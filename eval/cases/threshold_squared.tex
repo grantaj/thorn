@@ -1,0 +1,24 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{proposition}{Proposition}
+\begin{document}
+
+For a scalar $a>0$ and threshold $\tau>0$, define the soft threshold
+\[
+T_\tau(a)=\max(a-\tau,0).
+\]
+Also let $P=1$ and $S=\operatorname{sign}(a^2-\tau)$.
+
+\begin{proposition}\label{prop:threshold}
+For every $a,\tau>0$,
+\[
+T_\tau(a)=\frac12(a+aS)-\frac{\tau}{2}(P+PS).
+\]
+\end{proposition}
+\begin{proof}
+The sign $S$ separates the two cases $a>\tau$ and $a<\tau$. If $a>\tau$ then
+$S=1$ and the right hand side is $a-\tau$; otherwise $S=-1$ and the right hand
+side is zero. This is exactly $T_\tau(a)$.
+\end{proof}
+
+\end{document}

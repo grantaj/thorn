@@ -1,0 +1,7 @@
+{
+  "name": "threshold squared mismatch",
+  "kind": "finding",
+  "source": "Synthetic regression case",
+  "accepted_categories": ["counterexample", "invalid_implication", "algebra_error"],
+  "minimum_severity": "error"
+}

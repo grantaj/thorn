@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "thorn-math"
+version = "0.1.0"
+description = "AI-assisted correctness linting for mathematical LaTeX manuscripts"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "openai>=2.47.0",
+  "pydantic>=2.10",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.15",
+  "pytest>=8.3",
+  "ruff>=0.11",
+]
+
+[project.scripts]
+thorn = "thorn.cli:main"
+thorn-eval = "thorn.eval:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thorn"]
+
+[tool.hatch.build]
+include = [
+  "src/thorn/**/*.py",
+  "src/thorn/prompts/*.md",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["thorn"]

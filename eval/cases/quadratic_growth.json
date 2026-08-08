@@ -1,0 +1,7 @@
+{
+  "name": "quadratic growth is not smooth strong convexity",
+  "kind": "finding",
+  "source": "Synthetic regression case",
+  "accepted_categories": ["hypothesis_mismatch", "invalid_implication", "counterexample"],
+  "minimum_severity": "error"
+}

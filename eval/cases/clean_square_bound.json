@@ -1,0 +1,7 @@
+{
+  "name": "elementary square bound clean control",
+  "kind": "clean",
+  "source": "Synthetic clean control",
+  "accepted_categories": [],
+  "minimum_severity": "warning"
+}

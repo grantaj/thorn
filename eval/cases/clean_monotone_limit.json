@@ -1,0 +1,7 @@
+{
+  "name": "decreasing-limit clean control",
+  "kind": "clean",
+  "source": "Synthetic clean control paired with the convergence-mismatch case",
+  "accepted_categories": [],
+  "minimum_severity": "warning"
+}

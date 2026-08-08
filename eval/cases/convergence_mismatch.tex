@@ -1,0 +1,19 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+Suppose a nonlinear measure-valued map $H(u)$ is known to be continuous under
+bounded decreasing convergence: if $u_j\downarrow u$, then $H(u_j)\to H(u)$ weakly.
+
+\begin{theorem}\label{thm:limit}
+Let $(u_j)$ be uniformly bounded and suppose $u_j\to u$ in $L^1$. Then
+$H(u_j)\to H(u)$ weakly.
+\end{theorem}
+\begin{proof}
+By $L^1$ compactness we may pass to a subsequence converging to $u$. Using the
+stability of $H$ under decreasing limits, we pass to the limit and obtain
+$H(u_j)\to H(u)$ weakly.
+\end{proof}
+
+\end{document}
