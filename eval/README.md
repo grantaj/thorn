@@ -27,6 +27,12 @@ thorn-eval eval/cases --model <model>
 
 The command exits nonzero if a known defect is missed or if a clean control produces a surviving diagnostic above the configured confidence threshold.
 
+## Budget safety
+
+Default CI is deliberately offline. It runs unit tests, deterministic mocked provider/integration tests, fixture validation, linting, and type checking with `OPENAI_API_KEY` explicitly blank. Those checks must never make billable model calls.
+
+The GitHub `Live evaluation` workflow is intentionally separate and has only a manual `workflow_dispatch` trigger. It is the only workflow that injects `OPENAI_API_KEY`. Live semantic regression should remain an explicit human action rather than a pull-request or push check.
+
 This is a regression suite, not an accuracy benchmark. Cases are deliberately small and known in advance. A later benchmark should contain held-out and blinded cases.
 
 Exact provenance for research-derived audit cases should be kept outside this public repository.
