@@ -7,9 +7,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      # Budget safety: default CI must never have credentials for billable model calls.
-      OPENAI_API_KEY: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
