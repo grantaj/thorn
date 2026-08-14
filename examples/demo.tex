@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+
+\begin{lemma}\label{lem:square}
+For every real $x$, $x^2\ge 0$.
+\end{lemma}
+\begin{proof}
+This is the standard order property of the real numbers.
+\end{proof}
+
+\begin{theorem}[A deliberately broken demo]\label{thm:bad}
+For every real $x$, $x^2>x$.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:square}, $x^2\ge0$, hence $x^2>x$.
+\end{proof}
+
+\end{document}

@@ -1,0 +1,22 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+Let $R:\mathbb{R}\to\mathbb{R}$ be differentiable with minimizer $0$. Assume that
+for all $x$,
+\[
+\frac12 x^2 \le R(x)-R(0) \le \frac32 x^2.
+\]
+
+\begin{theorem}\label{thm:contraction}
+For every such $R$, the gradient step $x^+=x-\frac12 R'(x)$ satisfies
+$|x^+|<|x|$ whenever $x\ne0$.
+\end{theorem}
+\begin{proof}
+The two-sided quadratic bound gives strong convexity with constant $1$ and
+smoothness with constant $3$. Therefore the standard gradient-descent
+contraction estimate applies to the step size $1/2$, proving the claim.
+\end{proof}
+
+\end{document}

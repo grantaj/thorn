@@ -1,0 +1,34 @@
+name: Live evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: OpenAI API model name
+        required: true
+        type: string
+      min_confidence:
+        description: Minimum surviving diagnostic confidence
+        required: true
+        default: "0.65"
+        type: string
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -e .
+      - name: Run known-case semantic evaluation
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: >-
+          thorn-eval eval/cases
+          --model "${{ inputs.model }}"
+          --min-confidence "${{ inputs.min_confidence }}"

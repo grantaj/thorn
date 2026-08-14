@@ -1,0 +1,19 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+
+\begin{lemma}\label{lem:square}
+For all real $x$ and $y$,
+\[
+(x+y)^2 \le 2x^2+2y^2.
+\]
+\end{lemma}
+\begin{proof}
+Since $(x-y)^2\ge0$, we have $2xy\le x^2+y^2$. Therefore
+\[
+(x+y)^2=x^2+2xy+y^2\le2x^2+2y^2.
+\]
+\end{proof}
+
+\end{document}

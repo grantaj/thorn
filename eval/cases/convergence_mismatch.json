@@ -1,0 +1,7 @@
+{
+  "name": "decreasing-limit theorem used on L1 convergence",
+  "kind": "finding",
+  "source": "Synthetic regression case",
+  "accepted_categories": ["convergence_mismatch", "invalid_implication", "hypothesis_mismatch"],
+  "minimum_severity": "warning"
+}
