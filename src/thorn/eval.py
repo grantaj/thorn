@@ -12,8 +12,8 @@ from pydantic import BaseModel, Field
 
 from thorn.analysis import AnalysisFinding, analyze_project
 from thorn.dependencies import ExtractedProject
-from thorn.evidence import InferenceStatus
 from thorn.eval_review import build_result_review_context
+from thorn.evidence import InferenceStatus
 from thorn.latex import extract_project
 from thorn.linguistic import LinguisticFrontend
 from thorn.local_nlp import select_linguistic_frontend
