@@ -23,8 +23,9 @@ The numbered ladder under `cases/ladder/` increases the amount of mathematical c
 - **L2 — local algebra and notation:** local mathematical errors plus objective notation ambiguity.
 - **L3 — hypotheses, boundaries, and local logic:** missing assumptions, converse errors, asymptotic
   specification, forgotten endpoints, empty or degenerate cases.
-- **L4 — proof sufficiency and proof mechanics:** genuine gaps in true theorems, invalid WLOG,
-  induction coverage, existence/attainment, quotient well-definedness, and subsequence errors.
+- **L4 — proof sufficiency, scope, and proof mechanics:** genuine gaps in true theorems, theorem/proof
+  scope mismatch, demonstrated scope surplus, invalid WLOG, induction coverage, existence/attainment,
+  quotient well-definedness, and subsequence errors.
 - **L5 — statement correctness and broader theorem misuse:** false/overstrong results, quantifier
   swaps, parameter-dependent null sets, finite/infinite-dimensional confusion, and local-to-global
   promotion.
@@ -56,17 +57,33 @@ New fixtures should populate matrix fields when the classification is clear:
 - `locality`: line, proof, section, paper, or external;
 - `fault_class`: a stable descriptive identifier such as `invalid_wlog`;
 - `detection_methods`: intended ways the defect can be exposed;
-- `reader_consequence`: fatal, risky, or clarity;
+- `reader_consequence`: fatal, risky, clarity, opportunity, or not applicable;
 - `deception_level`: obvious, plausible, or sneaky;
 - `downstream_impact`: isolated, one result, or multiple results;
-- `repairability`: trivial, local, statement, structural, or none.
+- `repairability`: trivial, local, statement, structural, or none;
+- `scope_relation`: exact, proof narrower, proof stronger, incomparable, unknown, or not applicable;
+- `hypothesis_relation`: exact, proof requires more, theorem has surplus, unknown, or not applicable;
+- `conclusion_relation`: exact, proof establishes less, proof establishes more, incomparable, unknown,
+  or not applicable.
 
 These are ground truth for coverage analysis and future scoring. They are not included in model prompts.
 
 The matrix is intentionally more important than the raw case count. In particular, it distinguishes
 false theorems from true theorems with bad proofs and includes adversarial clean controls such as valid
-WLOG arguments, well-defined quotient maps, finite choice in ZF, and explicitly defined nonstandard
-notation.
+WLOG arguments, well-defined quotient maps, finite choice in ZF, dependency-sensitive hypothesis use,
+and explicitly defined nonstandard notation.
+
+## Theorem/proof scope policy
+
+A proof that works only under stronger hypotheses or establishes less than the theorem claims is a
+correctness failure. A proof that demonstrably works under weaker hypotheses or establishes a stronger
+conclusion is not a correctness failure; it may be reported only as an informational `scope_surplus`
+opportunity.
+
+Scope surplus must be demonstrated by the supplied proof. Thorn should not propose speculative
+research generalizations merely because an argument appears reusable. The suite includes a clean
+control for exactly this boundary, plus a clean case where an apparently unused theorem hypothesis is
+actually required through a cited lemma.
 
 ## Objective readability, not invented style
 
