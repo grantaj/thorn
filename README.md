@@ -25,7 +25,7 @@ Formal proof assistants such as **Lean** provide much stronger assurance once a 
 
 The intended position is therefore between unchecked informal mathematics and full formal verification. Formal methods are an escalation path, not an entry requirement. A mathematician should be able to get value from Thorn while continuing to write ordinary LaTeX; where a claim is sufficiently explicit and tractable, a future Thorn could ask a stronger backend to check a bounded proof obligation.
 
-The current parser and offline structural checks are a credible first step in that direction. They already recover machine-usable structure such as theorem/proof units, source locations, references, and local dependencies. A plausible longer-term architecture is:
+The current parser and offline structural checks are a credible first step in that direction. They already recover machine-usable structure such as theorem/proof units, source locations, references, local dependencies, and ambiguity-bearing proof-support evidence. A plausible longer-term architecture is:
 
 ```text
 LaTeX
@@ -42,11 +42,15 @@ The intended unit of review is often larger than a line: a proof may depend on h
 Thorn now has two capability levels over the same mathematical IR:
 
 ```text
-LaTeX -> result graph + symbol/scope IR -> thorn check
-                                      `-> thorn review
+LaTeX
+  -> typed reversible mathematical projection
+  -> local linguistic frontend
+  -> ambiguity/evidence-bearing Math IR
+       -> thorn check
+       `-> thorn review
 ```
 
-`thorn check` is deterministic, local, and zero-inference. `thorn review` adds model-backed adversarial mathematical judgment.
+`thorn check` makes deterministic lint decisions using local structural analysis. Its normal frontend includes local spaCy dependency parsing, but parser-derived ambiguity is evidence in the IR rather than a correctness warning. `thorn review` adds model-backed adversarial mathematical judgment.
 
 ## Status
 
@@ -55,7 +59,9 @@ Very early prototype. The architecture is evolving toward:
 ```text
 LaTeX
   -> source-preserving frontend
-  -> mathematical IR
+  -> typed mathematical projection
+  -> local linguistic structure
+  -> ambiguity/evidence-bearing mathematical IR
   -> deterministic structural analysis
   -> selective semantic review
   -> source-located diagnostics
@@ -72,20 +78,30 @@ the command remains `thorn`.
 python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
+python -m spacy download en_core_web_sm
 ```
 
 With `uv`:
 
 ```bash
 uv sync --extra dev
+uv run python -m spacy download en_core_web_sm
 ```
+
+The spaCy package is a normal runtime dependency. The English model is installed locally; once installed, the linguistic frontend makes no remote NLP/model calls.
 
 ## First use
 
-Run the deterministic local checker with no API key:
+Run the local checker with no API key:
 
 ```bash
 thorn check paper.tex
+```
+
+For a deliberately degraded parser-free run, useful in constrained environments and lightweight tests:
+
+```bash
+thorn check paper.tex --structural-only
 ```
 
 Inspect extracted theorem/proof units without running either checker or reviewer:
@@ -122,6 +138,7 @@ Useful options:
 --limit N              process only the first N extracted units in review/dry-run mode
 --fail-on LEVEL        never | error | warning
 --frontend NAME        current | regex | pylatexenc
+--structural-only      disable the normal local linguistic frontend
 
 review-specific:
 --model MODEL          model used for attacker and defender
@@ -133,7 +150,7 @@ review-specific:
 
 By default Thorn returns a non-zero exit status only when an `error` diagnostic is emitted.
 
-See [`docs/check.md`](docs/check.md) for the current zero-inference rule set and its deliberate false-positive boundary.
+See [`docs/check.md`](docs/check.md) for the current local rule set and its deliberate false-positive boundary, and [`docs/local-nlp.md`](docs/local-nlp.md) for the linguistic frontend and uncertainty contract.
 
 ## What the parser handles
 
@@ -145,8 +162,9 @@ See [`docs/check.md`](docs/check.md) for the current zero-inference rule set and
 - direct theorem dependencies referenced through `\\ref`, `\\eqref`, `\\autoref`, `\\cref`, or
   `\\Cref` when the referenced label belongs to another extracted theorem-like unit
 - conservative symbol, definition, role, constraint, and lexical-scope IR for explicit introductions
+- local linguistic support/symbol candidates with exact source provenance and first-class ambiguity
 
-This is intentionally a pragmatic LaTeX frontend, not a complete TeX interpreter.
+The LaTeX layer is intentionally pragmatic, not a complete TeX interpreter. The linguistic layer supplies general grammatical/dependency evidence only; it does not decide mathematical truth.
 
 ## Diagnostic philosophy
 
@@ -160,7 +178,7 @@ The proof uses gradient smoothness, but the stated assumption gives only quadrat
 Defender: survives (0.94)
 ```
 
-Deterministic `thorn check` findings use lower-numbered structural rule codes and state only mechanically established facts. They do not claim that a theorem is false because a structural relation is missing or suspicious.
+Deterministic `thorn check` findings use lower-numbered structural rule codes and state only mechanically established facts. Parser-derived ambiguous relations can be retained in the IR without becoming findings. Thorn does not claim that a theorem is false because a structural relation is missing, suspicious, or linguistically ambiguous.
 
 Vague referee-style comments such as "more justification is needed" are not useful lint diagnostics.
 
