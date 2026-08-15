@@ -14,8 +14,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pylatexenc = [
+  "pylatexenc==2.10",
+]
 dev = [
   "mypy>=1.15",
+  "pylatexenc==2.10",
   "pytest>=8.3",
   "ruff>=0.11",
 ]
