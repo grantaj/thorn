@@ -28,6 +28,7 @@ _TRAILING_BINDER_RE = re.compile(
     r"^\s*for\s+(?:every|all|each)\s+\$?\s*([A-Za-z](?:_[A-Za-z0-9{}]+)?)",
     re.IGNORECASE,
 )
+_TRAILING_BINDER_CANDIDATE_RE = re.compile(r"^\s*(?:for|where|given)\b", re.IGNORECASE)
 _CONCLUSION_RE = re.compile(r"^\s*(?:therefore|hence|thus|consequently)\b", re.IGNORECASE)
 _SINCE_RE = re.compile(r"^\s*since\s+(.+?),\s*(.+)$", re.IGNORECASE | re.DOTALL)
 _BY_DEFINITION_RE = re.compile(r"\bby\s+(?:the\s+)?definition\b", re.IGNORECASE)
@@ -458,6 +459,9 @@ def _ambiguous_qualifier_for(
     result_identifiers: set[str],
     frontend: LinguisticFrontend,
 ) -> ClaimQualifier | None:
+    if _TRAILING_BINDER_CANDIDATE_RE.match(raw) is None:
+        return None
+
     document, placeholders = _projection_document(
         file,
         source,
@@ -503,8 +507,8 @@ def _ambiguous_qualifier_for(
         evidence=[
             StructuralEvidence(
                 reason=(
-                    "prose immediately trailing a display contains one grammatically "
-                    "attached mathematical entity and may qualify the display"
+                    "binder-shaped prose immediately trailing a display contains one "
+                    "grammatically attached mathematical entity and may qualify the display"
                 ),
                 source=placeholder.source,
                 target=claim.source,

@@ -90,3 +90,33 @@ where $n\ge 1$ throughout the argument.
     # rather than being swallowed as though the binder interpretation were certain.
     assert claims[1].form == ClaimForm.PROSE
     assert claims[1].raw == r"where $n\ge 1$ throughout the argument."
+
+
+def test_post_display_conclusion_is_not_a_trailing_binder_candidate(tmp_path: Path) -> None:
+    tex = tmp_path / "conclusion-after-display.tex"
+    tex.write_text(
+        r"""\documentclass{article}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+\begin{theorem}\label{thm:main}
+A conclusion.
+\end{theorem}
+\begin{proof}
+\[
+a_n = 0.
+\]
+so $b_n=0$ as required.
+\end{proof}
+\end{document}
+""",
+        encoding="utf-8",
+    )
+
+    project = extract_project(tex, linguistic_frontend=StaticDependencyFrontend())
+    claims = project.proof_support_graph.claims_for_result("thm:main")
+
+    assert len(claims) == 2
+    assert claims[0].form == ClaimForm.DISPLAY
+    assert claims[0].qualifiers == []
+    assert claims[1].form == ClaimForm.PROSE
+    assert claims[1].raw == r"so $b_n=0$ as required."
