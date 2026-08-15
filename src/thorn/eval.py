@@ -119,6 +119,10 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         help="run only cases at or below this TDD ladder level",
     )
+    parser.add_argument(
+        "--case-filter",
+        help="run only cases whose name or fixture path contains this text",
+    )
     parser.add_argument("--no-defender", action="store_true")
     parser.add_argument(
         "--validate-only",
@@ -202,6 +206,18 @@ def main(argv: list[str] | None = None) -> int:
             for path, expectation in cases
             if expectation.level <= args.max_level
         ]
+
+    if args.case_filter:
+        needle = args.case_filter.casefold()
+        cases = [
+            (path, expectation)
+            for path, expectation in cases
+            if needle in expectation.name.casefold()
+            or needle in str(path).casefold()
+        ]
+        if not cases:
+            print(f"thorn-eval: no cases matched --case-filter {args.case_filter!r}")
+            return 2
 
     provider = None
     if not args.validate_only:
