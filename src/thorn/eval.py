@@ -544,10 +544,15 @@ def _targeted_preflight_record(
                     f"review item {item.identifier!r} has non-uncertain trigger relation "
                     f"{relation_identifier!r} ({relation.status.value})"
                 )
+            trigger_status: PreflightTriggerStatus = (
+                "AMBIGUOUS"
+                if relation.status is InferenceStatus.AMBIGUOUS
+                else "UNRESOLVED"
+            )
             triggers.append(
                 TargetedPreflightTrigger(
                     relation_identifier=relation_identifier,
-                    status=relation.status.name,
+                    status=trigger_status,
                 )
             )
         review_items.append(
