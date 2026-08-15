@@ -1,0 +1,23 @@
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+
+\begin{lemma}\label{lem:ambiguous}
+Zero equals zero.
+\end{lemma}
+\begin{proof}
+Immediate.
+\end{proof}
+
+\begin{lemma}\label{lem:ambiguous}
+One equals one.
+\end{lemma}
+\begin{proof}
+Immediate.
+\end{proof}
+
+\begin{theorem}\label{thm:ambiguous-reference-target}
+Two equals two.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:ambiguous}, the claim follows.
+\end{proof}
