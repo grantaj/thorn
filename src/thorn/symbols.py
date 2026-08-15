@@ -131,9 +131,12 @@ class SymbolTable(BaseModel):
         for symbol in self.symbols:
             if symbol.scope_identifier not in rank:
                 continue
-            if source is not None and symbol.source.file == source.file:
-                if symbol.source.start_offset > source.start_offset:
-                    continue
+            if (
+                source is not None
+                and symbol.source.file == source.file
+                and symbol.source.start_offset > source.start_offset
+            ):
+                continue
             visible.append(symbol)
         return sorted(
             visible,
