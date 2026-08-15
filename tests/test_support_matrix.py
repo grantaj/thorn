@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
 
+import pytest
 from pydantic import BaseModel, Field
 
 from thorn.eval import _load_cases, _select_unit
+from thorn.frontends import get_frontend
 from thorn.latex import extract_project
 from thorn.support import SupportKind
 
@@ -37,15 +39,17 @@ def test_support_expectations_reference_public_cases() -> None:
     assert support_names <= case_names
 
 
-def test_public_support_ir_matrix_matches_exact_expectations() -> None:
+@pytest.mark.parametrize("frontend_name", ["regex", "pylatexenc"])
+def test_public_support_ir_matrix_matches_exact_expectations(frontend_name: str) -> None:
     cases = {
         expectation.name: (tex_path, expectation)
         for tex_path, expectation in _load_cases(Path("eval/cases"))
     }
+    frontend = get_frontend(frontend_name)
 
     for name, expected in _load_support_expectations().items():
         tex_path, case = cases[name]
-        project = extract_project(tex_path)
+        project = extract_project(tex_path, frontend=frontend)
         unit = _select_unit(project.units, case)
         graph = project.proof_support_graph
         claims = graph.claims_for_result(unit.identifier)
@@ -68,14 +72,22 @@ def test_public_support_ir_matrix_matches_exact_expectations() -> None:
             for bound in qualifier.bound_names
         ]
 
-        assert len(claims) == expected.claim_count, name
-        assert observed_edge_kinds == sorted(expected.edge_kinds), name
-        assert observed_unsupported == sorted(expected.unsupported_load_bearing), name
-        assert observed_binders == expected.trailing_binders, name
+        assert len(claims) == expected.claim_count, (frontend_name, name)
+        assert observed_edge_kinds == sorted(expected.edge_kinds), (frontend_name, name)
+        assert observed_unsupported == sorted(expected.unsupported_load_bearing), (
+            frontend_name,
+            name,
+        )
+        assert observed_binders == expected.trailing_binders, (frontend_name, name)
         assert (
             project.dependency_graph.reverse_dependency_ids(unit.identifier)
             == expected.reverse_result_dependencies
-        ), name
+        ), (frontend_name, name)
+        assert all(
+            edge.explicit and edge.confidence == 1.0
+            for edge in graph.edges
+            if edge.target_claim_identifier in claim_ids
+        ), (frontend_name, name)
 
 
 def test_clearly_is_not_treated_as_support() -> None:
