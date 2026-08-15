@@ -4,6 +4,23 @@
 
 Thorn does not certify proofs. It tries to break them before your readers do.
 
+## Where Thorn fits
+
+Thorn is designed as a **review pass**, not an authoring environment. Interactive agents and chat tools are excellent for exploring ideas, finding proof strategies, explaining mathematics, and rewriting text. Thorn assumes those tools may already be part of the author's workflow.
+
+Its job begins when a manuscript reaches a point worth checking as an artifact. Given the LaTeX source, Thorn applies a repeatable adversarial review procedure to the mathematical argument and reports specific, source-located findings. The author should not have to remember which questions to ask an agent, construct the right review prompt, or manually keep track of what has and has not been checked.
+
+That makes Thorn complementary to an agent in an editor: the agent helps you **write and think**; Thorn gives the resulting manuscript a **defined correctness pass** that can be rerun at useful checkpoints and, eventually, as part of a build or CI workflow.
+
+Thorn is deliberately not:
+
+- a formal proof assistant or proof certificate;
+- a general-purpose mathematical writing agent;
+- line-by-line autocomplete or an LSP that reacts to every edit;
+- a tool that rewrites substantive mathematics in order to make a warning disappear.
+
+The intended unit of review is often larger than a line: a proof may depend on hypotheses, definitions, notation, or earlier results elsewhere in the manuscript. Thorn therefore favors bounded whole-argument review over continuous local prompting, and favors reviewable diagnostics over open-ended generated prose.
+
 The initial target is LaTeX mathematics. Thorn extracts theorem/proposition/lemma + proof units,
 builds a small local dependency context, asks an adversarial model for specific falsifiable
 objections, then gives a second model pass the job of defeating those objections before anything
