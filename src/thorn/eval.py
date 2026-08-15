@@ -23,14 +23,17 @@ from thorn.providers.base import AuditProvider
 
 # Test seam retained without importing the OpenAI provider in zero-inference modes.
 OpenAIProvider: Callable[[str], AuditProvider] | None = None
+CaseMode = Literal["check", "review"]
+
+
+def _default_case_modes() -> list[CaseMode]:
+    return ["check", "review"]
 
 
 class CaseExpectation(BaseModel):
     name: str
     kind: str = Field(pattern="^(finding|clean)$")
-    modes: list[Literal["check", "review"]] = Field(
-        default_factory=lambda: ["check", "review"]
-    )
+    modes: list[CaseMode] = Field(default_factory=_default_case_modes)
     source: str | None = None
     accepted_categories: list[FindingCategory] = Field(default_factory=list)
     minimum_severity: Severity = Severity.WARNING
