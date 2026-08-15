@@ -1,0 +1,13 @@
+{
+  "name": "missing internal theorem reference is structural error",
+  "kind": "finding",
+  "modes": ["check"],
+  "source": "Synthetic deterministic matrix case",
+  "level": 1,
+  "capability": "missing internal reference detection",
+  "target_identifier": "thm:missing-reference-target",
+  "accepted_categories": ["other"],
+  "minimum_severity": "error",
+  "repairability": "trivial",
+  "notes": "Check-only case: the referenced label does not exist anywhere in the parsed project."
+}
