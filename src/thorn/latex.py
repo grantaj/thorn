@@ -108,11 +108,25 @@ def _block_references(
 ) -> list[tuple[str, SourceRange, ReferenceContext]]:
     references: list[tuple[str, SourceRange, ReferenceContext]] = []
     for macro in _macros_in_span(file, environment.body_span, _REF_MACROS):
-        label = _first_required_argument(macro)
-        if not label:
+        raw_labels = _first_required_argument(macro)
+        if not raw_labels:
             continue
-        references.append((label, macro.span.source_range(), context))
+        for label in (item.strip() for item in raw_labels.split(",")):
+            if label:
+                references.append((label, macro.span.source_range(), context))
     return references
+
+
+def _project_labels(project: FrontendProject) -> set[str]:
+    labels: set[str] = set()
+    for file in project.files:
+        for macro in file.macros:
+            if macro.name != "label":
+                continue
+            label = _first_required_argument(macro)
+            if label:
+                labels.add(label)
+    return labels
 
 
 def _raise_missing_file_diagnostic(project: FrontendProject) -> None:
@@ -141,6 +155,7 @@ def extract_project(
     parsed = parser.parse_project(main_file)
     _raise_missing_file_diagnostic(parsed)
     envs = _theorem_envs(parsed)
+    all_labels = _project_labels(parsed)
     units: list[TheoremUnit] = []
     regions: list[ResultRegion] = []
     references: list[tuple[str, str, SourceRange, ReferenceContext]] = []
@@ -217,8 +232,18 @@ def extract_project(
     for source_identifier, target_label, source, context in references:
         candidates = by_label.get(target_label, [])
         if not candidates:
-            # A generic LaTeX reference may target an equation, figure, section, etc. Without a
-            # project-wide label index we cannot call it a missing theorem dependency.
+            if target_label not in all_labels:
+                edges.append(
+                    DependencyEdge(
+                        source_identifier=source_identifier,
+                        target_label=target_label,
+                        source=source,
+                        context=context,
+                        resolution=DependencyResolution.MISSING,
+                    )
+                )
+            # Existing non-result labels (equations, figures, sections, etc.) are
+            # intentionally not theorem-dependency edges.
             continue
         if len(candidates) == 1:
             edges.append(

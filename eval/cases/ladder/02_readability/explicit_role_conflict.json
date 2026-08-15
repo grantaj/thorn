@@ -1,0 +1,13 @@
+{
+  "name": "explicit same-scope symbol roles conflict",
+  "kind": "finding",
+  "modes": ["check"],
+  "source": "Synthetic deterministic matrix case",
+  "level": 2,
+  "capability": "explicit symbol role conflict detection",
+  "target_identifier": "thm:explicit-role-conflict",
+  "accepted_categories": ["notation_ambiguity"],
+  "minimum_severity": "warning",
+  "repairability": "local",
+  "notes": "Check-only case: f is explicitly introduced as scalar-like and then as a map in the same recovered scope."
+}

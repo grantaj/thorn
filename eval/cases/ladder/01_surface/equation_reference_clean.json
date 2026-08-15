@@ -1,0 +1,12 @@
+{
+  "name": "existing equation label is not missing theorem reference",
+  "kind": "clean",
+  "modes": ["check"],
+  "source": "Synthetic deterministic matrix control",
+  "level": 1,
+  "capability": "non-result reference clean control",
+  "target_identifier": "thm:equation-reference-clean",
+  "minimum_severity": "warning",
+  "repairability": "none",
+  "notes": "Check-only clean control: an equation label referenced with eqref must not be reported as a missing theorem/result dependency."
+}

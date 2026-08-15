@@ -1,0 +1,13 @@
+{
+  "name": "duplicate theorem label is structurally ambiguous",
+  "kind": "finding",
+  "modes": ["check"],
+  "source": "Synthetic deterministic matrix case",
+  "level": 1,
+  "capability": "duplicate result label detection",
+  "target_identifier": "thm:duplicate-label-target",
+  "accepted_categories": ["other"],
+  "minimum_severity": "error",
+  "repairability": "trivial",
+  "notes": "Check-only case: two distinct lemma environments carry the same label; semantic live evaluation should not spend tokens on this structural fault."
+}

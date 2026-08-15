@@ -1,0 +1,67 @@
+{
+  "decreasing-limit clean control": [],
+  "elementary square bound clean control": [],
+  "decreasing-limit theorem used on L1 convergence": [],
+  "duplicate theorem label is structurally ambiguous": [
+    "TH101"
+  ],
+  "reference to duplicate theorem label is ambiguous": [
+    "TH101",
+    "TH102"
+  ],
+  "missing internal theorem reference is structural error": [
+    "TH103"
+  ],
+  "existing equation label is not missing theorem reference": [],
+  "surface variable typo changes the argument": [],
+  "false but locally repairable square expansion": [],
+  "clean explicitly defined nonstandard notation": [],
+  "same symbol simultaneously denotes set and constant": [],
+  "explicit same-scope symbol roles conflict": [
+    "TH113"
+  ],
+  "map and function introductions are compatible callable roles": [],
+  "clean neighbour with explicit nonzero hypothesis": [],
+  "cancellation without a nonzero hypothesis": [],
+  "induction omits the n equals zero case": [],
+  "converse of Fermat theorem": [],
+  "asymptotic variable and uniformity are unspecified": [],
+  "infimum silently treated as minimum": [],
+  "induction step has wrong stride": [],
+  "convergent subsequence promoted to whole sequence": [],
+  "clean symmetric WLOG": [],
+  "invalid without loss of generality": [],
+  "proof establishes only a weaker conclusion": [],
+  "true theorem with an incomplete extremum argument": [],
+  "clean hypothesis used through a cited dependency": [],
+  "clean proof with no demonstrated surplus scope": [],
+  "proof silently requires a stronger hypothesis": [],
+  "proof establishes a stronger conclusion": [],
+  "theorem carries a surplus hypothesis": [],
+  "clean representative-independent quotient map": [],
+  "quotient map depends on representative": [],
+  "finite-dimensional compactness used in arbitrary normed space": [],
+  "local inverse theorem promoted to global diffeomorphism": [],
+  "forall-exists witness becomes exists-forall": [],
+  "uncountable union of parameter-dependent null sets": [],
+  "theorem is false as stated": [],
+  "nonexpansive map incorrectly called a contraction": [],
+  "downstream theorem depends on a flawed lemma": [],
+  "clean cross-result dependency": [],
+  "true theorem whose stated proof relies on a false lemma": [],
+  "two results prove each other circularly": [
+    "TH104"
+  ],
+  "three-hop circular dependency": [
+    "TH104"
+  ],
+  "one-line Fermat proof distributes an nth root over a sum": [],
+  "hidden ABC-conjecture dependency": [],
+  "unstated axiom of choice in ZF": [],
+  "clean finite choice in ZF": [],
+  "hidden Riemann-hypothesis dependency": [],
+  "theorem is only its definition renamed": [],
+  "theorem vacuous because definition has no instances": [],
+  "quadratic growth is not smooth strong convexity": [],
+  "threshold squared mismatch": []
+}
