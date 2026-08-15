@@ -41,6 +41,19 @@ class FixtureProvider:
         "thm:choice-right-inverse": FindingCategory.UNSTATED_AXIOM,
         "thm:stable-idempotent": FindingCategory.VACUOUS_TRUTH,
         "thm:empty-class": FindingCategory.VACUOUS_TRUTH,
+        "thm:converse": FindingCategory.INVALID_IMPLICATION,
+        "thm:bad-wlog": FindingCategory.INVALID_IMPLICATION,
+        "thm:stride-induction": FindingCategory.UNSUPPORTED_CLAIM,
+        "thm:quotient-bad": FindingCategory.WELL_DEFINEDNESS,
+        "thm:infimum-minimum": FindingCategory.INVALID_IMPLICATION,
+        "thm:bounded-sequence": FindingCategory.CONVERGENCE_MISMATCH,
+        "thm:extreme-value-gap": FindingCategory.UNSUPPORTED_CLAIM,
+        "thm:quantifier-swap": FindingCategory.QUANTIFIER_ERROR,
+        "thm:uniform-null-set": FindingCategory.INVALID_IMPLICATION,
+        "thm:unit-ball-compact": FindingCategory.HYPOTHESIS_MISMATCH,
+        "thm:local-global": FindingCategory.INVALID_IMPLICATION,
+        "thm:notation-collision": FindingCategory.NOTATION_AMBIGUITY,
+        "thm:ambiguous-big-o": FindingCategory.SPECIFICATION_AMBIGUITY,
     }
 
     def attack(self, unit: TheoremUnit) -> AttackReport:
@@ -80,11 +93,16 @@ class FixtureProvider:
 
 def test_eval_corpus_is_well_formed() -> None:
     cases = _load_cases(Path("eval/cases"))
-    assert len(cases) >= 25
+    assert len(cases) >= 41
 
     bad = 0
     clean = 0
     levels: set[int] = set()
+    matrix_cases = 0
+    matrix_families: set[str] = set()
+    truth_values: set[str] = set()
+    proof_statuses: set[str] = set()
+
     for tex_path, expectation in cases:
         units = extract_units(tex_path)
         unit = _select_unit(units, expectation)
@@ -101,14 +119,32 @@ def test_eval_corpus_is_well_formed() -> None:
                 for reference in unit.referenced_results
             )
 
+        if expectation.family is not None:
+            matrix_cases += 1
+            matrix_families.add(expectation.family)
+            assert expectation.statement_truth is not None
+            assert expectation.proof_status is not None
+            assert expectation.locality is not None
+            assert expectation.fault_class is not None
+            assert expectation.detection_methods
+            assert expectation.reader_consequence is not None
+            assert expectation.deception_level is not None
+            assert expectation.downstream_impact is not None
+            truth_values.add(expectation.statement_truth)
+            proof_statuses.add(expectation.proof_status)
+
         if expectation.kind == "finding":
             bad += 1
             assert expectation.accepted_categories
         else:
             clean += 1
 
-    assert bad >= 20
-    assert clean >= 5
+    assert bad >= 33
+    assert clean >= 8
+    assert matrix_cases >= 16
+    assert {"correctness", "specification", "readability"} <= matrix_families
+    assert {"true", "false", "unknown"} <= truth_values
+    assert {"valid", "gap", "invalid"} <= proof_statuses
     assert set(range(1, 11)).issubset(levels)
 
 

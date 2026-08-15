@@ -31,6 +31,36 @@ class CaseExpectation(BaseModel):
         "structural",
         "none",
     ] | None = None
+    family: Literal[
+        "correctness",
+        "specification",
+        "readability",
+        "scholarship",
+    ] | None = None
+    statement_truth: Literal[
+        "true",
+        "false",
+        "vacuous",
+        "unknown",
+        "not_applicable",
+    ] | None = None
+    proof_status: Literal[
+        "valid",
+        "gap",
+        "invalid",
+        "circular",
+        "not_applicable",
+    ] | None = None
+    locality: Literal["line", "proof", "section", "paper", "external"] | None = None
+    fault_class: str | None = None
+    detection_methods: list[str] = Field(default_factory=list)
+    reader_consequence: Literal["fatal", "risky", "clarity"] | None = None
+    deception_level: Literal["obvious", "plausible", "sneaky"] | None = None
+    downstream_impact: Literal[
+        "isolated",
+        "one_result",
+        "multiple_results",
+    ] | None = None
     notes: str | None = None
 
 
