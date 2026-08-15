@@ -1,7 +1,7 @@
 {
   "name": "clean explicit theorem equation definition and property support",
   "kind": "clean",
-  "modes": ["check"],
+  "modes": ["analyze"],
   "source": "Synthetic support-IR control",
   "level": 6,
   "capability": "explicit support relationship extraction",

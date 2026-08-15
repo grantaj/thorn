@@ -10,7 +10,7 @@ from thorn.models import Severity, SourceRange
 from thorn.symbols import Symbol, SymbolRole
 
 
-class CheckCategory(StrEnum):
+class AnalysisCategory(StrEnum):
     DUPLICATE_LABEL = "duplicate_label"
     AMBIGUOUS_REFERENCE = "ambiguous_reference"
     MISSING_REFERENCE = "missing_reference"
@@ -18,9 +18,9 @@ class CheckCategory(StrEnum):
     ROLE_CONFLICT = "role_conflict"
 
 
-class CheckFinding(BaseModel):
+class AnalysisFinding(BaseModel):
     rule: str
-    category: CheckCategory
+    category: AnalysisCategory
     severity: Severity
     title: str
     explanation: str
@@ -29,17 +29,17 @@ class CheckFinding(BaseModel):
     evidence: list[str] = Field(default_factory=list)
 
 
-_CHECK_RULES: dict[CheckCategory, str] = {
-    CheckCategory.DUPLICATE_LABEL: "TH101",
-    CheckCategory.AMBIGUOUS_REFERENCE: "TH102",
-    CheckCategory.MISSING_REFERENCE: "TH103",
-    CheckCategory.CIRCULAR_DEPENDENCY: "TH104",
-    CheckCategory.ROLE_CONFLICT: "TH113",
+_ANALYSIS_RULES: dict[AnalysisCategory, str] = {
+    AnalysisCategory.DUPLICATE_LABEL: "TH101",
+    AnalysisCategory.AMBIGUOUS_REFERENCE: "TH102",
+    AnalysisCategory.MISSING_REFERENCE: "TH103",
+    AnalysisCategory.CIRCULAR_DEPENDENCY: "TH104",
+    AnalysisCategory.ROLE_CONFLICT: "TH113",
 }
 
 
 def _finding(
-    category: CheckCategory,
+    category: AnalysisCategory,
     severity: Severity,
     title: str,
     explanation: str,
@@ -47,9 +47,9 @@ def _finding(
     *,
     unit_id: str | None = None,
     evidence: list[str] | None = None,
-) -> CheckFinding:
-    return CheckFinding(
-        rule=_CHECK_RULES[category],
+) -> AnalysisFinding:
+    return AnalysisFinding(
+        rule=_ANALYSIS_RULES[category],
         category=category,
         severity=severity,
         title=title,
@@ -60,9 +60,9 @@ def _finding(
     )
 
 
-def _check_dependencies(project: ExtractedProject) -> list[CheckFinding]:
+def _analyze_dependencies(project: ExtractedProject) -> list[AnalysisFinding]:
     graph = project.dependency_graph
-    findings: list[CheckFinding] = []
+    findings: list[AnalysisFinding] = []
 
     by_label: dict[str, list[DependencyNode]] = defaultdict(list)
     for node in graph.nodes:
@@ -79,7 +79,7 @@ def _check_dependencies(project: ExtractedProject) -> list[CheckFinding]:
         duplicate = nodes[1]
         findings.append(
             _finding(
-                CheckCategory.DUPLICATE_LABEL,
+                AnalysisCategory.DUPLICATE_LABEL,
                 Severity.ERROR,
                 "Duplicate theorem/result label",
                 f"The label {label!r} is attached to multiple theorem-like results.",
@@ -93,7 +93,7 @@ def _check_dependencies(project: ExtractedProject) -> list[CheckFinding]:
         if edge.resolution == DependencyResolution.AMBIGUOUS:
             findings.append(
                 _finding(
-                    CheckCategory.AMBIGUOUS_REFERENCE,
+                    AnalysisCategory.AMBIGUOUS_REFERENCE,
                     Severity.ERROR,
                     "Ambiguous theorem/result reference",
                     (
@@ -108,7 +108,7 @@ def _check_dependencies(project: ExtractedProject) -> list[CheckFinding]:
         elif edge.resolution == DependencyResolution.MISSING:
             findings.append(
                 _finding(
-                    CheckCategory.MISSING_REFERENCE,
+                    AnalysisCategory.MISSING_REFERENCE,
                     Severity.ERROR,
                     "Missing internal reference",
                     (
@@ -126,7 +126,7 @@ def _check_dependencies(project: ExtractedProject) -> list[CheckFinding]:
         cycle_text = " -> ".join([*component, component[0]])
         findings.append(
             _finding(
-                CheckCategory.CIRCULAR_DEPENDENCY,
+                AnalysisCategory.CIRCULAR_DEPENDENCY,
                 Severity.ERROR,
                 "Circular theorem/result dependency",
                 "These theorem-like results form a dependency cycle.",
@@ -147,8 +147,8 @@ def _role_family(role: SymbolRole) -> str | None:
     return role.value
 
 
-def _check_symbols(project: ExtractedProject) -> list[CheckFinding]:
-    """Emit only symbol diagnostics justified by explicit same-scope evidence.
+def _analyze_symbols(project: ExtractedProject) -> list[AnalysisFinding]:
+    """Emit only diagnostics justified by explicit same-scope structural evidence.
 
     The symbol IR also records unresolved uses and lexical-scope candidates, but
     those facts are intentionally not diagnostics yet. Mathematical prose permits
@@ -159,7 +159,7 @@ def _check_symbols(project: ExtractedProject) -> list[CheckFinding]:
     """
 
     table = project.symbol_table
-    findings: list[CheckFinding] = []
+    findings: list[AnalysisFinding] = []
     grouped: dict[tuple[str, str], list[Symbol]] = defaultdict(list)
     for symbol in table.symbols:
         grouped[(symbol.scope_identifier, symbol.name)].append(symbol)
@@ -176,7 +176,7 @@ def _check_symbols(project: ExtractedProject) -> list[CheckFinding]:
         source_symbol = ordered[-1]
         findings.append(
             _finding(
-                CheckCategory.ROLE_CONFLICT,
+                AnalysisCategory.ROLE_CONFLICT,
                 Severity.WARNING,
                 "Conflicting explicit symbol roles",
                 (
@@ -196,10 +196,10 @@ def _check_symbols(project: ExtractedProject) -> list[CheckFinding]:
     return findings
 
 
-def check_project(project: ExtractedProject) -> list[CheckFinding]:
-    """Run deterministic, zero-inference structural analyses over Thorn IR."""
+def analyze_project(project: ExtractedProject) -> list[AnalysisFinding]:
+    """Run deterministic, zero-inference structural analyses over Thorn Math IR."""
 
-    findings = [*_check_dependencies(project), *_check_symbols(project)]
+    findings = [*_analyze_dependencies(project), *_analyze_symbols(project)]
     return sorted(
         findings,
         key=lambda item: (

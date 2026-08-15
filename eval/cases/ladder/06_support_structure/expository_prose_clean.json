@@ -1,7 +1,7 @@
 {
   "name": "clean expository prose is not load-bearing",
   "kind": "clean",
-  "modes": ["check"],
+  "modes": ["analyze"],
   "source": "Synthetic support-IR control",
   "level": 6,
   "capability": "non-load-bearing prose representation",
