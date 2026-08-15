@@ -11,6 +11,7 @@ from thorn.analysis import AnalysisFinding, analyze_project
 from thorn.dependencies import ExtractedProject
 from thorn.frontends import get_frontend
 from thorn.latex import extract_project
+from thorn.local_nlp import select_linguistic_frontend
 from thorn.models import AuditFinding, Severity, TheoremUnit, UnitAudit
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
@@ -183,7 +184,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         frontend = get_frontend(args.frontend)
-        linguistic_frontend = None if args.structural_only else SpacyLinguisticFrontend()
+        linguistic_frontend = select_linguistic_frontend(
+            structural_only=args.structural_only,
+            factory=SpacyLinguisticFrontend,
+        )
         project = extract_project(
             args.file,
             frontend=frontend,

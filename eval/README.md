@@ -73,6 +73,8 @@ Scope surplus must be demonstrated by the supplied proof. Thorn should not propo
 
 Objective readability findings must identify a concrete mathematical ambiguity. Thorn should not invent a house style; unusual notation that is clearly defined and consistently used is a clean case.
 
+Semantic `thorn-eval` runs use the same normal local linguistic frontend as `thorn analyze` and `thorn ir`. This requires the local `en_core_web_sm` model but does not require a remote NLP service. `--structural-only` remains an explicit degraded/debug path for constrained environments and parser-neutral unit tests; it should not be used for the live/manual C2 IR or targeted comparison.
+
 ## Running the suite
 
 Validate all fixtures and extraction without API calls:
@@ -102,6 +104,14 @@ thorn-eval eval/cases --review-context raw --model <model>
 thorn-eval eval/cases --review-context ir --model <model>
 ```
 
+Inspect targeted semantic-review selection without an API key or semantic provider call:
+
+```bash
+OPENAI_API_KEY="" thorn-eval eval/cases --targeted-preflight --case-filter missing_nonzero_hypothesis
+```
+
+The preflight prints each stable `SemanticReviewItem` identifier and its exact trigger relation identifiers/statuses, then emits a JSON-friendly summary. `would_make_semantic_request_count` is the number of item-driven requests that a targeted semantic run would make; `provider_request_count` is always zero in preflight. A zero-item selection is represented explicitly rather than treated as an error.
+
 Run the live semantic regression suite:
 
 ```bash
@@ -129,7 +139,7 @@ In short:
 
 Default CI is deliberately offline. It runs unit tests, fixture validation, the deterministic analysis matrix, proof-support IR expectations, linting, and type checking with `OPENAI_API_KEY` explicitly blank. Those checks must never make billable model calls.
 
-The GitHub `Live evaluation` workflow is separate and manually triggered. It is the only workflow that injects `OPENAI_API_KEY`. Analyze-only fixtures are excluded from that semantic run.
+The separate local-NLP contract workflow installs `en_core_web_sm` and exercises the production linguistic path, including the selected keyless C2 targeted preflight. It also keeps `OPENAI_API_KEY` blank. The GitHub `Live evaluation` workflow remains separate and manually triggered; it is not part of the preflight.
 
 This is a regression suite, not an accuracy benchmark. Cases are deliberately small and known in advance. A later benchmark should contain held-out and blinded cases.
 

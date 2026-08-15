@@ -253,7 +253,9 @@ def test_eval_harness_runs_all_review_cases_without_network(
 
     cases = _load_cases(Path("eval/cases"))
     review_cases = [case for case in cases if "review" in case[1].modes]
-    assert main(["eval/cases", "--model", "fixture-provider"]) == 0
+    assert main(
+        ["eval/cases", "--model", "fixture-provider", "--structural-only"]
+    ) == 0
 
     output = capsys.readouterr().out
     assert output.count("PASS ") == len(review_cases)
@@ -283,6 +285,7 @@ def test_eval_max_level_filters_the_review_ladder(
             "fixture-provider",
             "--max-level",
             "2",
+            "--structural-only",
         ]
     ) == 0
     output = capsys.readouterr().out
@@ -303,6 +306,7 @@ def test_controlled_raw_and_ir_compare_same_case_attack_only_and_keyless(
         "fixture-provider",
         "--case-filter",
         "missing_nonzero_hypothesis",
+        "--structural-only",
     ]
 
     assert main([*base_args, "--review-context", "raw"]) == 0
@@ -383,6 +387,7 @@ def test_targeted_mode_sends_exact_grouped_items_and_zero_when_none(
         "missing_nonzero_hypothesis",
         "--review-context",
         "targeted",
+        "--structural-only",
     ]
 
     assert main(args) == 0
@@ -441,6 +446,7 @@ def test_targeted_mode_keeps_distinct_review_items_as_distinct_requests(
             "missing_nonzero_hypothesis",
             "--review-context",
             "targeted",
+            "--structural-only",
         ]
     ) == 0
     result = _single_result(_summary(capsys.readouterr().out))

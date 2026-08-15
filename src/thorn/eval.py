@@ -13,7 +13,10 @@ from pydantic import BaseModel, Field
 from thorn.analysis import AnalysisFinding, analyze_project
 from thorn.dependencies import ExtractedProject
 from thorn.eval_review import build_result_review_context
+from thorn.evidence import InferenceStatus
 from thorn.latex import extract_project
+from thorn.linguistic import LinguisticFrontend
+from thorn.local_nlp import select_linguistic_frontend
 from thorn.models import (
     AuditFinding,
     FindingCategory,
@@ -24,12 +27,14 @@ from thorn.models import (
 from thorn.providers.base import EvaluationProvider
 from thorn.semantic_audit import SemanticReviewResult, review_semantic_context
 from thorn.semantic_review import ReviewContext, build_review_context
+from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
 # Test seam retained without importing the OpenAI provider in zero-inference modes.
 OpenAIProvider: Callable[[str], EvaluationProvider] | None = None
 CaseMode = Literal["analyze", "review"]
 ReviewContextChoice = Literal["raw", "ir", "targeted"]
 ReviewStrategy = Literal["legacy", "raw", "ir", "targeted"]
+PreflightTriggerStatus = Literal["AMBIGUOUS", "UNRESOLVED"]
 
 
 def _default_case_modes() -> list[CaseMode]:
@@ -163,6 +168,28 @@ class EvaluationResult(BaseModel):
     defender_used: bool = False
 
 
+class TargetedPreflightTrigger(BaseModel):
+    relation_identifier: str
+    status: PreflightTriggerStatus
+
+
+class TargetedPreflightItem(BaseModel):
+    review_item_identifier: str
+    trigger_relations: list[TargetedPreflightTrigger] = Field(default_factory=list)
+
+
+class TargetedPreflightRecord(BaseModel):
+    fixture: str
+    case_name: str
+    selected_result_identifier: str
+    semantic_review_item_count: int = Field(ge=0)
+    review_item_identifiers: list[str] = Field(default_factory=list)
+    review_items: list[TargetedPreflightItem] = Field(default_factory=list)
+    would_make_semantic_request_count: int = Field(ge=0)
+    provider_request_count: int = Field(default=0, ge=0)
+    no_semantic_escalation_required: bool
+
+
 _SEVERITY_RANK = {
     Severity.INFO: 0,
     Severity.WARNING: 1,
@@ -202,6 +229,14 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--structural-only",
+        action="store_true",
+        help=(
+            "disable the normal local linguistic frontend for semantic evaluation; intended "
+            "for debugging, constrained environments, and parser-neutral unit tests"
+        ),
+    )
+    parser.add_argument(
         "--no-defender",
         action="store_true",
         help="disable the defender in the backward-compatible default review mode",
@@ -216,6 +251,14 @@ def _parser() -> argparse.ArgumentParser:
         "--analyze",
         action="store_true",
         help="run deterministic structural-analysis expectations with no model/API calls",
+    )
+    mode.add_argument(
+        "--targeted-preflight",
+        action="store_true",
+        help=(
+            "inspect targeted SemanticReviewItem selection through the normal local linguistic "
+            "frontend without constructing or calling a semantic provider"
+        ),
     )
     return parser
 
@@ -454,6 +497,101 @@ def _targeted_context(project: ExtractedProject, unit: TheoremUnit) -> ReviewCon
     )
 
 
+def _extract_evaluation_project(
+    tex_path: Path,
+    *,
+    use_local_linguistic_frontend: bool,
+    linguistic_frontend: LinguisticFrontend | None = None,
+) -> ExtractedProject:
+    selected_linguistic_frontend = select_linguistic_frontend(
+        structural_only=not use_local_linguistic_frontend,
+        injected=linguistic_frontend,
+        factory=SpacyLinguisticFrontend,
+    )
+    return extract_project(
+        tex_path,
+        linguistic_frontend=selected_linguistic_frontend,
+    )
+
+
+def _targeted_preflight_record(
+    *,
+    tex_path: Path,
+    project: ExtractedProject,
+    unit: TheoremUnit,
+    expectation: CaseExpectation,
+) -> TargetedPreflightRecord:
+    context = _targeted_context(project, unit)
+    relation_by_identifier = {
+        relation.identifier: relation
+        for relation in project.proof_support_graph.edges
+    }
+    review_items: list[TargetedPreflightItem] = []
+    for item in context.items:
+        triggers: list[TargetedPreflightTrigger] = []
+        for relation_identifier in item.trigger_relation_identifiers:
+            relation = relation_by_identifier.get(relation_identifier)
+            if relation is None:
+                raise ValueError(
+                    f"review item {item.identifier!r} references unknown trigger relation "
+                    f"{relation_identifier!r}"
+                )
+            if relation.status not in {
+                InferenceStatus.AMBIGUOUS,
+                InferenceStatus.UNRESOLVED,
+            }:
+                raise ValueError(
+                    f"review item {item.identifier!r} has non-uncertain trigger relation "
+                    f"{relation_identifier!r} ({relation.status.value})"
+                )
+            trigger_status: PreflightTriggerStatus = (
+                "AMBIGUOUS"
+                if relation.status is InferenceStatus.AMBIGUOUS
+                else "UNRESOLVED"
+            )
+            triggers.append(
+                TargetedPreflightTrigger(
+                    relation_identifier=relation_identifier,
+                    status=trigger_status,
+                )
+            )
+        review_items.append(
+            TargetedPreflightItem(
+                review_item_identifier=item.identifier,
+                trigger_relations=triggers,
+            )
+        )
+
+    identifiers = [item.review_item_identifier for item in review_items]
+    item_count = len(review_items)
+    return TargetedPreflightRecord(
+        fixture=str(tex_path),
+        case_name=expectation.name,
+        selected_result_identifier=unit.identifier,
+        semantic_review_item_count=item_count,
+        review_item_identifiers=identifiers,
+        review_items=review_items,
+        would_make_semantic_request_count=item_count,
+        provider_request_count=0,
+        no_semantic_escalation_required=item_count == 0,
+    )
+
+
+def _print_targeted_preflight(record: TargetedPreflightRecord, level: int) -> None:
+    print(
+        f"PREFLIGHT TARGETED L{level} {record.case_name}: "
+        f"target={record.selected_result_identifier} "
+        f"items={record.semantic_review_item_count} "
+        f"would_request={record.would_make_semantic_request_count} "
+        f"provider_requests={record.provider_request_count} "
+        f"no_escalation={str(record.no_semantic_escalation_required).lower()}"
+    )
+    for item in record.review_items:
+        print(f"     item {item.review_item_identifier}")
+        for trigger in item.trigger_relations:
+            print(f"       trigger {trigger.relation_identifier} {trigger.status}")
+
+
 def _run_review_strategy(
     *,
     tex_path: Path,
@@ -524,6 +662,10 @@ def _run_review_strategy(
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     started = time.perf_counter()
+    if args.targeted_preflight and args.review_context not in {None, "targeted"}:
+        print("thorn-eval: --targeted-preflight is only compatible with targeted review context")
+        return 2
+
     try:
         all_cases = _load_cases(args.case_dir)
         analysis_expectations = (
@@ -567,20 +709,43 @@ def main(argv: list[str] | None = None) -> int:
         ]
 
     provider: EvaluationProvider | None = None
-    if not args.validate_only and not args.analyze:
+    if not args.validate_only and not args.analyze and not args.targeted_preflight:
         if OpenAIProvider is None and not os.getenv("OPENAI_API_KEY"):
             print(
-                "thorn-eval: OPENAI_API_KEY is required unless "
-                "--validate-only or --analyze is used"
+                "thorn-eval: OPENAI_API_KEY is required unless --validate-only, "
+                "--analyze, or --targeted-preflight is used"
             )
             return 2
         provider = _make_openai_provider(args.model)
 
-    review_strategy: ReviewStrategy = args.review_context or "legacy"
+    review_strategy: ReviewStrategy = (
+        "targeted" if args.targeted_preflight else args.review_context or "legacy"
+    )
     review_results: list[EvaluationResult] = []
+    preflight_results: list[TargetedPreflightRecord] = []
     failures = 0
     for tex_path, expectation in cases:
-        project = extract_project(tex_path)
+        use_local_linguistic_frontend = (
+            not args.structural_only
+            and not args.validate_only
+            and not args.analyze
+        )
+        try:
+            project = _extract_evaluation_project(
+                tex_path,
+                use_local_linguistic_frontend=use_local_linguistic_frontend,
+            )
+        except LinguisticFrontendUnavailable as exc:
+            print(
+                "thorn-eval: local linguistic frontend unavailable: "
+                f"{exc}. Install the local spaCy model or rerun with --structural-only."
+            )
+            return 2
+        except (OSError, UnicodeError, RuntimeError, ValueError) as exc:
+            print(f"FAIL {expectation.name}: could not extract project: {exc}")
+            failures += 1
+            continue
+
         units = project.units
         try:
             unit = _select_unit(units, expectation)
@@ -642,6 +807,22 @@ def main(argv: list[str] | None = None) -> int:
                     )
             continue
 
+        if args.targeted_preflight:
+            try:
+                preflight = _targeted_preflight_record(
+                    tex_path=tex_path,
+                    project=project,
+                    unit=unit,
+                    expectation=expectation,
+                )
+            except ValueError as exc:
+                print(f"FAIL {expectation.name}: targeted preflight: {exc}")
+                failures += 1
+                continue
+            preflight_results.append(preflight)
+            _print_targeted_preflight(preflight, expectation.level)
+            continue
+
         assert provider is not None
         result, visible = _run_review_strategy(
             tex_path=tex_path,
@@ -673,18 +854,30 @@ def main(argv: list[str] | None = None) -> int:
                     f"{finding.title}"
                 )
 
-    mode = "analyze" if args.analyze else "validate" if args.validate_only else "review"
+    if args.targeted_preflight:
+        mode = "targeted-preflight"
+    elif args.analyze:
+        mode = "analyze"
+    elif args.validate_only:
+        mode = "validate"
+    else:
+        mode = "review"
+
     defender = (
         not args.no_defender
-        if mode != "review" or review_strategy == "legacy"
+        if mode == "review" and review_strategy == "legacy"
         else False
     )
     summary: dict[str, object] = {
         "cases": len(cases),
         "failures": failures,
         "mode": mode,
-        "review_context": None if mode != "review" else review_strategy,
-        "model": None if args.validate_only or args.analyze else args.model,
+        "review_context": (
+            "targeted"
+            if mode == "targeted-preflight"
+            else None if mode != "review" else review_strategy
+        ),
+        "model": None if mode != "review" else args.model,
         "min_confidence": args.min_confidence,
         "defender": defender,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
@@ -695,6 +888,20 @@ def main(argv: list[str] | None = None) -> int:
             result.model_dump(mode="json")
             for result in review_results
         ]
+    elif mode == "targeted-preflight":
+        summary.update(
+            {
+                "provider_instantiated": False,
+                "requests": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "results": [
+                    result.model_dump(mode="json")
+                    for result in preflight_results
+                ],
+            }
+        )
 
     print()
     print(json.dumps(summary, indent=2))
