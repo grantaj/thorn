@@ -1,0 +1,35 @@
+{
+  "load-bearing sneaky prose feeds a downstream theorem": {
+    "claim_count": 3,
+    "edge_kinds": ["named_property", "prior_claim"],
+    "unsupported_load_bearing": ["The limit clearly has full rank."],
+    "trailing_binders": [],
+    "reverse_result_dependencies": ["thm:sneaky-downstream"]
+  },
+  "clean trailing binders remain attached to their displays": {
+    "claim_count": 2,
+    "edge_kinds": [],
+    "unsupported_load_bearing": [],
+    "trailing_binders": ["x", "x"],
+    "reverse_result_dependencies": []
+  },
+  "clean explicit theorem equation definition and property support": {
+    "claim_count": 4,
+    "edge_kinds": [
+      "definition",
+      "equation_reference",
+      "named_property",
+      "result_reference"
+    ],
+    "unsupported_load_bearing": [],
+    "trailing_binders": [],
+    "reverse_result_dependencies": []
+  },
+  "clean expository prose is not load-bearing": {
+    "claim_count": 2,
+    "edge_kinds": ["named_property"],
+    "unsupported_load_bearing": [],
+    "trailing_binders": [],
+    "reverse_result_dependencies": []
+  }
+}
