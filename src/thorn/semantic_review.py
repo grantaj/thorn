@@ -292,10 +292,10 @@ def _select_symbol_context(
     local_constraints: list[Constraint] = []
     symbol_by_id = {symbol.identifier: symbol for symbol in symbols}
     for constraint in table.constraints:
-        symbol = symbol_by_id.get(constraint.symbol_identifier)
-        if symbol is None:
+        selected_symbol = symbol_by_id.get(constraint.symbol_identifier)
+        if selected_symbol is None:
             continue
-        scope_kind = table.scope(symbol.scope_identifier).kind
+        scope_kind = table.scope(selected_symbol.scope_identifier).kind
         if scope_kind in {ScopeKind.RESULT, ScopeKind.STATEMENT}:
             hypotheses.append(constraint)
         else:
