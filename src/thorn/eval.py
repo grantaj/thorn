@@ -11,19 +11,26 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from thorn.check import CheckFinding, check_project
+from thorn.dependencies import ExtractedProject
+from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
 from thorn.models import (
     AuditFinding,
+    CandidateFinding,
     FindingCategory,
     Severity,
     TheoremUnit,
     UnitAudit,
 )
-from thorn.providers.base import AuditProvider
+from thorn.providers.base import EvaluationProvider
+from thorn.semantic_audit import SemanticReviewResult, review_semantic_context
+from thorn.semantic_review import ReviewContext, build_review_context
 
 # Test seam retained without importing the OpenAI provider in zero-inference modes.
-OpenAIProvider: Callable[[str], AuditProvider] | None = None
+OpenAIProvider: Callable[[str], EvaluationProvider] | None = None
 CaseMode = Literal["check", "review"]
+ReviewContextChoice = Literal["raw", "ir", "targeted"]
+ReviewStrategy = Literal["legacy", "raw", "ir", "targeted"]
 
 
 def _default_case_modes() -> list[CaseMode]:
@@ -110,6 +117,53 @@ class CaseExpectation(BaseModel):
     notes: str | None = None
 
 
+class ObservedFinding(BaseModel):
+    id: str
+    rule: str
+    category: FindingCategory
+    severity: Severity
+    confidence: float = Field(ge=0.0, le=1.0)
+    title: str
+    review_item_identifier: str | None = None
+
+
+class ProviderUsage(BaseModel):
+    requests: int = Field(default=0, ge=0)
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    total_tokens: int = Field(default=0, ge=0)
+
+    def minus(self, earlier: ProviderUsage) -> ProviderUsage:
+        return ProviderUsage(
+            requests=self.requests - earlier.requests,
+            input_tokens=self.input_tokens - earlier.input_tokens,
+            output_tokens=self.output_tokens - earlier.output_tokens,
+            total_tokens=self.total_tokens - earlier.total_tokens,
+        )
+
+
+class EvaluationResult(BaseModel):
+    case_name: str
+    fixture: str
+    target_identifier: str
+    review_strategy: ReviewStrategy
+    expected_kind: str = Field(pattern="^(finding|clean)$")
+    expectation: CaseExpectation
+    passed: bool
+    detail: str
+    observed_findings: list[ObservedFinding] = Field(default_factory=list)
+    semantic_request_count: int = Field(ge=0)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    total_tokens: int = Field(ge=0)
+    elapsed_seconds: float = Field(ge=0.0)
+    semantic_review_item_count: int = Field(ge=0)
+    sent_review_item_identifiers: list[str] = Field(default_factory=list)
+    no_semantic_escalation_required: bool | None = None
+    model_identifier: str | None = None
+    defender_used: bool = False
+
+
 _SEVERITY_RANK = {
     Severity.INFO: 0,
     Severity.WARNING: 1,
@@ -139,7 +193,20 @@ def _parser() -> argparse.ArgumentParser:
         "--case-filter",
         help="run only cases whose name or fixture path contains this text",
     )
-    parser.add_argument("--no-defender", action="store_true")
+    parser.add_argument(
+        "--review-context",
+        choices=("raw", "ir", "targeted"),
+        help=(
+            "select a controlled semantic-review strategy: raw and ir are attack-only "
+            "one-request context A/B modes; targeted reviews only deterministic IR "
+            "items selected for escalation"
+        ),
+    )
+    parser.add_argument(
+        "--no-defender",
+        action="store_true",
+        help="disable the defender in the backward-compatible default review mode",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--validate-only",
@@ -243,10 +310,10 @@ def _select_unit(
 
 
 def _matching_findings(
-    findings: list[AuditFinding],
+    findings: list[ObservedFinding],
     expectation: CaseExpectation,
     confidence: float,
-) -> list[AuditFinding]:
+) -> list[ObservedFinding]:
     return [
         finding
         for finding in findings
@@ -260,7 +327,7 @@ def _matching_findings(
     ]
 
 
-def _make_openai_provider(model: str) -> AuditProvider:
+def _make_openai_provider(model: str) -> EvaluationProvider:
     if OpenAIProvider is not None:
         return OpenAIProvider(model)
 
@@ -271,7 +338,7 @@ def _make_openai_provider(model: str) -> AuditProvider:
 
 def _audit_unit(
     unit: TheoremUnit,
-    provider: AuditProvider,
+    provider: EvaluationProvider,
     *,
     use_defender: bool,
 ) -> UnitAudit:
@@ -301,18 +368,158 @@ def _check_case(
     return passed, detail
 
 
-def _provider_usage(provider: AuditProvider | None) -> dict[str, object]:
+def _provider_usage_snapshot(provider: EvaluationProvider | None) -> ProviderUsage:
+    if provider is None:
+        return ProviderUsage()
+    return ProviderUsage(
+        requests=provider.requests,
+        input_tokens=provider.input_tokens,
+        output_tokens=provider.output_tokens,
+        total_tokens=provider.total_tokens,
+    )
+
+
+def _provider_usage(provider: EvaluationProvider | None) -> dict[str, object]:
     if provider is None:
         return {}
-    requests = getattr(provider, "requests", None)
-    if not isinstance(requests, int):
-        return {}
-    return {
-        "requests": requests,
-        "input_tokens": getattr(provider, "input_tokens", 0),
-        "output_tokens": getattr(provider, "output_tokens", 0),
-        "total_tokens": getattr(provider, "total_tokens", 0),
-    }
+    return _provider_usage_snapshot(provider).model_dump()
+
+
+def _observed_audit_findings(findings: list[AuditFinding]) -> list[ObservedFinding]:
+    return [
+        ObservedFinding(
+            id=f"{finding.unit_id}:{finding.rule}:{index}",
+            rule=finding.rule,
+            category=finding.category,
+            severity=finding.severity,
+            confidence=finding.confidence,
+            title=finding.title,
+        )
+        for index, finding in enumerate(findings, start=1)
+    ]
+
+
+def _observed_semantic_findings(
+    results: list[SemanticReviewResult],
+) -> list[ObservedFinding]:
+    observed: list[ObservedFinding] = []
+    for result in results:
+        for finding in result.report.findings:
+            observed.append(
+                ObservedFinding(
+                    id=finding.id,
+                    rule=finding.rule,
+                    category=finding.category,
+                    severity=finding.severity,
+                    confidence=finding.confidence,
+                    title=finding.title,
+                    review_item_identifier=result.item_identifier,
+                )
+            )
+    return observed
+
+
+def _evaluate_expectation(
+    findings: list[ObservedFinding],
+    expectation: CaseExpectation,
+    confidence: float,
+) -> tuple[bool, str, list[ObservedFinding]]:
+    visible = [finding for finding in findings if finding.confidence >= confidence]
+    matches = _matching_findings(visible, expectation, confidence)
+
+    if expectation.kind == "clean":
+        passed = not visible
+        detail = (
+            "no surviving diagnostics"
+            if passed
+            else f"{len(visible)} unexpected diagnostic(s)"
+        )
+    else:
+        passed = bool(matches)
+        detail = (
+            ", ".join(f"{item.rule}/{item.category.value}" for item in matches)
+            if passed
+            else "expected defect not detected"
+        )
+    return passed, detail, visible
+
+
+def _targeted_context(project: ExtractedProject, unit: TheoremUnit) -> ReviewContext:
+    generated = build_review_context(project)
+    return ReviewContext(
+        items=[
+            item
+            for item in generated.items
+            if item.result.identifier == unit.identifier
+        ]
+    )
+
+
+def _run_review_strategy(
+    *,
+    tex_path: Path,
+    project: ExtractedProject,
+    unit: TheoremUnit,
+    expectation: CaseExpectation,
+    provider: EvaluationProvider,
+    strategy: ReviewStrategy,
+    min_confidence: float,
+    use_defender: bool,
+) -> tuple[EvaluationResult, list[ObservedFinding]]:
+    before = _provider_usage_snapshot(provider)
+    started = time.perf_counter()
+    item_identifiers: list[str] = []
+    item_count = 0
+    no_escalation: bool | None = None
+    defender_used = False
+
+    if strategy == "legacy":
+        audit = _audit_unit(unit, provider, use_defender=use_defender)
+        findings = _observed_audit_findings(audit.findings)
+        defender_used = use_defender
+    elif strategy == "raw":
+        audit = _audit_unit(unit, provider, use_defender=False)
+        findings = _observed_audit_findings(audit.findings)
+    else:
+        if strategy == "ir":
+            context = build_result_review_context(project, unit.identifier)
+        else:
+            context = _targeted_context(project, unit)
+            no_escalation = not context.items
+        item_count = len(context.items)
+        semantic_results = review_semantic_context(context, provider)
+        item_identifiers = [result.item_identifier for result in semantic_results]
+        findings = _observed_semantic_findings(semantic_results)
+
+    elapsed = time.perf_counter() - started
+    usage = _provider_usage_snapshot(provider).minus(before)
+    passed, detail, visible = _evaluate_expectation(
+        findings,
+        expectation,
+        min_confidence,
+    )
+    result = EvaluationResult(
+        case_name=expectation.name,
+        fixture=str(tex_path),
+        target_identifier=unit.identifier,
+        review_strategy=strategy,
+        expected_kind=expectation.kind,
+        expectation=expectation.model_copy(deep=True),
+        passed=passed,
+        detail=detail,
+        observed_findings=findings,
+        semantic_request_count=usage.requests,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        total_tokens=usage.total_tokens,
+        elapsed_seconds=round(elapsed, 6),
+        semantic_review_item_count=item_count,
+        sent_review_item_identifiers=item_identifiers,
+        no_semantic_escalation_required=no_escalation,
+        model_identifier=provider.model,
+        defender_used=defender_used,
+    )
+    return result, visible
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -360,9 +567,9 @@ def main(argv: list[str] | None = None) -> int:
             if "review" in expectation.modes
         ]
 
-    provider: AuditProvider | None = None
+    provider: EvaluationProvider | None = None
     if not args.validate_only and not args.check:
-        if not os.getenv("OPENAI_API_KEY"):
+        if OpenAIProvider is None and not os.getenv("OPENAI_API_KEY"):
             print(
                 "thorn-eval: OPENAI_API_KEY is required unless "
                 "--validate-only or --check is used"
@@ -370,6 +577,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         provider = _make_openai_provider(args.model)
 
+    review_strategy: ReviewStrategy = args.review_context or "legacy"
+    review_results: list[EvaluationResult] = []
     failures = 0
     for tex_path, expectation in cases:
         project = extract_project(tex_path)
@@ -435,64 +644,55 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         assert provider is not None
-        audit = _audit_unit(
-            unit,
-            provider,
+        result, visible = _run_review_strategy(
+            tex_path=tex_path,
+            project=project,
+            unit=unit,
+            expectation=expectation,
+            provider=provider,
+            strategy=review_strategy,
+            min_confidence=args.min_confidence,
             use_defender=not args.no_defender,
         )
-        visible = [
-            audit_finding
-            for audit_finding in audit.findings
-            if audit_finding.confidence >= args.min_confidence
-        ]
-        matches = _matching_findings(
-            visible,
-            expectation,
-            args.min_confidence,
+        review_results.append(result)
+
+        status = "PASS" if result.passed else "FAIL"
+        print(
+            f"{status} {review_strategy.upper()} L{expectation.level} "
+            f"{expectation.name}: {result.detail}"
         )
-
-        if expectation.kind == "clean":
-            passed = not visible
-            detail = (
-                "no surviving diagnostics"
-                if passed
-                else f"{len(visible)} unexpected diagnostic(s)"
-            )
-        else:
-            passed = bool(matches)
-            detail = (
-                ", ".join(
-                    f"{item.rule}/{item.category.value}"
-                    for item in matches
-                )
-                if passed
-                else "expected defect not detected"
-            )
-
-        status = "PASS" if passed else "FAIL"
-        print(f"{status} L{expectation.level} {expectation.name}: {detail}")
-        if not passed:
+        if not result.passed:
             failures += 1
-            for audit_finding in visible:
+            for finding in visible:
                 print(
                     "     observed "
-                    f"{audit_finding.rule}/{audit_finding.category.value}/"
-                    f"{audit_finding.severity.value} "
-                    f"confidence={audit_finding.confidence:.2f}: "
-                    f"{audit_finding.title}"
+                    f"{finding.rule}/{finding.category.value}/"
+                    f"{finding.severity.value} confidence={finding.confidence:.2f}: "
+                    f"{finding.title}"
                 )
 
     mode = "check" if args.check else "validate" if args.validate_only else "review"
+    defender = (
+        not args.no_defender
+        if mode != "review" or review_strategy == "legacy"
+        else False
+    )
     summary: dict[str, object] = {
         "cases": len(cases),
         "failures": failures,
         "mode": mode,
+        "review_context": None if mode != "review" else review_strategy,
         "model": None if args.validate_only or args.check else args.model,
         "min_confidence": args.min_confidence,
-        "defender": not args.no_defender,
+        "defender": defender,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
     }
     summary.update(_provider_usage(provider))
+    if mode == "review":
+        summary["results"] = [
+            result.model_dump(mode="json")
+            for result in review_results
+        ]
 
     print()
     print(json.dumps(summary, indent=2))
