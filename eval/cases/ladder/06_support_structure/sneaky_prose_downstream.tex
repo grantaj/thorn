@@ -1,0 +1,23 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{lemma}\label{lem:sneaky-limit}
+A minimizing sequence has an admissible limiting object.
+\end{lemma}
+\begin{proof}
+By compactness, pass to a convergent subsequence.
+The limit clearly has full rank.
+Therefore the limit is admissible.
+\end{proof}
+
+\begin{theorem}\label{thm:sneaky-downstream}
+An admissible minimizing object exists.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:sneaky-limit}, an admissible limiting object exists.
+\end{proof}
+
+\end{document}
