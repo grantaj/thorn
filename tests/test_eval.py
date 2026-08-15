@@ -106,7 +106,7 @@ class FixtureProvider:
 
 def test_eval_corpus_is_well_formed() -> None:
     cases = _load_cases(Path("eval/cases"))
-    assert len(cases) >= 46
+    assert len(cases) >= 52
 
     bad = 0
     clean = 0
@@ -178,7 +178,7 @@ def test_eval_corpus_is_well_formed() -> None:
     assert set(range(1, 11)).issubset(levels)
 
 
-def test_eval_harness_runs_all_cases_without_network(
+def test_eval_harness_runs_all_review_cases_without_network(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -187,14 +187,16 @@ def test_eval_harness_runs_all_cases_without_network(
     monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
 
     cases = _load_cases(Path("eval/cases"))
+    review_cases = [case for case in cases if "review" in case[1].modes]
     assert main(["eval/cases", "--model", "fixture-provider"]) == 0
 
     output = capsys.readouterr().out
-    assert output.count("PASS ") == len(cases)
+    assert output.count("PASS ") == len(review_cases)
+    assert f'"cases": {len(review_cases)}' in output
     assert '"failures": 0' in output
 
 
-def test_eval_max_level_filters_the_ladder(
+def test_eval_max_level_filters_the_review_ladder(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -203,7 +205,10 @@ def test_eval_max_level_filters_the_ladder(
     monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
 
     cases = _load_cases(Path("eval/cases"))
-    expected = sum(expectation.level <= 2 for _, expectation in cases)
+    expected = sum(
+        expectation.level <= 2 and "review" in expectation.modes
+        for _, expectation in cases
+    )
 
     assert main(
         [
