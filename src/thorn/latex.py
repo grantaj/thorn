@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 from pathlib import Path
 
 from thorn.dependencies import (
@@ -12,6 +10,16 @@ from thorn.dependencies import (
     ExtractedProject,
     ReferenceContext,
 )
+from thorn.frontend import (
+    FrontendDiagnosticKind,
+    FrontendEnvironment,
+    FrontendFile,
+    FrontendMacro,
+    LatexFrontend,
+    SourceSpan,
+)
+from thorn.frontend import ParsedProject as FrontendProject
+from thorn.frontends import RegexLatexFrontend
 from thorn.models import SourceRange, TheoremUnit
 
 _DEFAULT_THEOREM_ENVS = {
@@ -21,144 +29,20 @@ _DEFAULT_THEOREM_ENVS = {
     "corollary",
     "claim",
 }
-
-_NEWTHEOREM_RE = re.compile(r"\\newtheorem\*?\s*\{([^}]+)\}")
-_INCLUDE_RE = re.compile(r"\\(?:input|include)\s*\{([^}]+)\}")
-_LABEL_RE = re.compile(r"\\label\s*\{([^}]+)\}")
-_REF_RE = re.compile(r"\\(?:ref|eqref|autoref|cref|Cref)\s*\{([^}]+)\}")
+_REF_MACROS = {"ref", "eqref", "autoref", "cref", "Cref"}
+_DEFAULT_FRONTEND = RegexLatexFrontend()
 
 
-@dataclass(frozen=True)
-class _Block:
-    env: str
-    title: str | None
-    body: str
-    start: int
-    end: int
-    body_start: int
-    body_end: int
-    start_line: int
-    end_line: int
-
-
-@dataclass(frozen=True)
-class _Reference:
-    source_identifier: str
-    target_label: str
-    source: SourceRange
-    context: ReferenceContext
-
-
-def _strip_comments(text: str) -> str:
-    out: list[str] = []
-    for line in text.splitlines(keepends=True):
-        escaped = False
-        cut = len(line)
-        for i, char in enumerate(line):
-            if char == "%" and not escaped:
-                cut = i
-                break
-            escaped = not escaped if char == "\\" else False
-        out.append(line[:cut] + ("\n" if line.endswith("\n") and cut < len(line) else ""))
-    return "".join(out)
-
-
-def _line_number(text: str, offset: int) -> int:
-    return text.count("\n", 0, offset) + 1
-
-
-def _read_project(main: Path) -> dict[Path, str]:
-    main = main.resolve()
-    pending = [main]
-    seen: dict[Path, str] = {}
-
-    while pending:
-        path = pending.pop()
-        if path in seen:
-            continue
-        if not path.exists():
-            raise FileNotFoundError(path)
-        text = path.read_text(encoding="utf-8")
-        seen[path] = text
-        cleaned = _strip_comments(text)
-        for match in _INCLUDE_RE.finditer(cleaned):
-            name = match.group(1).strip()
-            child = Path(name)
-            if child.suffix == "":
-                child = child.with_suffix(".tex")
-            child = (path.parent / child).resolve()
-            if child not in seen:
-                pending.append(child)
-    return seen
-
-
-def _theorem_envs(files: dict[Path, str]) -> set[str]:
+def _theorem_envs(project: FrontendProject) -> set[str]:
     envs = set(_DEFAULT_THEOREM_ENVS)
-    for text in files.values():
-        envs.update(_NEWTHEOREM_RE.findall(_strip_comments(text)))
+    for file in project.files:
+        for macro in file.macros:
+            if macro.name != "newtheorem" or not macro.arguments:
+                continue
+            argument = macro.arguments[0]
+            if not argument.optional and argument.value.strip():
+                envs.add(argument.value.strip())
     return envs
-
-
-def _find_blocks(text: str, envs: set[str]) -> list[_Block]:
-    if not envs:
-        return []
-    names = "|".join(sorted((re.escape(name) for name in envs), key=len, reverse=True))
-    begin_re = re.compile(rf"\\begin\{{(?P<env>{names})\}}(?:\[(?P<title>[^]]*)\])?")
-    blocks: list[_Block] = []
-
-    for match in begin_re.finditer(text):
-        env = match.group("env")
-        end_re = re.compile(rf"\\end\{{{re.escape(env)}\}}")
-        end_match = end_re.search(text, match.end())
-        if end_match is None:
-            continue
-        body_start = match.end()
-        body_end = end_match.start()
-        blocks.append(
-            _Block(
-                env=env,
-                title=match.group("title"),
-                body=text[body_start:body_end].strip(),
-                start=match.start(),
-                end=end_match.end(),
-                body_start=body_start,
-                body_end=body_end,
-                start_line=_line_number(text, match.start()),
-                end_line=_line_number(text, end_match.end()),
-            )
-        )
-    return blocks
-
-
-def _find_proof_after(text: str, block: _Block, next_block_start: int | None) -> _Block | None:
-    upper = next_block_start if next_block_start is not None else len(text)
-    # A proof normally follows its result. Keep the association deliberately conservative:
-    # no more than 40 source lines and never across another theorem-like block.
-    tail = text[block.end:upper]
-    proof_re = re.compile(r"\\begin\{proof\}(?:\[(?P<title>[^]]*)\])?")
-    match = proof_re.search(tail)
-    if match is None:
-        return None
-    absolute_start = block.end + match.start()
-    if _line_number(text, absolute_start) - block.end_line > 40:
-        return None
-    end_re = re.compile(r"\\end\{proof\}")
-    end_match = end_re.search(text, block.end + match.end(), upper)
-    if end_match is None:
-        return None
-    body_start = block.end + match.end()
-    body_end = end_match.start()
-    return _Block(
-        env="proof",
-        title=match.group("title"),
-        body=text[body_start:body_end].strip(),
-        start=absolute_start,
-        end=end_match.end(),
-        body_start=body_start,
-        body_end=body_end,
-        start_line=_line_number(text, absolute_start),
-        end_line=_line_number(text, end_match.end()),
-    )
 
 
 def _local_context(text: str, start_line: int, lines: int = 120) -> str:
@@ -168,70 +52,129 @@ def _local_context(text: str, start_line: int, lines: int = 120) -> str:
     return "\n".join(source_lines[first:last]).strip()
 
 
+def _macros_in_span(
+    file: FrontendFile,
+    span: SourceSpan,
+    names: set[str] | None = None,
+) -> list[FrontendMacro]:
+    return [
+        macro
+        for macro in file.macros
+        if macro.span.start_offset >= span.start_offset
+        and macro.span.end_offset <= span.end_offset
+        and (names is None or macro.name in names)
+    ]
+
+
+def _first_required_argument(macro: FrontendMacro) -> str | None:
+    for argument in macro.arguments:
+        if not argument.optional:
+            return argument.value.strip()
+    return None
+
+
+def _environment_title(environment: FrontendEnvironment) -> str | None:
+    for argument in environment.arguments:
+        if argument.optional:
+            return argument.value
+    return None
+
+
+def _find_proof_after(
+    file: FrontendFile,
+    theorem: FrontendEnvironment,
+    next_theorem_start: int | None,
+) -> FrontendEnvironment | None:
+    upper = next_theorem_start if next_theorem_start is not None else len(file.raw)
+    candidates = [
+        environment
+        for environment in file.environments
+        if environment.name == "proof"
+        and environment.span.start_offset >= theorem.span.end_offset
+        and environment.span.start_offset < upper
+        and environment.span.start_line - theorem.span.end_line <= 40
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: item.span.start_offset)
+
+
 def _block_references(
-    path: Path,
-    text: str,
-    block: _Block,
+    file: FrontendFile,
+    environment: FrontendEnvironment,
     source_identifier: str,
     context: ReferenceContext,
-) -> list[_Reference]:
-    body = text[block.body_start:block.body_end]
-    references: list[_Reference] = []
-    for match in _REF_RE.finditer(body):
-        absolute_offset = block.body_start + match.start()
-        line = _line_number(text, absolute_offset)
-        references.append(
-            _Reference(
-                source_identifier=source_identifier,
-                target_label=match.group(1),
-                source=SourceRange(file=str(path), start_line=line, end_line=line),
-                context=context,
-            )
-        )
+) -> list[tuple[str, SourceRange, ReferenceContext]]:
+    references: list[tuple[str, SourceRange, ReferenceContext]] = []
+    for macro in _macros_in_span(file, environment.body_span, _REF_MACROS):
+        label = _first_required_argument(macro)
+        if not label:
+            continue
+        references.append((label, macro.span.source_range(), context))
     return references
 
 
-def extract_project(main_file: str | Path) -> ExtractedProject:
-    """Extract theorem-like units and their structural reference graph."""
+def _raise_missing_file_diagnostic(project: FrontendProject) -> None:
+    for diagnostic in project.diagnostics:
+        if diagnostic.kind != FrontendDiagnosticKind.MISSING_FILE:
+            continue
+        prefix = "included LaTeX file not found: "
+        if diagnostic.message.startswith(prefix):
+            raise FileNotFoundError(diagnostic.message.removeprefix(prefix))
+        raise FileNotFoundError(diagnostic.message)
 
-    main = Path(main_file).resolve()
-    files = _read_project(main)
-    envs = _theorem_envs(files)
+
+def extract_project(
+    main_file: str | Path,
+    *,
+    frontend: LatexFrontend | None = None,
+) -> ExtractedProject:
+    """Extract theorem-like units and their structural reference graph.
+
+    LaTeX syntax is supplied by a parser-neutral frontend. The theorem/result
+    interpretation and dependency graph are Thorn-owned analysis above that
+    boundary, so parser backends can be replaced or A/B tested independently.
+    """
+
+    parser = frontend or _DEFAULT_FRONTEND
+    parsed = parser.parse_project(main_file)
+    _raise_missing_file_diagnostic(parsed)
+    envs = _theorem_envs(parsed)
     units: list[TheoremUnit] = []
-    references: list[_Reference] = []
+    references: list[tuple[str, str, SourceRange, ReferenceContext]] = []
 
-    for path, text in files.items():
-        blocks = sorted(_find_blocks(text, envs), key=lambda item: item.start)
+    for file in parsed.files:
+        blocks = sorted(
+            (environment for environment in file.environments if environment.name in envs),
+            key=lambda item: item.span.start_offset,
+        )
         for index, block in enumerate(blocks):
-            next_start = blocks[index + 1].start if index + 1 < len(blocks) else None
-            proof = _find_proof_after(text, block, next_start)
-            label_match = _LABEL_RE.search(block.body)
-            label = label_match.group(1) if label_match else None
-            identifier = label or f"{path.name}:{block.start_line}:{block.env}"
+            next_start = blocks[index + 1].span.start_offset if index + 1 < len(blocks) else None
+            proof = _find_proof_after(file, block, next_start)
+            label_macros = _macros_in_span(file, block.body_span, {"label"})
+            label = _first_required_argument(label_macros[0]) if label_macros else None
+            identifier = label or f"{Path(file.path).name}:{block.span.start_line}:{block.name}"
             unit = TheoremUnit(
                 identifier=identifier,
-                environment=block.env,
-                title=block.title,
+                environment=block.name,
+                title=_environment_title(block),
                 label=label,
-                statement=block.body,
-                proof=proof.body if proof else None,
-                statement_range=SourceRange(
-                    file=str(path), start_line=block.start_line, end_line=block.end_line
-                ),
-                proof_range=(
-                    SourceRange(
-                        file=str(path), start_line=proof.start_line, end_line=proof.end_line
-                    )
-                    if proof
-                    else None
-                ),
-                local_context=_local_context(text, block.start_line),
+                statement=block.body(file.raw).strip(),
+                proof=proof.body(file.raw).strip() if proof else None,
+                statement_range=block.span.source_range(),
+                proof_range=proof.span.source_range() if proof else None,
+                local_context=_local_context(file.raw, block.span.start_line),
             )
             units.append(unit)
             references.extend(
-                _block_references(
-                    path,
-                    text,
+                (
+                    identifier,
+                    target_label,
+                    source,
+                    context,
+                )
+                for target_label, source, context in _block_references(
+                    file,
                     block,
                     identifier,
                     ReferenceContext.STATEMENT,
@@ -239,9 +182,14 @@ def extract_project(main_file: str | Path) -> ExtractedProject:
             )
             if proof is not None:
                 references.extend(
-                    _block_references(
-                        path,
-                        text,
+                    (
+                        identifier,
+                        target_label,
+                        source,
+                        context,
+                    )
+                    for target_label, source, context in _block_references(
+                        file,
                         proof,
                         identifier,
                         ReferenceContext.PROOF,
@@ -256,8 +204,8 @@ def extract_project(main_file: str | Path) -> ExtractedProject:
             by_label.setdefault(unit.label, []).append(unit)
 
     edges: list[DependencyEdge] = []
-    for reference in references:
-        candidates = by_label.get(reference.target_label, [])
+    for source_identifier, target_label, source, context in references:
+        candidates = by_label.get(target_label, [])
         if not candidates:
             # A generic LaTeX reference may target an equation, figure, section, etc. Without a
             # project-wide label index we cannot call it a missing theorem dependency.
@@ -265,21 +213,21 @@ def extract_project(main_file: str | Path) -> ExtractedProject:
         if len(candidates) == 1:
             edges.append(
                 DependencyEdge(
-                    source_identifier=reference.source_identifier,
-                    target_label=reference.target_label,
+                    source_identifier=source_identifier,
+                    target_label=target_label,
                     target_identifier=candidates[0].identifier,
-                    source=reference.source,
-                    context=reference.context,
+                    source=source,
+                    context=context,
                     resolution=DependencyResolution.RESOLVED,
                 )
             )
         else:
             edges.append(
                 DependencyEdge(
-                    source_identifier=reference.source_identifier,
-                    target_label=reference.target_label,
-                    source=reference.source,
-                    context=reference.context,
+                    source_identifier=source_identifier,
+                    target_label=target_label,
+                    source=source,
+                    context=context,
                     resolution=DependencyResolution.AMBIGUOUS,
                 )
             )
@@ -295,17 +243,22 @@ def extract_project(main_file: str | Path) -> ExtractedProject:
         for unit in units
     ]
     return ExtractedProject(
-        main_file=str(main),
+        main_file=parsed.main_file,
         units=enriched,
         dependency_graph=graph,
     )
 
 
-def extract_units(main_file: str | Path) -> list[TheoremUnit]:
+def extract_units(
+    main_file: str | Path,
+    *,
+    frontend: LatexFrontend | None = None,
+) -> list[TheoremUnit]:
     """Extract theorem-like result/proof units from a LaTeX project.
 
-    This compatibility API now delegates to :func:`extract_project`; prompt-facing dependency
-    context is rendered from the project's first-class dependency graph.
+    This compatibility API delegates to :func:`extract_project`; prompt-facing
+    dependency context is rendered from the project's first-class dependency
+    graph.
     """
 
-    return extract_project(main_file).units
+    return extract_project(main_file, frontend=frontend).units
