@@ -26,7 +26,7 @@ from thorn.providers.replay import (
     ReplayProvider,
 )
 from thorn.semantic_review import ReviewTargetKind, SemanticReviewItem
-from thorn.semantic_review_render import build_semantic_review_request
+from thorn.semantic_review_render import SemanticReviewRequest, build_semantic_review_request
 
 
 class FakeLiveProvider:
@@ -70,10 +70,9 @@ class FakeLiveProvider:
         self._usage()
         return self._report(unit.identifier)
 
-    def review_semantic(self, request: object) -> AttackReport:
+    def review_semantic(self, request: SemanticReviewRequest) -> AttackReport:
         self._usage(input_tokens=8, output_tokens=3)
-        item = getattr(request, "item")
-        return self._report(item.result.identifier)
+        return self._report(request.item.result.identifier)
 
     def defend(
         self,
@@ -105,7 +104,7 @@ def _unit(statement: str = "If ab=ac then b=c.") -> TheoremUnit:
     )
 
 
-def _semantic_request() -> object:
+def _semantic_request() -> SemanticReviewRequest:
     item = SemanticReviewItem(
         identifier="semantic-review:test",
         target_kind=ReviewTargetKind.SUPPORT_RELATION,
@@ -144,7 +143,7 @@ def test_recording_and_replay_round_trip_all_provider_request_kinds(tmp_path: Pa
     request = _semantic_request()
 
     attack = recording.attack(unit)
-    semantic = recording.review_semantic(request)  # type: ignore[arg-type]
+    semantic = recording.review_semantic(request)
     defense = recording.defend(unit, attack.findings)
 
     assert live.requests == live.live_requests == 3
@@ -164,7 +163,7 @@ def test_recording_and_replay_round_trip_all_provider_request_kinds(tmp_path: Pa
 
     replay = ReplayProvider(model="fixture-model", directory=tmp_path)
     assert replay.attack(unit) == attack
-    assert replay.review_semantic(request) == semantic  # type: ignore[arg-type]
+    assert replay.review_semantic(request) == semantic
     assert replay.defend(unit, attack.findings) == defense
     assert replay.requests == 3
     assert replay.live_requests == 0
