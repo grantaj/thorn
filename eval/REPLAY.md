@@ -26,6 +26,8 @@ Recordings include:
 - the structured provider response;
 - the input/output/total token usage observed on that live exchange.
 
+Recordings therefore contain the exact rendered theorem/source/IR packet sent to the model. The documented `.thorn/` location is gitignored; recordings made from private papers must remain in private storage and must not be copied into the public Thorn fixture corpus.
+
 ## Replay without an API key
 
 Use the same semantic inputs and point `thorn-eval` at the recording directory:
