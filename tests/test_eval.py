@@ -313,7 +313,8 @@ def test_controlled_raw_and_ir_compare_same_case_attack_only_and_keyless(
     ir_summary = _summary(capsys.readouterr().out)
     ir = _single_result(ir_summary)
 
-    assert raw["case_name"] == ir["case_name"] == "missing_nonzero_hypothesis"
+    expected_name = "cancellation without a nonzero hypothesis"
+    assert raw["case_name"] == ir["case_name"] == expected_name
     assert raw["target_identifier"] == ir["target_identifier"] == "thm:missing-hypothesis"
     assert raw["expectation"] == ir["expectation"]
     assert raw["passed"] is True
