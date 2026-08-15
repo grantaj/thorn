@@ -57,7 +57,9 @@ def test_extracts_high_confidence_symbols_definitions_roles_and_constraints(
 
     assert by_name[r"\epsilon"].role == SymbolRole.SCALAR
     epsilon_constraint = next(
-        item for item in table.constraints if item.symbol_identifier == by_name[r"\epsilon"].identifier
+        item
+        for item in table.constraints
+        if item.symbol_identifier == by_name[r"\epsilon"].identifier
     )
     assert epsilon_constraint.relation == ">"
     assert epsilon_constraint.expression_latex == "0"
