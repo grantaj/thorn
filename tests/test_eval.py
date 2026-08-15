@@ -54,7 +54,11 @@ class FixtureProvider:
             ]
         )
 
-    def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
+    def defend(
+        self,
+        unit: TheoremUnit,
+        findings: list[CandidateFinding],
+    ) -> DefenseReport:
         return DefenseReport(
             verdicts=[
                 DefenseItem(
@@ -103,7 +107,8 @@ def test_eval_corpus_is_well_formed() -> None:
 
 
 def test_eval_harness_runs_all_cases_without_network(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     provider = FixtureProvider()
     monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-key")
@@ -118,22 +123,36 @@ def test_eval_harness_runs_all_cases_without_network(
 
 
 def test_eval_max_level_filters_the_ladder(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     provider = FixtureProvider()
     monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-key")
     monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
 
     cases = _load_cases(Path("eval/cases"))
-    expected = sum(expectation.level <= 2 for _, expectation in cases)
+    expected = sum(
+        expectation.level <= 2
+        for _, expectation in cases
+    )
 
-    assert main(["eval/cases", "--model", "fixture-provider", "--max-level", "2"]) == 0
+    assert main(
+        [
+            "eval/cases",
+            "--model",
+            "fixture-provider",
+            "--max-level",
+            "2",
+        ]
+    ) == 0
     output = capsys.readouterr().out
     assert output.count("PASS ") == expected
     assert f'"cases": {expected}' in output
 
 
-def test_live_eval_refuses_to_start_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_eval_refuses_to_start_without_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     assert main(["eval/cases", "--model", "unused"]) == 2
