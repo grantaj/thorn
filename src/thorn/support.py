@@ -60,6 +60,7 @@ class SupportEdge(BaseModel):
     target_label: str | None = None
     named_property: str | None = None
     explicit: bool = True
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class ProofSupportGraph(BaseModel):
