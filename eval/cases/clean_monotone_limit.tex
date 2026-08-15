@@ -3,16 +3,17 @@
 \newtheorem{theorem}{Theorem}
 \begin{document}
 
-Suppose a map $H(u)$ is continuous under bounded decreasing convergence: if
-$u_j\downarrow u$, then $H(u_j)\to H(u)$.
+For nonnegative real numbers define $H(u)=u^2$.
 
 \begin{theorem}\label{thm:monotone}
-If $(u_j)$ is uniformly bounded and $u_j\downarrow u$, then
+If $(u_j)$ is uniformly bounded and $u_j\downarrow u\ge 0$, then
 $H(u_j)\to H(u)$.
 \end{theorem}
 \begin{proof}
-This is exactly the assumed continuity of $H$ under bounded decreasing
-convergence.
+Since $u_j\to u$ and the sequence is bounded,
+\[
+  |H(u_j)-H(u)|=|u_j-u|\,|u_j+u|\to 0.
+\]
 \end{proof}
 
 \end{document}
