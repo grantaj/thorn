@@ -1,0 +1,31 @@
+{
+  "name": "proof silently requires a stronger hypothesis",
+  "kind": "finding",
+  "source": "Synthetic scope matrix case",
+  "accepted_categories": [
+    "scope_mismatch",
+    "hypothesis_mismatch",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 4,
+  "capability": "compare theorem hypotheses with the actual scope under which the proof works",
+  "target_identifier": "thm:scope-extra-assumption",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "proof_requires_extra_hypothesis",
+  "detection_methods": [
+    "proof-goal comparison",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "proof_requires_more",
+  "conclusion_relation": "exact",
+  "notes": "The argument is valid only after adding x>0; x=-1 disproves the stated theorem."
+}
