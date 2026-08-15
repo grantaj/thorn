@@ -1,0 +1,22 @@
+{
+  "name": "load-bearing sneaky prose feeds a downstream theorem",
+  "kind": "finding",
+  "modes": ["check"],
+  "source": "Synthetic support-IR case",
+  "level": 6,
+  "capability": "load-bearing prose support extraction",
+  "target_identifier": "lem:sneaky-limit",
+  "accepted_categories": ["unsupported_claim"],
+  "minimum_severity": "error",
+  "repairability": "local",
+  "family": "correctness",
+  "statement_truth": "unknown",
+  "proof_status": "gap",
+  "locality": "proof",
+  "fault_class": "load_bearing_unsupported_prose",
+  "detection_methods": ["support_graph", "semantic_review"],
+  "reader_consequence": "fatal",
+  "deception_level": "sneaky",
+  "downstream_impact": "one_result",
+  "notes": "The word clearly is not itself a defect. The structural fact is that the full-rank assertion is consumed downstream while no explicit support edge enters it."
+}
