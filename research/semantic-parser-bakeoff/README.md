@@ -35,12 +35,19 @@ The benchmark is intentionally defined in terms of mathematical-prose relations 
 
 ## Evidence and decision
 
-The 70-case experiment established enough signal to stop the open-ended parser bake-off:
+The original successful spaCy 3.8.14 / `en_core_web_sm` 3.8.0 benchmark run over all 70 cases measured:
 
-- spaCy collapsed 15 prior-claim conclusion paraphrases to one structural dependency template with zero adversarial collisions;
-- six trailing-binder variants collapsed to one template;
-- 13 introduction phrasings reduced to three templates;
-- result-support language remains structurally confusable with deliberately expository controls.
+| task | positive | negative | positive dependency templates | positive/negative collisions |
+| --- | ---: | ---: | ---: | ---: |
+| definition | 7 | 0 | 4 | 0 |
+| introduction | 13 | 0 | 3 | 0 |
+| prior claim | 15 | 5 | 5 | 0 |
+| result support | 16 | 8 | 11 | 3 |
+| trailing binder | 6 | 0 | 1 | 0 |
+
+A previous summary incorrectly described the 15 prior-claim positives as collapsing to one template. The preserved benchmark harness and original CI log show **five** templates with **zero adversarial collisions**. This document records the executable evidence rather than the mistaken summary.
+
+The useful signal is still strong: six trailing-binder variants collapse to one structural template, 13 introduction phrasings reduce to three, and prior-claim paraphrases occupy only five templates without colliding with the five adversarial controls. The deliberately difficult area is result support: 16 positives occupy 11 templates and share three templates with eight expository controls. Thorn should preserve that ambiguity rather than patch it with lexical exceptions.
 
 Stanza was exercised on the same dependency benchmark but did not add enough value to justify maintaining a second production parser. RST/discourse parsing, AMR, CoreNLP, and SRL remain possible research comparators, but their integration cost is not justified for Thorn's current goal.
 
@@ -50,7 +57,7 @@ Stanza was exercised on the same dependency benchmark but did not add enough val
 
 Nothing in this benchmark is allowed to make default CI depend on an NLP model or a remote service. Core Thorn must remain lightweight, deterministic, paid-call-free, and usable without spaCy.
 
-Production spaCy/model tests belong in a separate heavier CI path introduced with #30. The parser-independent corpus remains the regression oracle and must not be weakened merely to make a parser pass.
+Production spaCy/model tests belong in a separate heavier CI path introduced with #30. The parser-independent corpus remains the regression oracle and must not be weakened merely to make a parser pass. The heavy contract should reproduce the historical benchmark metrics above; a parser/model change that moves them requires investigation and an intentional benchmark update.
 
 ## Running the optional comparator
 
