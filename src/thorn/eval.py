@@ -28,6 +28,9 @@ OpenAIProvider: Callable[[str], AuditProvider] | None = None
 class CaseExpectation(BaseModel):
     name: str
     kind: str = Field(pattern="^(finding|clean)$")
+    modes: list[Literal["check", "review"]] = Field(
+        default_factory=lambda: ["check", "review"]
+    )
     source: str | None = None
     accepted_categories: list[FindingCategory] = Field(default_factory=list)
     minimum_severity: Severity = Severity.WARNING
@@ -159,6 +162,8 @@ def _load_cases(case_dir: Path) -> list[tuple[Path, CaseExpectation]]:
         expectation = CaseExpectation.model_validate_json(
             metadata_path.read_text(encoding="utf-8")
         )
+        if not expectation.modes:
+            raise ValueError(f"evaluation case {expectation.name!r} has no enabled modes")
         cases.append((tex_path, expectation))
     if not cases:
         raise ValueError(f"no *.json evaluation cases found in {case_dir}")
@@ -190,7 +195,11 @@ def _load_check_expectations(
             )
         expectations[name] = rules
 
-    case_names = {expectation.name for _, expectation in cases}
+    case_names = {
+        expectation.name
+        for _, expectation in cases
+        if "check" in expectation.modes
+    }
     expectation_names = set(expectations)
     missing = sorted(case_names - expectation_names)
     extra = sorted(expectation_names - case_names)
@@ -334,6 +343,19 @@ def main(argv: list[str] | None = None) -> int:
         if not cases:
             print(f"thorn-eval: no cases matched --case-filter {args.case_filter!r}")
             return 2
+
+    if args.check:
+        cases = [
+            (path, expectation)
+            for path, expectation in cases
+            if "check" in expectation.modes
+        ]
+    elif not args.validate_only:
+        cases = [
+            (path, expectation)
+            for path, expectation in cases
+            if "review" in expectation.modes
+        ]
 
     provider: AuditProvider | None = None
     if not args.validate_only and not args.check:
