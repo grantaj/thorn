@@ -27,9 +27,6 @@ from thorn.frontend import (
     SourceSpan,
 )
 
-# These signatures are structural facts Thorn already relies on. Registering
-# them explicitly keeps pylatexenc normalization independent of whichever
-# package defaults happen to be present in a given release.
 _ONE_ARGUMENT_MACROS = {
     "Cref",
     "autoref",
@@ -109,8 +106,6 @@ def _arguments(path: Path, text: str, node: Any) -> list[FrontendArgument]:
         converted = _argument_from_node(path, text, arg)
         if converted is None:
             continue
-        # pylatexenc represents the `*` from a `*` argspec as an argument;
-        # Thorn represents that separately as FrontendMacro.starred.
         if converted.raw == "*":
             continue
         arguments.append(converted)
@@ -130,6 +125,12 @@ def _macro(path: Path, text: str, node: Any) -> FrontendMacro:
         arguments=_arguments(path, text, node),
         starred=starred,
     )
+
+
+def _environment_is_explicitly_closed(text: str, node: Any) -> bool:
+    start, end = _raw_node_span(node)
+    name = str(node.environmentname)
+    return text[start:end].rstrip().endswith(f"\\end{{{name}}}")
 
 
 def _environment_body_bounds(text: str, node: Any) -> tuple[int, int]:
@@ -187,14 +188,11 @@ def _walk_nodes(nodes: Any) -> list[Any]:
 
     def visit(node: Any) -> None:
         flattened.append(node)
-
-        # Environment/group/math contents are ordinary child nodes.
         nodelist = getattr(node, "nodelist", None)
         if nodelist:
             for child in nodelist:
                 visit(child)
 
-        # Macro/environment arguments may themselves contain macros/math.
         nodeargd = getattr(node, "nodeargd", None)
         argnlist = getattr(nodeargd, "argnlist", None)
         if argnlist:
@@ -211,17 +209,8 @@ def _context_for(text: str) -> Any:
     context = get_default_latex_context_db()
 
     macros = [MacroSpec(name, "{") for name in sorted(_ONE_ARGUMENT_MACROS)]
-    # Signature accepts both starred and unstarred common `newtheorem` forms:
-    #   \newtheorem{env}{Title}
-    #   \newtheorem{env}[shared]{Title}
-    #   \newtheorem{env}{Title}[within]
-    #   \newtheorem*{env}{Title}
     macros.append(MacroSpec("newtheorem", "*{[{["))
 
-    # For unknown macros, only infer the common optional+mandatory signature
-    # when an optional argument is visibly present. We deliberately do *not*
-    # guess that every following brace group is a macro argument; that would
-    # recreate the greediness bug guarded by #15's regression tests.
     known = set(_ONE_ARGUMENT_MACROS) | {"newtheorem"}
     for match in _UNKNOWN_OPTIONAL_MACRO_RE.finditer(text):
         name = match.group(1)
@@ -236,10 +225,6 @@ def _context_for(text: str) -> Any:
         if not name or name in seen_envs:
             continue
         seen_envs.add(name)
-        # The generic Thorn structural contract needs theorem/proof optional
-        # titles. An optional argument is safe for environments where absent;
-        # unlike a generic mandatory argument it cannot swallow brace-led body
-        # content.
         environments.append(EnvironmentSpec(name, "["))
 
     context.add_context_category(
@@ -271,9 +256,6 @@ def _parse_file(path: Path) -> tuple[FrontendFile, list[FrontendDiagnostic]]:
         nodes, _, _ = walker.get_latex_nodes()
     except LatexWalkerParseError as exc:
         diagnostics.append(_parse_error(path, text, exc))
-        # Recover as much syntax as pylatexenc can provide, but retain the
-        # strict parse diagnostic so downstream callers never mistake recovery
-        # for a clean parse.
         walker = LatexWalker(text, latex_context=context, tolerant_parsing=True)
         try:
             nodes, _, _ = walker.get_latex_nodes()
@@ -288,6 +270,7 @@ def _parse_file(path: Path) -> tuple[FrontendFile, list[FrontendDiagnostic]]:
         _environment(path, text, node)
         for node in flattened
         if isinstance(node, LatexEnvironmentNode)
+        and _environment_is_explicitly_closed(text, node)
     ]
     math = [_math(path, text, node) for node in flattened if isinstance(node, LatexMathNode)]
 
