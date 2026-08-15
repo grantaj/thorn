@@ -386,9 +386,18 @@ def _attach_adjacent_claim_candidate(
         for token in document.tokens
         if token.head_index == token.index and token.pos in {"VERB", "AUX"}
     ]
-    if not roots:
-        return
-    root_path = document.root_path_signature(roots[0].index)
+    root_path = document.root_path_signature(roots[0].index) if roots else []
+    status = InferenceStatus.AMBIGUOUS if root_path else InferenceStatus.UNRESOLVED
+    if root_path:
+        reason = (
+            "adjacent claim and dependency-root structure permit a conclusion reading; "
+            "semantic dependence is not resolved offline"
+        )
+    else:
+        reason = (
+            "adjacent claims remain a possible local support relation even though the "
+            "linguistic parse has no verbal root; semantic dependence is unresolved"
+        )
     _add_edge(
         edges,
         target=claim,
@@ -398,13 +407,10 @@ def _attach_adjacent_claim_candidate(
         source_claim_identifier=previous_claim.identifier,
         explicit=False,
         confidence=None,
-        status=InferenceStatus.AMBIGUOUS,
+        status=status,
         evidence=[
             StructuralEvidence(
-                reason=(
-                    "adjacent claim and dependency-root structure permit a conclusion "
-                    "reading; semantic dependence is not resolved offline"
-                ),
+                reason=reason,
                 source=previous_claim.source,
                 target=claim.source,
                 context=f"{previous_claim.raw}\n{claim.raw}",
