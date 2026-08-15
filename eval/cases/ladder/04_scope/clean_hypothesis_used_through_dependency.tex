@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+
+\begin{lemma}\label{lem:scope-cancel}
+If $a\ne 0$ and $au=av$, then $u=v$.
+\end{lemma}
+\begin{proof}
+Subtract to obtain $a(u-v)=0$. Since $a\ne 0$, it follows that $u-v=0$.
+\end{proof}
+
+\begin{theorem}\label{thm:scope-clean-dependency}
+If $a\ne 0$ and $ax=0$, then $x=0$.
+\end{theorem}
+\begin{proof}
+Apply Lemma~\ref{lem:scope-cancel} with $u=x$ and $v=0$.
+\end{proof}
+
+\end{document}
