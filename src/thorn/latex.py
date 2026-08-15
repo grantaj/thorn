@@ -21,6 +21,7 @@ from thorn.frontend import (
 from thorn.frontend import ParsedProject as FrontendProject
 from thorn.frontends import RegexLatexFrontend
 from thorn.models import SourceRange, TheoremUnit
+from thorn.support_extract import extract_proof_support_graph
 from thorn.symbols import ResultRegion, extract_symbol_table
 
 _DEFAULT_THEOREM_ENVS = {
@@ -144,11 +145,10 @@ def extract_project(
     *,
     frontend: LatexFrontend | None = None,
 ) -> ExtractedProject:
-    """Extract theorem/result, dependency, and conservative symbol IR.
+    """Extract theorem/result, dependency, symbol, and explicit support IR.
 
     LaTeX syntax is supplied by a parser-neutral frontend. All mathematical
-    interpretation remains Thorn-owned above that boundary, including the
-    result dependency graph and symbol/definition/scope layer.
+    interpretation remains Thorn-owned above that boundary.
     """
 
     parser = frontend or _DEFAULT_FRONTEND
@@ -242,8 +242,6 @@ def extract_project(
                         resolution=DependencyResolution.MISSING,
                     )
                 )
-            # Existing non-result labels (equations, figures, sections, etc.) are
-            # intentionally not theorem-dependency edges.
             continue
         if len(candidates) == 1:
             edges.append(
@@ -282,6 +280,7 @@ def extract_project(
         units=enriched,
         dependency_graph=graph,
         symbol_table=extract_symbol_table(parsed, regions),
+        proof_support_graph=extract_proof_support_graph(parsed, regions),
     )
 
 
@@ -290,11 +289,6 @@ def extract_units(
     *,
     frontend: LatexFrontend | None = None,
 ) -> list[TheoremUnit]:
-    """Extract theorem-like result/proof units from a LaTeX project.
-
-    This compatibility API delegates to :func:`extract_project`; prompt-facing
-    dependency context is rendered from the project's first-class dependency
-    graph.
-    """
+    """Extract theorem-like result/proof units from a LaTeX project."""
 
     return extract_project(main_file, frontend=frontend).units
