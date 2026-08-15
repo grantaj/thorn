@@ -54,18 +54,31 @@ class FixtureProvider:
         "thm:local-global": FindingCategory.INVALID_IMPLICATION,
         "thm:notation-collision": FindingCategory.NOTATION_AMBIGUITY,
         "thm:ambiguous-big-o": FindingCategory.SPECIFICATION_AMBIGUITY,
+        "thm:scope-extra-assumption": FindingCategory.SCOPE_MISMATCH,
+        "thm:scope-surplus-hypothesis": FindingCategory.SCOPE_SURPLUS,
+        "thm:scope-stronger-conclusion": FindingCategory.SCOPE_SURPLUS,
+    }
+
+    _INFO_FINDINGS = {
+        "thm:scope-surplus-hypothesis",
+        "thm:scope-stronger-conclusion",
     }
 
     def attack(self, unit: TheoremUnit) -> AttackReport:
         category = self._DEFECTS.get(unit.identifier)
         if category is None:
             return AttackReport(findings=[])
+        severity = (
+            Severity.INFO
+            if unit.identifier in self._INFO_FINDINGS
+            else Severity.ERROR
+        )
         return AttackReport(
             findings=[
                 CandidateFinding(
                     id="F1",
                     category=category,
-                    severity=Severity.ERROR,
+                    severity=severity,
                     title=f"Synthetic finding for {unit.identifier}",
                     explanation="Deterministic test finding.",
                     confidence=0.95,
@@ -93,7 +106,7 @@ class FixtureProvider:
 
 def test_eval_corpus_is_well_formed() -> None:
     cases = _load_cases(Path("eval/cases"))
-    assert len(cases) >= 41
+    assert len(cases) >= 46
 
     bad = 0
     clean = 0
@@ -102,6 +115,9 @@ def test_eval_corpus_is_well_formed() -> None:
     matrix_families: set[str] = set()
     truth_values: set[str] = set()
     proof_statuses: set[str] = set()
+    scope_relations: set[str] = set()
+    hypothesis_relations: set[str] = set()
+    conclusion_relations: set[str] = set()
 
     for tex_path, expectation in cases:
         units = extract_units(tex_path)
@@ -133,18 +149,32 @@ def test_eval_corpus_is_well_formed() -> None:
             truth_values.add(expectation.statement_truth)
             proof_statuses.add(expectation.proof_status)
 
+        if expectation.scope_relation is not None:
+            assert expectation.hypothesis_relation is not None
+            assert expectation.conclusion_relation is not None
+            scope_relations.add(expectation.scope_relation)
+            hypothesis_relations.add(expectation.hypothesis_relation)
+            conclusion_relations.add(expectation.conclusion_relation)
+
         if expectation.kind == "finding":
             bad += 1
             assert expectation.accepted_categories
         else:
             clean += 1
 
-    assert bad >= 33
-    assert clean >= 8
-    assert matrix_cases >= 16
+    assert bad >= 36
+    assert clean >= 10
+    assert matrix_cases >= 21
     assert {"correctness", "specification", "readability"} <= matrix_families
     assert {"true", "false", "unknown"} <= truth_values
     assert {"valid", "gap", "invalid"} <= proof_statuses
+    assert {"exact", "proof_narrower", "proof_stronger"} <= scope_relations
+    assert {"exact", "proof_requires_more", "theorem_has_surplus"} <= hypothesis_relations
+    assert {
+        "exact",
+        "proof_establishes_less",
+        "proof_establishes_more",
+    } <= conclusion_relations
     assert set(range(1, 11)).issubset(levels)
 
 
