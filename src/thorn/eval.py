@@ -54,12 +54,41 @@ class CaseExpectation(BaseModel):
     locality: Literal["line", "proof", "section", "paper", "external"] | None = None
     fault_class: str | None = None
     detection_methods: list[str] = Field(default_factory=list)
-    reader_consequence: Literal["fatal", "risky", "clarity"] | None = None
+    reader_consequence: Literal[
+        "fatal",
+        "risky",
+        "clarity",
+        "opportunity",
+        "not_applicable",
+    ] | None = None
     deception_level: Literal["obvious", "plausible", "sneaky"] | None = None
     downstream_impact: Literal[
         "isolated",
         "one_result",
         "multiple_results",
+    ] | None = None
+    scope_relation: Literal[
+        "exact",
+        "proof_narrower",
+        "proof_stronger",
+        "incomparable",
+        "unknown",
+        "not_applicable",
+    ] | None = None
+    hypothesis_relation: Literal[
+        "exact",
+        "proof_requires_more",
+        "theorem_has_surplus",
+        "unknown",
+        "not_applicable",
+    ] | None = None
+    conclusion_relation: Literal[
+        "exact",
+        "proof_establishes_less",
+        "proof_establishes_more",
+        "incomparable",
+        "unknown",
+        "not_applicable",
     ] | None = None
     notes: str | None = None
 
