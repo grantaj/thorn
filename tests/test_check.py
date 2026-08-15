@@ -71,7 +71,7 @@ Equation~\eqref{eq:identity} proves the claim.
     assert CheckCategory.MISSING_REFERENCE not in _categories(tex)
 
 
-def test_symbol_use_before_introduction_is_reported(tmp_path: Path) -> None:
+def test_unresolved_use_before_later_declaration_stays_ir_only(tmp_path: Path) -> None:
     tex = tmp_path / "main.tex"
     tex.write_text(
         r"""\newtheorem{theorem}{Theorem}
@@ -82,16 +82,17 @@ First $q>0$. Let $q$ be real. Then $q>1$.
         encoding="utf-8",
     )
 
-    findings = check_project(extract_project(tex))
-    finding = next(
-        item for item in findings if item.category == CheckCategory.USE_BEFORE_INTRODUCTION
-    )
-    assert finding.rule == "TH111"
-    assert finding.source.start_line == 3
-    assert "later explicit introduction" in finding.explanation
+    project = extract_project(tex)
+    unresolved = [
+        use
+        for use in project.symbol_table.uses
+        if use.name == "q" and use.resolved_symbol_identifier is None
+    ]
+    assert unresolved
+    assert check_project(project) == []
 
 
-def test_local_quantifier_does_not_leak(tmp_path: Path) -> None:
+def test_local_quantifier_same_name_outside_scope_stays_ir_only(tmp_path: Path) -> None:
     tex = tmp_path / "main.tex"
     tex.write_text(
         r"""\newtheorem{theorem}{Theorem}
@@ -102,12 +103,32 @@ Let $X$ be a set. We have $\forall z\in X,\ z=z$. Then $z=z$.
         encoding="utf-8",
     )
 
-    findings = check_project(extract_project(tex))
-    scope_findings = [
-        item for item in findings if item.category == CheckCategory.SCOPE_VIOLATION
+    project = extract_project(tex)
+    unresolved = [
+        use
+        for use in project.symbol_table.uses
+        if use.name == "z" and use.resolved_symbol_identifier is None
     ]
-    assert len(scope_findings) == 2
-    assert all(item.rule == "TH112" for item in scope_findings)
+    assert unresolved
+    assert check_project(project) == []
+
+
+def test_trailing_quantifier_is_not_use_before_introduction(tmp_path: Path) -> None:
+    tex = tmp_path / "main.tex"
+    tex.write_text(
+        r"""\newtheorem{theorem}{Theorem}
+\begin{theorem}\label{thm:trailing}
+Let $f:X\to\mathbb R$ be bounded. There is $M>0$ with
+\[
+  f(x)\le M
+\]
+for every $x\in X$.
+\end{theorem}
+""",
+        encoding="utf-8",
+    )
+
+    assert check_project(extract_project(tex)) == []
 
 
 def test_incompatible_explicit_roles_are_reported_but_callable_roles_are_compatible(
