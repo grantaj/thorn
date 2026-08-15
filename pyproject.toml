@@ -11,14 +11,12 @@ requires-python = ">=3.11"
 dependencies = [
   "openai>=2.47.0",
   "pydantic>=2.10",
+  "spacy==3.8.14",
 ]
 
 [project.optional-dependencies]
 pylatexenc = [
   "pylatexenc==2.10",
-]
-nlp = [
-  "spacy==3.8.14",
 ]
 dev = [
   "mypy>=1.15",
