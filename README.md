@@ -19,6 +19,24 @@ Thorn is deliberately not:
 - line-by-line autocomplete or an LSP that reacts to every edit;
 - a tool that rewrites substantive mathematics in order to make a warning disappear.
 
+### Thorn and formal proof
+
+Formal proof assistants such as **Lean** provide much stronger assurance once a theorem and its proof have been formalized: a small trusted kernel can check the resulting proof object. That is a different contract from Thorn's. Thorn starts from ordinary mathematical manuscripts and aims to provide useful correctness checking **without requiring the author to formalize the paper first**.
+
+The intended position is therefore between unchecked informal mathematics and full formal verification. Formal methods are an escalation path, not an entry requirement. A mathematician should be able to get value from Thorn while continuing to write ordinary LaTeX; where a claim is sufficiently explicit and tractable, a future Thorn could ask a stronger backend to check a bounded proof obligation.
+
+The current parser and offline structural checks are a credible first step in that direction. They already recover machine-usable structure such as theorem/proof units, source locations, references, and local dependencies. A plausible longer-term architecture is:
+
+```text
+LaTeX
+  -> deterministic parsing and structural checks
+  -> increasingly explicit mathematical representation
+  -> bounded proof obligations
+  -> optional formal checks (for example, Lean)
+```
+
+This is a direction, not a current capability. Thorn does not currently translate manuscripts to Lean, and a clean Thorn run is never a proof certificate. The goal is to make stronger forms of checking progressively available without making formalization a prerequisite for ordinary users.
+
 The intended unit of review is often larger than a line: a proof may depend on hypotheses, definitions, notation, or earlier results elsewhere in the manuscript. Thorn therefore favors bounded whole-argument review over continuous local prompting, and favors reviewable diagnostics over open-ended generated prose.
 
 The initial target is LaTeX mathematics. Thorn extracts theorem/proposition/lemma + proof units,
