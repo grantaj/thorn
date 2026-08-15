@@ -35,12 +35,16 @@ Every claim retains its raw LaTeX and exact byte/line/column span. Claim identif
 
 A `SupportEdge` records that the manuscript visibly presents some source as support for a claim. The initial support kinds are:
 
-- `result_reference` — an explicit reference to a theorem-like result;
-- `equation_reference` — an explicit equation/reference edge recovered through `\eqref` or a non-result reference;
+- `result_reference` — a theorem-like result reference presented with a local support cue such as `by`, `from`, `using`, `apply`, or `invoke`;
+- `equation_reference` — an explicit `\eqref` presented with such a support cue;
 - `definition` — an explicit `by definition` justification;
 - `named_property` — an explicit named reason such as `by compactness` or `by continuity`;
 - `prior_claim` — an explicit conclusion cue such as `Therefore`, `Hence`, or `Thus` consuming the immediately preceding recovered claim;
 - `explicit_reason` — a mechanically clear `Since ..., ...` reason clause.
+
+A plain `\ref` to a non-result object is not guessed to be proof support: it may denote a section, figure, table, equation, or something else. Likewise, a bare reference mentioned for exposition does not become a support edge merely because it occurs inside a proof.
+
+Each edge records exact source provenance, whether the extraction is explicit, and an extraction confidence. The initial mechanically recognized edges use confidence `1.0`; this field leaves room for later conservative extractors without conflating extraction confidence with mathematical validity.
 
 An edge means **the author presented this as support**. It does not mean Thorn has established that the implication is mathematically valid.
 
@@ -116,6 +120,7 @@ In particular:
 - `clearly` and `obviously` are not support edges;
 - two equal symbol spellings are not automatically the same binding;
 - prose may be represented without being classified as load-bearing;
+- bare/expository references are not automatically support;
 - a support edge may be mathematically invalid even though it is structurally explicit;
 - absence of a support edge is not by itself a correctness finding.
 
