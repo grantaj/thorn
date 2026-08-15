@@ -2,10 +2,25 @@
   "decreasing-limit clean control": [],
   "elementary square bound clean control": [],
   "decreasing-limit theorem used on L1 convergence": [],
+  "duplicate theorem label is structurally ambiguous": [
+    "TH101"
+  ],
+  "reference to duplicate theorem label is ambiguous": [
+    "TH101",
+    "TH102"
+  ],
+  "missing internal theorem reference is structural error": [
+    "TH103"
+  ],
+  "existing equation label is not missing theorem reference": [],
   "surface variable typo changes the argument": [],
   "false but locally repairable square expansion": [],
   "clean explicitly defined nonstandard notation": [],
   "same symbol simultaneously denotes set and constant": [],
+  "explicit same-scope symbol roles conflict": [
+    "TH113"
+  ],
+  "map and function introductions are compatible callable roles": [],
   "clean neighbour with explicit nonzero hypothesis": [],
   "cancellation without a nonzero hypothesis": [],
   "induction omits the n equals zero case": [],
