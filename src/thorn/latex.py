@@ -20,6 +20,8 @@ from thorn.frontend import (
 )
 from thorn.frontend import ParsedProject as FrontendProject
 from thorn.frontends import RegexLatexFrontend
+from thorn.linguistic import LinguisticFrontend
+from thorn.linguistic_support import apply_linguistic_uncertainty
 from thorn.models import SourceRange, TheoremUnit
 from thorn.support_extract import extract_proof_support_graph
 from thorn.symbols import ResultRegion, extract_symbol_table
@@ -144,11 +146,13 @@ def extract_project(
     main_file: str | Path,
     *,
     frontend: LatexFrontend | None = None,
+    linguistic_frontend: LinguisticFrontend | None = None,
 ) -> ExtractedProject:
-    """Extract theorem/result, dependency, symbol, and explicit support IR.
+    """Extract theorem/result, dependency, symbol, and proof-support IR.
 
-    LaTeX syntax is supplied by a parser-neutral frontend. All mathematical
-    interpretation remains Thorn-owned above that boundary.
+    LaTeX syntax is supplied by a parser-neutral frontend. Optional local NLP
+    proposes structural candidates only; mathematical interpretation remains
+    Thorn-owned above both parser boundaries.
     """
 
     parser = frontend or _DEFAULT_FRONTEND
@@ -275,12 +279,29 @@ def extract_project(
         )
         for unit in units
     ]
+    support_graph = extract_proof_support_graph(
+        parsed,
+        regions,
+        linguistic_frontend=linguistic_frontend,
+    )
+    if linguistic_frontend is not None:
+        support_graph = apply_linguistic_uncertainty(
+            parsed,
+            regions,
+            support_graph,
+            linguistic_frontend,
+        )
+
     return ExtractedProject(
         main_file=parsed.main_file,
         units=enriched,
         dependency_graph=graph,
-        symbol_table=extract_symbol_table(parsed, regions),
-        proof_support_graph=extract_proof_support_graph(parsed, regions),
+        symbol_table=extract_symbol_table(
+            parsed,
+            regions,
+            linguistic_frontend=linguistic_frontend,
+        ),
+        proof_support_graph=support_graph,
     )
 
 
@@ -288,7 +309,12 @@ def extract_units(
     main_file: str | Path,
     *,
     frontend: LatexFrontend | None = None,
+    linguistic_frontend: LinguisticFrontend | None = None,
 ) -> list[TheoremUnit]:
     """Extract theorem-like result/proof units from a LaTeX project."""
 
-    return extract_project(main_file, frontend=frontend).units
+    return extract_project(
+        main_file,
+        frontend=frontend,
+        linguistic_frontend=linguistic_frontend,
+    ).units

@@ -4,7 +4,9 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import ParsedProject, SourceSpan
+from thorn.linguistic import LinguisticFrontend
 
 
 class ScopeKind(StrEnum):
@@ -33,6 +35,11 @@ class IntroductionKind(StrEnum):
     QUANTIFIER = "quantifier"
 
 
+class SymbolCandidateKind(StrEnum):
+    INTRODUCTION = "introduction"
+    DEFINITION = "definition"
+
+
 class Scope(BaseModel):
     identifier: str
     kind: ScopeKind
@@ -54,6 +61,24 @@ class Symbol(BaseModel):
     source: SourceSpan
     introduction_source: SourceSpan
     raw_introduction: str
+
+
+class SymbolIntroductionCandidate(BaseModel):
+    """A declaration-shaped entity retained without entering deterministic scope."""
+
+    identifier: str
+    name: str
+    kind: SymbolCandidateKind
+    role: SymbolRole = SymbolRole.UNKNOWN
+    scope_identifier: str
+    result_identifier: str
+    source: SourceSpan
+    math_source: SourceSpan
+    raw_context: str
+    definition_operator: str | None = None
+    expression_latex: str | None = None
+    status: InferenceStatus = InferenceStatus.AMBIGUOUS
+    evidence: list[StructuralEvidence] = Field(default_factory=list)
 
 
 class Definition(BaseModel):
@@ -94,6 +119,7 @@ class ResultRegion(BaseModel):
 class SymbolTable(BaseModel):
     scopes: list[Scope] = Field(default_factory=list)
     symbols: list[Symbol] = Field(default_factory=list)
+    candidates: list[SymbolIntroductionCandidate] = Field(default_factory=list)
     definitions: list[Definition] = Field(default_factory=list)
     constraints: list[Constraint] = Field(default_factory=list)
     uses: list[SymbolUse] = Field(default_factory=list)
@@ -155,9 +181,24 @@ class SymbolTable(BaseModel):
         return None
 
 
-def extract_symbol_table(project: ParsedProject, regions: list[ResultRegion]) -> SymbolTable:
-    """Compatibility entry point for the symbol extraction pass."""
+def extract_symbol_table(
+    project: ParsedProject,
+    regions: list[ResultRegion],
+    *,
+    linguistic_frontend: LinguisticFrontend | None = None,
+) -> SymbolTable:
+    """Build deterministic symbols plus optional ambiguity-aware candidates."""
 
     from thorn.symbol_extract import extract_symbol_table as run_extractor
 
-    return run_extractor(project, regions)
+    table = run_extractor(project, regions)
+    if linguistic_frontend is not None:
+        from thorn.linguistic_symbols import add_linguistic_symbol_candidates
+
+        add_linguistic_symbol_candidates(
+            project,
+            regions,
+            table,
+            linguistic_frontend,
+        )
+    return table

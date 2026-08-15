@@ -1,12 +1,14 @@
 # `thorn check`
 
-`thorn check` is Thorn's deterministic, zero-inference analysis mode.
+`thorn check` is Thorn's local analysis mode with **deterministic lint decisions**.
 
 ```bash
 thorn check paper.tex
 ```
 
-It consumes the same project-level mathematical IR used by later semantic review, but it does not import or invoke model-backed audit/provider code. No `OPENAI_API_KEY` is required.
+Normal execution uses the local spaCy linguistic frontend to recover plausible grammatical structure. Those parser-derived relations are evidence in the mathematical IR, not mathematical truth: ambiguous or unresolved candidates do not become lint findings merely because the parser proposed them. `thorn check` does not import or invoke the model-backed audit/provider path and requires no `OPENAI_API_KEY`.
+
+For debugging, constrained environments, and lightweight tests, `thorn check paper.tex --structural-only` explicitly disables the linguistic frontend.
 
 A clean `thorn check` run means only that none of the implemented **structural** rules fired. It is not a proof certificate and does not imply that a theorem or proof is mathematically correct.
 
@@ -26,7 +28,7 @@ The issue #18 tranche intentionally contains only checks supported by strong str
 
 ## Binding facts are not yet diagnostics
 
-The symbol IR records useful facts such as unresolved uses, source ordering, and lexical scope. The first #18 implementation initially promoted two of those facts directly to warnings:
+The symbol IR records useful facts such as unresolved uses, source ordering, lexical scope, and now ambiguity-bearing linguistic declaration candidates. The first #18 implementation initially promoted two structural facts directly to warnings:
 
 - `TH111` — a known symbol appears before a later explicit introduction;
 - `TH112` — a same-named explicit declaration exists outside the use's recovered lexical scope.
@@ -42,7 +44,7 @@ for every $x\in[0,1]$.
 
 and freely reuses locally bound names. A source-order or same-name scope relationship therefore does not establish that the author used the wrong binding.
 
-The IR continues to retain those facts because they may become useful once Thorn has a richer prose/argument structure, but `thorn check` stays silent on them for now. This is an intentional example of the distinction between **representing a suspicious fact** and having enough evidence to **lint it**.
+The IR continues to retain those facts because they may become useful once Thorn has richer prose/argument structure. The local linguistic frontend may additionally preserve a noncanonical trailing binder as an ambiguous, evidence-bearing candidate, but ambiguity alone still does not justify a warning. This is an intentional example of the distinction between **representing a suspicious or uncertain fact** and having enough evidence to **lint it**.
 
 ## Full-matrix specification
 
@@ -78,13 +80,13 @@ The two existing L7 circular-dependency papers exercise `TH104`.
 
 Case metadata has a `modes` field. Existing cases default to both `check` and `review`; structural fixtures can declare `"modes": ["check"]`. As a result, the deterministic matrix can grow without silently increasing paid semantic-review runs. The live review suite remains at 46 cases.
 
-This is important to Thorn's capability boundary. A false theorem, invalid compactness step, hidden conjecture dependency, or quantifier error should not acquire a structural warning merely because the offline checker cannot understand it.
+This is important to Thorn's capability boundary. A false theorem, invalid compactness step, hidden conjecture dependency, or quantifier error should not acquire a structural warning merely because the local checker cannot understand it.
 
-Default CI runs the complete 52-case deterministic matrix with `OPENAI_API_KEY` blank.
+Default CI runs the complete 52-case deterministic matrix with `OPENAI_API_KEY` blank. Its CLI smoke uses `--structural-only` so the lightweight job does not load the language model; a separate `Local NLP contract` workflow installs the real model and exercises the normal frontend over the 70-case linguistic corpus.
 
 ## False-positive boundary
 
-This initial pass deliberately does **not**:
+The current checker deliberately does **not**:
 
 - treat every mathematical token as a user-defined symbol;
 - complain about conventional notation merely because it lacks a local declaration;
@@ -93,6 +95,7 @@ This initial pass deliberately does **not**:
 - infer deep mathematical types from notation;
 - infer function arity from arbitrary expressions;
 - decide whether a nontrivial implication is mathematically valid;
+- turn parser ambiguity into a correctness warning;
 - treat prose style such as `clearly` or `obviously` as a defect.
 
 Broad undefined-symbol detection, binding/scope diagnostics, more aggressive redefinition checks, and arity diagnostics should be added only with planted failures plus nearby clean controls demonstrating acceptable noise.
@@ -102,7 +105,7 @@ Broad undefined-symbol detection, binding/scope diagnostics, more aggressive red
 The CLI capability boundary is explicit:
 
 ```text
-thorn check paper.tex     deterministic structural analysis; no model calls
+thorn check paper.tex     local analysis with deterministic lint decisions; no model/API calls
 thorn review paper.tex    model-backed adversarial mathematical review
 ```
 
@@ -114,16 +117,19 @@ thorn paper.tex
 
 continues to mean `thorn review paper.tex`.
 
-Both modes share LaTeX extraction and mathematical IR. The intended long-term pipeline is:
+Both modes share LaTeX extraction, typed mathematical projection, the normal local linguistic frontend, and the ambiguity/evidence-bearing mathematical IR. The intended pipeline is:
 
 ```text
 LaTeX
   -> source-preserving frontend
-  -> result graph + symbol/scope IR
-  -> thorn check
-  -> later proof/support IR
-  -> selective thorn review
+  -> typed reversible mathematical projection
+  -> Thorn-owned local linguistic frontend
+  -> ambiguity/evidence-bearing Math IR
+       -> deterministic thorn check
+       `-> selective thorn review
 ```
+
+See [`local-nlp.md`](local-nlp.md) for the parser boundary and uncertainty contract.
 
 ## Exit status
 
@@ -133,7 +139,7 @@ LaTeX
 - `warning`: non-zero for warning or error findings;
 - `never`: always zero for findings.
 
-Parser/project-read failures still return status 2.
+Parser/project-read failures still return status 2. A missing local spaCy model is reported as a local-frontend error and suggests `--structural-only` as the explicit degraded fallback.
 
 JSON output is available with:
 
