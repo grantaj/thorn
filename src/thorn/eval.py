@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -11,7 +12,17 @@ from pydantic import BaseModel, Field
 
 from thorn.check import CheckFinding, check_project
 from thorn.latex import extract_project
-from thorn.models import AuditFinding, FindingCategory, Severity, TheoremUnit
+from thorn.models import (
+    AuditFinding,
+    FindingCategory,
+    Severity,
+    TheoremUnit,
+    UnitAudit,
+)
+from thorn.providers.base import AuditProvider
+
+# Test seam retained without importing the OpenAI provider in zero-inference modes.
+OpenAIProvider: Callable[[str], AuditProvider] | None = None
 
 
 class CaseExpectation(BaseModel):
@@ -237,13 +248,21 @@ def _matching_findings(
     ]
 
 
-def _make_openai_provider(model: str):
-    from thorn.providers.openai import OpenAIProvider
+def _make_openai_provider(model: str) -> AuditProvider:
+    if OpenAIProvider is not None:
+        return OpenAIProvider(model)
 
-    return OpenAIProvider(model=model)
+    from thorn.providers.openai import OpenAIProvider as RealOpenAIProvider
+
+    return RealOpenAIProvider(model=model)
 
 
-def _audit_unit(unit: TheoremUnit, provider, *, use_defender: bool):
+def _audit_unit(
+    unit: TheoremUnit,
+    provider: AuditProvider,
+    *,
+    use_defender: bool,
+) -> UnitAudit:
     from thorn.audit import audit_unit
 
     return audit_unit(unit, provider, use_defender=use_defender, cache=None)
@@ -302,7 +321,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"thorn-eval: no cases matched --case-filter {args.case_filter!r}")
             return 2
 
-    provider = None
+    provider: AuditProvider | None = None
     if not args.validate_only and not args.check:
         if not os.getenv("OPENAI_API_KEY"):
             print(
@@ -357,16 +376,16 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.check:
             assert check_expectations is not None
-            findings = check_project(project)
+            check_findings = check_project(project)
             passed, detail = _check_case(
-                findings,
+                check_findings,
                 check_expectations[expectation.name],
             )
             status = "PASS" if passed else "FAIL"
             print(f"{status} CHECK L{expectation.level} {expectation.name}: {detail}")
             if not passed:
                 failures += 1
-                for finding in findings:
+                for finding in check_findings:
                     print(
                         "     observed "
                         f"{finding.rule}/{finding.category.value}/"
