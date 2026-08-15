@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -188,6 +189,7 @@ def _matching_findings(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    started = time.perf_counter()
     try:
         cases = _load_cases(args.case_dir)
     except (OSError, ValueError) as exc:
@@ -301,8 +303,26 @@ def main(argv: list[str] | None = None) -> int:
                     f"confidence={finding.confidence:.2f}: {finding.title}"
                 )
 
+    summary: dict[str, object] = {
+        "cases": len(cases),
+        "failures": failures,
+        "model": None if args.validate_only else args.model,
+        "min_confidence": args.min_confidence,
+        "defender": not args.no_defender,
+        "elapsed_seconds": round(time.perf_counter() - started, 3),
+    }
+    if provider is not None and hasattr(provider, "requests"):
+        summary.update(
+            {
+                "requests": provider.requests,
+                "input_tokens": provider.input_tokens,
+                "output_tokens": provider.output_tokens,
+                "total_tokens": provider.total_tokens,
+            }
+        )
+
     print()
-    print(json.dumps({"cases": len(cases), "failures": failures}, indent=2))
+    print(json.dumps(summary, indent=2))
     return 1 if failures else 0
 
 
