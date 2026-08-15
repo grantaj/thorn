@@ -46,6 +46,13 @@ class StaticDependencyFrontend:
         return LinguisticDocument(text=text, tokens=tokens)
 
 
+class NoRootFrontend:
+    name = "no-root"
+
+    def parse(self, text: str) -> LinguisticDocument:
+        return LinguisticDocument(text=text, tokens=[])
+
+
 def test_conclusion_word_does_not_force_confident_prior_claim(tmp_path: Path) -> None:
     tex = tmp_path / "conclusion-trap.tex"
     tex.write_text(
@@ -77,6 +84,42 @@ We first establish notation. Therefore, in the next section, we discuss an examp
     assert edges[0].confidence is None
     assert edges[0].evidence[0].frontend == "static-dependencies"
     assert "lexical overlap alone" in edges[0].evidence[0].reason
+    assert project.proof_support_graph.confident_incoming_edges(claims[1].identifier) == []
+    assert check_project(project) == []
+
+
+def test_elliptical_adjacent_claim_is_retained_as_unresolved_candidate(tmp_path: Path) -> None:
+    tex = tmp_path / "elliptical-conclusion.tex"
+    tex.write_text(
+        r"""\documentclass{article}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+\begin{theorem}\label{thm:main}
+A conclusion.
+\end{theorem}
+\begin{proof}
+A base fact. Accordingly the conclusion.
+\end{proof}
+\end{document}
+""",
+        encoding="utf-8",
+    )
+
+    core = extract_project(tex)
+    core_claims = core.proof_support_graph.claims_for_result("thm:main")
+    assert core.proof_support_graph.incoming_edges(core_claims[1].identifier) == []
+
+    project = extract_project(tex, linguistic_frontend=NoRootFrontend())
+    claims = project.proof_support_graph.claims_for_result("thm:main")
+    edges = project.proof_support_graph.incoming_edges(claims[1].identifier)
+
+    assert len(edges) == 1
+    assert edges[0].kind == SupportKind.PRIOR_CLAIM
+    assert edges[0].status == InferenceStatus.UNRESOLVED
+    assert edges[0].confidence is None
+    assert edges[0].evidence[0].frontend == "no-root"
+    assert edges[0].evidence[0].dependency_path == []
+    assert "adjacent claims" in edges[0].evidence[0].reason
     assert project.proof_support_graph.confident_incoming_edges(claims[1].identifier) == []
     assert check_project(project) == []
 
