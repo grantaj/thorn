@@ -23,6 +23,7 @@ class FindingCategory(StrEnum):
     ALGEBRA_ERROR = "algebra_error"
     DEFINITION_MISMATCH = "definition_mismatch"
     WELL_DEFINEDNESS = "well_definedness"
+    SCOPE_MISMATCH = "scope_mismatch"
     VACUOUS_TRUTH = "vacuous_truth"
     EXTERNAL_DEPENDENCY = "external_dependency"
     UNSUPPORTED_CLAIM = "unsupported_claim"
@@ -30,6 +31,7 @@ class FindingCategory(StrEnum):
     UNSTATED_AXIOM = "unstated_axiom"
     NOTATION_AMBIGUITY = "notation_ambiguity"
     SPECIFICATION_AMBIGUITY = "specification_ambiguity"
+    SCOPE_SURPLUS = "scope_surplus"
     OTHER = "other"
 
 
@@ -41,6 +43,7 @@ RULE_CODES: dict[FindingCategory, str] = {
     FindingCategory.DEFINITION_MISMATCH: "TH205",
     FindingCategory.VACUOUS_TRUTH: "TH206",
     FindingCategory.WELL_DEFINEDNESS: "TH207",
+    FindingCategory.SCOPE_MISMATCH: "TH208",
     FindingCategory.ALGEBRA_ERROR: "TH301",
     FindingCategory.COUNTEREXAMPLE: "TH302",
     FindingCategory.BOUNDARY_CASE: "TH303",
@@ -51,6 +54,7 @@ RULE_CODES: dict[FindingCategory, str] = {
     FindingCategory.UNSTATED_AXIOM: "TH504",
     FindingCategory.NOTATION_AMBIGUITY: "TH601",
     FindingCategory.SPECIFICATION_AMBIGUITY: "TH602",
+    FindingCategory.SCOPE_SURPLUS: "TH603",
     FindingCategory.OTHER: "TH999",
 }
 
