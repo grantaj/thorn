@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from importlib.resources import files
 from typing import Literal
 
 from pydantic import BaseModel
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
+from thorn.semantic_review_compact import render_compact_semantic_review_request
 from thorn.semantic_review_render import SemanticReviewRequest, render_semantic_review_request
 
 RequestKind = Literal["attack", "defend", "semantic"]
@@ -97,11 +99,21 @@ def semantic_request_envelope(
     request: SemanticReviewRequest,
     model: str,
 ) -> ProviderRequestEnvelope:
+    rendering = os.getenv("THORN_SEMANTIC_RENDERING", "full")
+    if rendering == "full":
+        user_content = render_semantic_review_request(request)
+    elif rendering == "compact":
+        user_content = render_compact_semantic_review_request(request)
+    else:
+        raise ValueError(
+            "THORN_SEMANTIC_RENDERING must be 'full' or 'compact', "
+            f"got {rendering!r}"
+        )
     return ProviderRequestEnvelope(
         kind="semantic",
         model=model,
         system_prompt=_read_prompt("semantic_reviewer.md"),
-        user_content=render_semantic_review_request(request),
+        user_content=user_content,
         response_schema=AttackReport.model_json_schema(),
     )
 
