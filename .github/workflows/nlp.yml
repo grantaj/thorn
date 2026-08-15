@@ -4,8 +4,10 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - ".github/workflows/ci.yml"
       - ".github/workflows/nlp.yml"
       - "pyproject.toml"
+      - "src/thorn/cli.py"
       - "src/thorn/evidence.py"
       - "src/thorn/latex.py"
       - "src/thorn/linguistic*.py"
@@ -13,7 +15,9 @@ on:
       - "src/thorn/support*.py"
       - "src/thorn/symbols.py"
       - "research/semantic-parser-bakeoff/**"
+      - "tests/test_cli_check.py"
       - "tests/test_linguistic_*.py"
+      - "tests/test_semantic_projection.py"
 
 jobs:
   spacy-contract:
@@ -25,10 +29,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install Thorn with local NLP support
+          cache: pip
+      - name: Install Thorn and the local English model
         run: |
           python -m pip install --upgrade pip
-          pip install 'click>=8.1' -e '.[nlp]'
+          python -m pip install -e '.[dev]'
           python -m spacy download en_core_web_sm
-      - name: Check parser-independent metamorphic contract
+      - name: Run parser-neutral unit contracts
+        run: |
+          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_check.py
+      - name: Check Thorn-owned spaCy behavior over the 70-case corpus
         run: python research/semantic-parser-bakeoff/check_spacy_contract.py
+      - name: Exercise the normal CLI linguistic path
+        run: thorn check examples/demo.tex --fail-on never
