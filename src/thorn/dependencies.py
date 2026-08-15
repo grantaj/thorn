@@ -5,6 +5,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from thorn.models import SourceRange, TheoremUnit
+from thorn.support import ProofSupportGraph
 from thorn.symbols import SymbolTable
 
 
@@ -195,6 +196,7 @@ class ExtractedProject(BaseModel):
     units: list[TheoremUnit] = Field(default_factory=list)
     dependency_graph: DependencyGraph
     symbol_table: SymbolTable = Field(default_factory=SymbolTable)
+    proof_support_graph: ProofSupportGraph = Field(default_factory=ProofSupportGraph)
 
     def unit(self, identifier: str) -> TheoremUnit:
         for unit in self.units:
