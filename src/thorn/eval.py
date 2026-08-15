@@ -9,10 +9,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from thorn.audit import audit_unit
-from thorn.latex import extract_units
+from thorn.check import CheckFinding, check_project
+from thorn.latex import extract_project
 from thorn.models import AuditFinding, FindingCategory, Severity, TheoremUnit
-from thorn.providers.openai import OpenAIProvider
 
 
 class CaseExpectation(BaseModel):
@@ -124,10 +123,16 @@ def _parser() -> argparse.ArgumentParser:
         help="run only cases whose name or fixture path contains this text",
     )
     parser.add_argument("--no-defender", action="store_true")
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--validate-only",
         action="store_true",
         help="validate fixtures and extraction without making API calls",
+    )
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="run deterministic thorn check expectations with no model/API calls",
     )
     return parser
 
@@ -146,7 +151,48 @@ def _load_cases(case_dir: Path) -> list[tuple[Path, CaseExpectation]]:
         cases.append((tex_path, expectation))
     if not cases:
         raise ValueError(f"no *.json evaluation cases found in {case_dir}")
+    names = [expectation.name for _, expectation in cases]
+    if len(names) != len(set(names)):
+        raise ValueError("evaluation case names must be unique")
     return cases
+
+
+def _load_check_expectations(
+    case_dir: Path,
+    cases: list[tuple[Path, CaseExpectation]],
+) -> dict[str, list[str]]:
+    path = case_dir.parent / "check-expectations.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid deterministic expectation file {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"deterministic expectation file {path} must be a JSON object")
+
+    expectations: dict[str, list[str]] = {}
+    for name, rules in payload.items():
+        if not isinstance(name, str) or not isinstance(rules, list) or not all(
+            isinstance(rule, str) for rule in rules
+        ):
+            raise ValueError(
+                f"deterministic expectation for {name!r} must be a list of rule codes"
+            )
+        expectations[name] = rules
+
+    case_names = {expectation.name for _, expectation in cases}
+    expectation_names = set(expectations)
+    missing = sorted(case_names - expectation_names)
+    extra = sorted(expectation_names - case_names)
+    if missing or extra:
+        parts: list[str] = []
+        if missing:
+            parts.append(f"missing cases: {', '.join(missing)}")
+        if extra:
+            parts.append(f"unknown cases: {', '.join(extra)}")
+        raise ValueError(
+            f"deterministic expectation coverage mismatch in {path}: " + "; ".join(parts)
+        )
+    return expectations
 
 
 def _select_unit(
@@ -191,15 +237,52 @@ def _matching_findings(
     ]
 
 
+def _make_openai_provider(model: str):
+    from thorn.providers.openai import OpenAIProvider
+
+    return OpenAIProvider(model=model)
+
+
+def _audit_unit(unit: TheoremUnit, provider, *, use_defender: bool):
+    from thorn.audit import audit_unit
+
+    return audit_unit(unit, provider, use_defender=use_defender, cache=None)
+
+
+def _check_case(
+    findings: list[CheckFinding],
+    expected_rules: list[str],
+) -> tuple[bool, str]:
+    observed_rules = sorted(finding.rule for finding in findings)
+    wanted_rules = sorted(expected_rules)
+    passed = observed_rules == wanted_rules
+    if passed:
+        detail = (
+            ", ".join(observed_rules)
+            if observed_rules
+            else "no deterministic diagnostics expected or observed"
+        )
+    else:
+        detail = (
+            f"expected {wanted_rules or ['<none>']}, "
+            f"observed {observed_rules or ['<none>']}"
+        )
+    return passed, detail
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     started = time.perf_counter()
     try:
-        cases = _load_cases(args.case_dir)
+        all_cases = _load_cases(args.case_dir)
+        check_expectations = (
+            _load_check_expectations(args.case_dir, all_cases) if args.check else None
+        )
     except (OSError, ValueError) as exc:
         print(f"thorn-eval: {exc}")
         return 2
 
+    cases = all_cases
     if args.max_level is not None:
         cases = [
             (path, expectation)
@@ -220,18 +303,19 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     provider = None
-    if not args.validate_only:
+    if not args.validate_only and not args.check:
         if not os.getenv("OPENAI_API_KEY"):
             print(
                 "thorn-eval: OPENAI_API_KEY is required unless "
-                "--validate-only is used"
+                "--validate-only or --check is used"
             )
             return 2
-        provider = OpenAIProvider(model=args.model)
+        provider = _make_openai_provider(args.model)
 
     failures = 0
     for tex_path, expectation in cases:
-        units = extract_units(tex_path)
+        project = extract_project(tex_path)
+        units = project.units
         try:
             unit = _select_unit(units, expectation)
         except ValueError as exc:
@@ -271,12 +355,31 @@ def main(argv: list[str] | None = None) -> int:
             )
             continue
 
+        if args.check:
+            assert check_expectations is not None
+            findings = check_project(project)
+            passed, detail = _check_case(
+                findings,
+                check_expectations[expectation.name],
+            )
+            status = "PASS" if passed else "FAIL"
+            print(f"{status} CHECK L{expectation.level} {expectation.name}: {detail}")
+            if not passed:
+                failures += 1
+                for finding in findings:
+                    print(
+                        "     observed "
+                        f"{finding.rule}/{finding.category.value}/"
+                        f"{finding.severity.value}: {finding.title} "
+                        f"at {finding.source.file}:{finding.source.start_line}"
+                    )
+            continue
+
         assert provider is not None
-        audit = audit_unit(
+        audit = _audit_unit(
             unit,
             provider,
             use_defender=not args.no_defender,
-            cache=None,
         )
         visible = [
             finding
@@ -319,10 +422,12 @@ def main(argv: list[str] | None = None) -> int:
                     f"confidence={finding.confidence:.2f}: {finding.title}"
                 )
 
+    mode = "check" if args.check else "validate" if args.validate_only else "review"
     summary: dict[str, object] = {
         "cases": len(cases),
         "failures": failures,
-        "model": None if args.validate_only else args.model,
+        "mode": mode,
+        "model": None if args.validate_only or args.check else args.model,
         "min_confidence": args.min_confidence,
         "defender": not args.no_defender,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
