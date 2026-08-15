@@ -20,3 +20,17 @@ class SemanticReviewProvider(Protocol):
     model: str
 
     def review_semantic(self, request: SemanticReviewRequest) -> AttackReport: ...
+
+
+class EvaluationProvider(AuditProvider, SemanticReviewProvider, Protocol):
+    """Combined evaluator boundary with per-provider usage accounting.
+
+    The ordinary raw and semantic-review provider protocols remain independent.
+    ``thorn-eval`` needs both boundaries on one provider so a controlled run can
+    compare them while taking usage snapshots before and after each case.
+    """
+
+    requests: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
