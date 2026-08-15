@@ -1,0 +1,17 @@
+\documentclass{article}
+\usepackage{amssymb,amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+For real numbers define $x\blacktriangleleft y$ to mean $x<y$.
+
+\begin{theorem}\label{thm:unusual-notation}
+The relation $\blacktriangleleft$ is transitive.
+\end{theorem}
+\begin{proof}
+If $x\blacktriangleleft y$ and $y\blacktriangleleft z$, then by definition
+$x<y$ and $y<z$. Transitivity of the usual order gives $x<z$, hence
+$x\blacktriangleleft z$.
+\end{proof}
+
+\end{document}

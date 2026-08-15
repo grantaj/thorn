@@ -1,0 +1,12 @@
+{
+  "name": "two results prove each other circularly",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 7,
+  "capability": "dependency cycle detection",
+  "target_identifier": "lem:cycle-b",
+  "accepted_categories": ["circular_dependency", "unsupported_claim"],
+  "minimum_severity": "error",
+  "repairability": "structural",
+  "notes": "Both statements are true, but the supplied dependency graph contains no non-circular proof."
+}

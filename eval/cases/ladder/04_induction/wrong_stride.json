@@ -1,0 +1,26 @@
+{
+  "name": "induction step has wrong stride",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "unsupported_claim",
+    "invalid_implication"
+  ],
+  "minimum_severity": "error",
+  "level": 4,
+  "capability": "notice that a base case plus n-to-n+2 induction covers only one parity",
+  "target_identifier": "thm:stride-induction",
+  "repairability": "local",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "gap",
+  "locality": "proof",
+  "fault_class": "induction_wrong_stride",
+  "detection_methods": [
+    "induction coverage check"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "notes": "The theorem is true, but the supplied induction reaches only odd n from the sole base case n=1."
+}

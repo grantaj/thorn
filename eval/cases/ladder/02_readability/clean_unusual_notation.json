@@ -1,0 +1,23 @@
+{
+  "name": "clean explicitly defined nonstandard notation",
+  "kind": "clean",
+  "source": "Synthetic matrix control",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 2,
+  "capability": "avoid treating unusual but explicit and consistent notation as a defect",
+  "target_identifier": "thm:unusual-notation",
+  "repairability": "none",
+  "family": "readability",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "line",
+  "fault_class": "nonstandard_notation_control",
+  "detection_methods": [
+    "notation scope check"
+  ],
+  "reader_consequence": "clarity",
+  "deception_level": "obvious",
+  "downstream_impact": "isolated",
+  "notes": "The symbol is unconventional but fully defined and consistently used; Thorn should stay silent."
+}

@@ -1,0 +1,12 @@
+{
+  "name": "cancellation without a nonzero hypothesis",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 3,
+  "capability": "hypothesis checking",
+  "target_identifier": "thm:missing-hypothesis",
+  "accepted_categories": ["hypothesis_mismatch", "counterexample", "boundary_case", "algebra_error"],
+  "minimum_severity": "error",
+  "repairability": "statement",
+  "notes": "a=0 is a cheap counterexample; adding a nonzero hypothesis repairs the theorem."
+}

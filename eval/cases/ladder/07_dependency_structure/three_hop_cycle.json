@@ -1,0 +1,13 @@
+{
+  "name": "three-hop circular dependency",
+  "kind": "finding",
+  "source": "Synthetic TDD case",
+  "accepted_categories": ["circular_dependency", "unsupported_claim"],
+  "minimum_severity": "error",
+  "level": 7,
+  "capability": "trace an indirect proof cycle through several named results",
+  "target_identifier": "lem:deep-cycle-c",
+  "root_cause_identifier": "thm:deep-cycle-a",
+  "repairability": "structural",
+  "notes": "A depends on B, B depends on C, and C closes the cycle by invoking A. All statements happen to be true, but the supplied proofs are circular."
+}

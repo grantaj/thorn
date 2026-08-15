@@ -1,0 +1,28 @@
+{
+  "name": "uncountable union of parameter-dependent null sets",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "invalid_implication",
+    "counterexample",
+    "quantifier_error"
+  ],
+  "minimum_severity": "error",
+  "level": 5,
+  "capability": "track parameter-dependent almost-everywhere exceptional sets",
+  "target_identifier": "thm:uniform-null-set",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "parameter_dependent_null_set",
+  "detection_methods": [
+    "measure-theory hypothesis check",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "sneaky",
+  "downstream_impact": "one_result",
+  "notes": "Take f_t=1_{ {t} }. Each f_t vanishes a.e., but no single null set works for all t."
+}

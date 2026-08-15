@@ -1,0 +1,12 @@
+{
+  "name": "theorem is false as stated",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 5,
+  "capability": "counterexample-level theorem failure",
+  "target_identifier": "thm:false-as-stated",
+  "accepted_categories": ["counterexample", "hypothesis_mismatch", "invalid_implication"],
+  "minimum_severity": "error",
+  "repairability": "statement",
+  "notes": "The constant function f(x)=2 is a counterexample; requiring f to map [0,1] into itself repairs the standard one-dimensional fixed-point statement."
+}

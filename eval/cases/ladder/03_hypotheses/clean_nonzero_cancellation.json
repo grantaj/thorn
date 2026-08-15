@@ -1,0 +1,11 @@
+{
+  "name": "clean neighbour with explicit nonzero hypothesis",
+  "kind": "clean",
+  "source": "Synthetic TDD ladder control",
+  "level": 3,
+  "capability": "hypothesis checking without false positives",
+  "target_identifier": "thm:clean-nonzero",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "repairability": "none"
+}

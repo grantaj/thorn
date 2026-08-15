@@ -1,0 +1,22 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+For positive integers $n,m$, set $a_{n,m}=n+m$.
+
+\begin{theorem}\label{thm:ambiguous-big-o}
+One has
+\[
+  a_{n,m}=O(n).
+\]
+\end{theorem}
+\begin{proof}
+For each $m$ and every $n\ge1$,
+\[
+  n+m\le (m+1)n.
+\]
+Thus $a_{n,m}=O(n)$.
+\end{proof}
+
+\end{document}

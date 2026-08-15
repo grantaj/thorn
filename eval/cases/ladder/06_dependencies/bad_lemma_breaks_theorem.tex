@@ -1,0 +1,25 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\title{Even Powers and Equality}
+\author{Synthetic Thorn Test}
+\maketitle
+
+\begin{lemma}\label{lem:bad-square-root}
+For real numbers $u,v$, if $u^2=v^2$, then $u=v$.
+\end{lemma}
+\begin{proof}
+Taking square roots of both sides gives $u=v$.
+\end{proof}
+
+\begin{theorem}\label{thm:depends-bad-lemma}
+For real numbers $x,y$, if $x^4=y^4$, then $x=y$.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:bad-square-root}, applied to $u=x^2$ and $v=y^2$, we get $x^2=y^2$. Applying Lemma~\ref{lem:bad-square-root} again gives $x=y$.
+\end{proof}
+
+\end{document}

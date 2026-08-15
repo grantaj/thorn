@@ -1,0 +1,16 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{theorem}\label{thm:infimum-minimum}
+Every nonempty subset $S\subset\mathbb R$ that is bounded below has a least
+element.
+\end{theorem}
+\begin{proof}
+By completeness of the real numbers, $m=\inf S$ exists. By definition of
+the infimum, $m$ is the smallest value allowed by $S$, so $m\in S$. Hence
+$m$ is the least element.
+\end{proof}
+
+\end{document}

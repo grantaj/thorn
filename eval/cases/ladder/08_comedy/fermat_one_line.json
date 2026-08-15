@@ -1,0 +1,12 @@
+{
+  "name": "one-line Fermat proof distributes an nth root over a sum",
+  "kind": "finding",
+  "source": "Synthetic comedy TDD case",
+  "level": 8,
+  "capability": "resist confident grand claims and find elementary fatal steps",
+  "target_identifier": "thm:fermat",
+  "accepted_categories": ["invalid_implication", "algebra_error"],
+  "minimum_severity": "error",
+  "repairability": "structural",
+  "notes": "The planted error is the invalid inference from x^n+y^n=z^n to x+y=z; Thorn need not re-prove Fermat's Last Theorem."
+}

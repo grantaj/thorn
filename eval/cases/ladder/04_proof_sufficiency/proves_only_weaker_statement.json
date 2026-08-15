@@ -1,0 +1,30 @@
+{
+  "name": "proof establishes only a weaker conclusion",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "scope_mismatch",
+    "unsupported_claim",
+    "invalid_implication"
+  ],
+  "minimum_severity": "error",
+  "level": 4,
+  "capability": "notice when a true theorem's proof establishes only boundedness rather than attainment",
+  "target_identifier": "thm:extreme-value-gap",
+  "repairability": "local",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "gap",
+  "locality": "proof",
+  "fault_class": "proof_weaker_than_statement",
+  "detection_methods": [
+    "proof-goal comparison"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "proof_establishes_less",
+  "notes": "The theorem is true, but boundedness alone does not imply the extrema are attained."
+}

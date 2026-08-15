@@ -1,0 +1,19 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+A map $f:X\to X$ will be called \emph{stable} if
+\[
+  f(f(x))=f(x) \qquad\text{for every }x\in X.
+\]
+
+\begin{theorem}\label{thm:stable-idempotent}
+Every stable map is idempotent.
+\end{theorem}
+\begin{proof}
+Let $f$ be stable. By stability, $f(f(x))=f(x)$ for every $x\in X$.
+Therefore $f\circ f=f$, which is precisely idempotence.
+\end{proof}
+
+\end{document}

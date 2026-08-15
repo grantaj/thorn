@@ -1,0 +1,25 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\title{A Valid Lemma Dependency}
+\author{Synthetic Thorn Test}
+\maketitle
+
+\begin{lemma}\label{lem:good-bound}
+For every integer $n\ge2$, one has $n^2\ge n+1$.
+\end{lemma}
+\begin{proof}
+We have $n^2-(n+1)=n(n-1)-1\ge2-1=1$.
+\end{proof}
+
+\begin{theorem}\label{thm:clean-dependency}
+For every integer $n\ge2$, one has $n^2+1\ge n+2$.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:good-bound}, $n^2\ge n+1$. Adding $1$ to both sides gives the result.
+\end{proof}
+
+\end{document}

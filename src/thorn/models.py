@@ -22,8 +22,16 @@ class FindingCategory(StrEnum):
     CIRCULAR_DEPENDENCY = "circular_dependency"
     ALGEBRA_ERROR = "algebra_error"
     DEFINITION_MISMATCH = "definition_mismatch"
+    WELL_DEFINEDNESS = "well_definedness"
+    SCOPE_MISMATCH = "scope_mismatch"
+    VACUOUS_TRUTH = "vacuous_truth"
     EXTERNAL_DEPENDENCY = "external_dependency"
     UNSUPPORTED_CLAIM = "unsupported_claim"
+    UNPROVED_DEPENDENCY = "unproved_dependency"
+    UNSTATED_AXIOM = "unstated_axiom"
+    NOTATION_AMBIGUITY = "notation_ambiguity"
+    SPECIFICATION_AMBIGUITY = "specification_ambiguity"
+    SCOPE_SURPLUS = "scope_surplus"
     OTHER = "other"
 
 
@@ -33,12 +41,20 @@ RULE_CODES: dict[FindingCategory, str] = {
     FindingCategory.CONVERGENCE_MISMATCH: "TH203",
     FindingCategory.QUANTIFIER_ERROR: "TH204",
     FindingCategory.DEFINITION_MISMATCH: "TH205",
+    FindingCategory.VACUOUS_TRUTH: "TH206",
+    FindingCategory.WELL_DEFINEDNESS: "TH207",
+    FindingCategory.SCOPE_MISMATCH: "TH208",
     FindingCategory.ALGEBRA_ERROR: "TH301",
     FindingCategory.COUNTEREXAMPLE: "TH302",
     FindingCategory.BOUNDARY_CASE: "TH303",
     FindingCategory.CIRCULAR_DEPENDENCY: "TH401",
     FindingCategory.EXTERNAL_DEPENDENCY: "TH501",
     FindingCategory.UNSUPPORTED_CLAIM: "TH502",
+    FindingCategory.UNPROVED_DEPENDENCY: "TH503",
+    FindingCategory.UNSTATED_AXIOM: "TH504",
+    FindingCategory.NOTATION_AMBIGUITY: "TH601",
+    FindingCategory.SPECIFICATION_AMBIGUITY: "TH602",
+    FindingCategory.SCOPE_SURPLUS: "TH603",
     FindingCategory.OTHER: "TH999",
 }
 

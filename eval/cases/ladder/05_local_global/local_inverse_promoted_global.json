@@ -1,0 +1,28 @@
+{
+  "name": "local inverse theorem promoted to global diffeomorphism",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "hypothesis_mismatch",
+    "invalid_implication",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 5,
+  "capability": "distinguish local invertibility from global surjectivity/invertibility",
+  "target_identifier": "thm:local-global",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "local_to_global",
+  "detection_methods": [
+    "local-global check",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "sneaky",
+  "downstream_impact": "one_result",
+  "notes": "f(x)=arctan(x) has derivative everywhere nonzero but is not onto R."
+}

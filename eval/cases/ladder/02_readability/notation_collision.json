@@ -1,0 +1,27 @@
+{
+  "name": "same symbol simultaneously denotes set and constant",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "notation_ambiguity",
+    "specification_ambiguity"
+  ],
+  "minimum_severity": "warning",
+  "level": 2,
+  "capability": "flag a simultaneous notation collision that changes mathematical type",
+  "target_identifier": "thm:notation-collision",
+  "repairability": "trivial",
+  "family": "readability",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "simultaneous_symbol_overload",
+  "detection_methods": [
+    "notation scope check",
+    "type check"
+  ],
+  "reader_consequence": "clarity",
+  "deception_level": "obvious",
+  "downstream_impact": "one_result",
+  "notes": "C denotes both the domain set and a positive real constant in the same statement and proof."
+}

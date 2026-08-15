@@ -115,6 +115,20 @@ Defender: survives (0.94)
 
 Vague referee-style comments such as "more justification is needed" are not useful lint diagnostics.
 
+Thorn also distinguishes objective mathematical readability from subjective style. A simultaneous
+notation collision or materially ambiguous asymptotic convention can be lintable; merely preferring a
+different symbol or prose style is not. Style rules should come from an explicitly adopted external
+style guide, not from model taste.
+
+## Test-driven specification
+
+The public synthetic corpus is a specification of Thorn's behavior, including clean controls that
+constrain false positives. The rough L1--L10 difficulty ladder is complemented by an orthogonal fault
+matrix covering theorem truth, proof validity, locality, fault class, repairability, detection method,
+reader consequence, and downstream impact.
+
+See [the test matrix](docs/test-matrix.md) and the [evaluation corpus](eval/README.md).
+
 ## Development
 
 ```bash

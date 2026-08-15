@@ -1,0 +1,23 @@
+{
+  "name": "clean representative-independent quotient map",
+  "kind": "clean",
+  "source": "Synthetic matrix control",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 4,
+  "capability": "accept a quotient construction after representative independence is checked",
+  "target_identifier": "thm:quotient-good",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "representative_dependence_control",
+  "detection_methods": [
+    "well-definedness check"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "notes": "The proof explicitly verifies representative independence."
+}

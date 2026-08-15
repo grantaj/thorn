@@ -1,0 +1,12 @@
+{
+  "name": "induction omits the n equals zero case",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 3,
+  "capability": "boundary-case coverage",
+  "target_identifier": "thm:missing-zero-case",
+  "accepted_categories": ["boundary_case", "unsupported_claim", "quantifier_error"],
+  "minimum_severity": "warning",
+  "repairability": "local",
+  "notes": "The statement is true, but the proof starts at n=1 while claiming n>=0. Checking n=0 repairs the proof."
+}

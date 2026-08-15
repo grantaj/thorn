@@ -1,0 +1,31 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+
+\title{A Circular Proof of a Familiar Sum}
+\author{Synthetic Thorn Test}
+\maketitle
+
+\begin{theorem}\label{thm:cycle-a}
+For every integer $n\ge1$,
+\[
+1+2+\cdots+n=\frac{n(n+1)}2.
+\]
+\end{theorem}
+\begin{proof}
+This is exactly Lemma~\ref{lem:cycle-b}.
+\end{proof}
+
+\begin{lemma}\label{lem:cycle-b}
+For every integer $n\ge1$,
+\[
+\sum_{k=1}^{n}k=\frac{n(n+1)}2.
+\]
+\end{lemma}
+\begin{proof}
+This is Theorem~\ref{thm:cycle-a}.
+\end{proof}
+
+\end{document}

@@ -1,0 +1,19 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+Let $C=[0,1]$, and let $f:C\to\mathbb R$ be continuous.
+
+\begin{theorem}\label{thm:notation-collision}
+There exists $C>0$ such that for every $x\in C$,
+\[
+  |f(x)|\le C.
+\]
+\end{theorem}
+\begin{proof}
+By compactness, $|f|$ attains a maximum. Let $C=\max_{x\in C}|f(x)|$.
+Then the displayed inequality holds.
+\end{proof}
+
+\end{document}

@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+Let $\mathbb Z/2\mathbb Z$ denote the integers modulo the relation
+$n\sim m$ iff $n-m$ is even.
+
+\begin{theorem}\label{thm:quotient-good}
+The rule
+\[
+  F([n])=(-1)^n
+\]
+defines a function $F:\mathbb Z/2\mathbb Z\to\{-1,1\}$.
+\end{theorem}
+\begin{proof}
+If $[n]=[m]$, then $n-m$ is even. Hence $n$ and $m$ have the same parity,
+so $(-1)^n=(-1)^m$. Thus the value is independent of the representative.
+\end{proof}
+
+\end{document}

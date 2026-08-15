@@ -1,0 +1,40 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newcommand{\rad}{\operatorname{rad}}
+\begin{document}
+
+For a positive integer $n$, let $\rad(n)$ denote the product of the
+distinct prime divisors of $n$.
+
+\begin{lemma}[Radical growth bound]\label{lem:abc-radical}
+For every $\varepsilon>0$ there is a constant $K_\varepsilon$ such that
+whenever $a,b,c$ are pairwise coprime positive integers with $a+b=c$,
+\[
+  c\le K_\varepsilon\rad(abc)^{1+\varepsilon}.
+\]
+\end{lemma}
+\begin{proof}
+A standard radical estimate bounds the height of a coprime additive triple
+by the product of its distinct prime divisors with an arbitrarily small
+loss in the exponent. Absorbing the finitely many small triples into the
+constant gives the claim.
+\end{proof}
+
+\begin{theorem}\label{thm:abc-finiteness}
+There are only finitely many pairwise coprime positive integer triples
+$a+b=c$ satisfying
+\[
+  \rad(abc)\le c^{1/2}.
+\]
+\end{theorem}
+\begin{proof}
+Apply Lemma~\ref{lem:abc-radical} with $\varepsilon=1/2$. Then
+\[
+ c\le K_{1/2}\rad(abc)^{3/2}\le K_{1/2}c^{3/4},
+\]
+so $c\le K_{1/2}^4$. Only finitely many triples remain.
+\end{proof}
+
+\end{document}

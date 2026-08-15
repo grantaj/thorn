@@ -1,0 +1,14 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{theorem}\label{thm:bounded-sequence}
+Every bounded real sequence converges.
+\end{theorem}
+\begin{proof}
+Let $(x_n)$ be bounded. By Bolzano--Weierstrass it has a convergent
+subsequence $(x_{n_k})$. Therefore $(x_n)$ converges to the same limit.
+\end{proof}
+
+\end{document}

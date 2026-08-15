@@ -1,0 +1,28 @@
+{
+  "name": "convergent subsequence promoted to whole sequence",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "convergence_mismatch",
+    "invalid_implication",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 4,
+  "capability": "distinguish subsequential convergence from convergence of the full sequence",
+  "target_identifier": "thm:bounded-sequence",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "subsequence_to_sequence",
+  "detection_methods": [
+    "convergence-mode check",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "obvious",
+  "downstream_impact": "one_result",
+  "notes": "The bounded sequence (-1)^n has convergent subsequences but does not converge."
+}

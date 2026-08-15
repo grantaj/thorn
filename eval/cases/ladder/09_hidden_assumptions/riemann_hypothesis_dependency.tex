@@ -1,0 +1,31 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+
+\begin{lemma}[Square-root prime error]\label{lem:rh-square-root}
+There is a constant $C>0$ such that, for all sufficiently large $x$,
+\[
+  |\psi(x)-x|\le C x^{1/2}(\log x)^2,
+\]
+where $\psi$ is Chebyshev's function.
+\end{lemma}
+\begin{proof}
+Use the explicit formula for $\psi$. Each nontrivial zero $\rho$ of the
+zeta function contributes at scale $x^{1/2}$, and summing the zero terms
+up to height $x$ gives the stated $O(x^{1/2}(\log x)^2)$ remainder.
+\end{proof}
+
+\begin{theorem}\label{thm:rh-prime-window}
+For every sufficiently large $x$, the interval
+$[x,x+x^{3/4}]$ contains a prime.
+\end{theorem}
+\begin{proof}
+Apply Lemma~\ref{lem:rh-square-root} at $x$ and $x+x^{3/4}$.
+The main terms differ by $x^{3/4}$, whereas the two error terms are
+$O(x^{1/2}(\log x)^2)$. Thus $\psi(x+x^{3/4})-\psi(x)>0$ for large $x$,
+which forces a prime in the interval.
+\end{proof}
+
+\end{document}

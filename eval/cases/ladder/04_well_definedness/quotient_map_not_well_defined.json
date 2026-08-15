@@ -1,0 +1,28 @@
+{
+  "name": "quotient map depends on representative",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "well_definedness",
+    "definition_mismatch",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 4,
+  "capability": "check representative independence in a quotient construction",
+  "target_identifier": "thm:quotient-bad",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "representative_dependence",
+  "detection_methods": [
+    "well-definedness check",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "notes": "[0]=[2], but the proposed rule assigns both 0 and 2 to the same equivalence class."
+}

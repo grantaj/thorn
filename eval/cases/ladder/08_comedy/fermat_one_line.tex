@@ -1,0 +1,20 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\title{A One-Line Elementary Proof of Fermat's Last Theorem}
+\author{Synthetic Thorn Test}
+\maketitle
+
+\begin{theorem}\label{thm:fermat}
+For integers $x,y,z>0$ and $n>2$, there are no solutions of
+\[
+x^n+y^n=z^n.
+\]
+\end{theorem}
+\begin{proof}
+If such a solution existed, taking $n$th roots of the equation would give $x+y=z$. But the triangle inequality gives $x+y>z$, a contradiction.
+\end{proof}
+
+\end{document}

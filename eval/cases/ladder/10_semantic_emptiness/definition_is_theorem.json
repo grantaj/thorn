@@ -1,0 +1,12 @@
+{
+  "name": "theorem is only its definition renamed",
+  "kind": "finding",
+  "source": "Synthetic TDD case",
+  "accepted_categories": ["vacuous_truth", "definition_mismatch"],
+  "minimum_severity": "warning",
+  "level": 10,
+  "capability": "recognize when an advertised theorem merely restates a definition",
+  "target_identifier": "thm:stable-idempotent",
+  "repairability": "structural",
+  "notes": "The theorem is correct but contains no mathematical content beyond the definition of stable. This should be a semantic warning, not a claim that the proof is false."
+}
