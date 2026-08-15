@@ -656,10 +656,13 @@ def main(argv: list[str] | None = None) -> int:
         review_results.append(result)
 
         status = "PASS" if result.passed else "FAIL"
-        print(
-            f"{status} {review_strategy.upper()} L{expectation.level} "
-            f"{expectation.name}: {result.detail}"
-        )
+        if review_strategy == "legacy":
+            print(f"{status} L{expectation.level} {expectation.name}: {result.detail}")
+        else:
+            print(
+                f"{status} {review_strategy.upper()} L{expectation.level} "
+                f"{expectation.name}: {result.detail}"
+            )
         if not result.passed:
             failures += 1
             for finding in visible:
