@@ -1,0 +1,34 @@
+name: Local NLP contract
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/nlp.yml"
+      - "pyproject.toml"
+      - "src/thorn/evidence.py"
+      - "src/thorn/latex.py"
+      - "src/thorn/linguistic*.py"
+      - "src/thorn/semantic_projection.py"
+      - "src/thorn/support*.py"
+      - "src/thorn/symbols.py"
+      - "research/semantic-parser-bakeoff/**"
+      - "tests/test_linguistic_*.py"
+
+jobs:
+  spacy-contract:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Thorn with local NLP support
+        run: |
+          python -m pip install --upgrade pip
+          pip install 'click>=8.1' -e '.[nlp]'
+          python -m spacy download en_core_web_sm
+      - name: Check parser-independent metamorphic contract
+        run: python research/semantic-parser-bakeoff/check_spacy_contract.py

@@ -17,6 +17,9 @@ dependencies = [
 pylatexenc = [
   "pylatexenc==2.10",
 ]
+nlp = [
+  "spacy==3.8.14",
+]
 dev = [
   "mypy>=1.15",
   "pylatexenc==2.10",
