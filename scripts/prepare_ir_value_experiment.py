@@ -159,7 +159,10 @@ def build_inventory(
         "provider_requests": 0,
         "live_requests": 0,
         "api_key_required": False,
-        "size_units": "exact model-facing user-content characters and UTF-8 bytes; actual token usage is measured only during an explicitly authorized live run",
+        "size_units": (
+            "exact model-facing user-content characters and UTF-8 bytes; actual token "
+            "usage is measured only during an explicitly authorized live run"
+        ),
         "totals": totals,
         "records": records,
     }
