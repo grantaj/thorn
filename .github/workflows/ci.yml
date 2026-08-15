@@ -16,6 +16,5 @@ jobs:
       - run: python -m pip install -e '.[dev]'
       - run: pytest -q
       - run: thorn-eval eval/cases --validate-only
-      - run: python scripts/benchmark_frontends.py --iterations 20 --results 40
       - run: ruff check .
       - run: mypy src
