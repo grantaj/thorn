@@ -16,7 +16,6 @@ from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
 from thorn.models import (
     AuditFinding,
-    CandidateFinding,
     FindingCategory,
     Severity,
     TheoremUnit,
