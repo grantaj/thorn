@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from thorn.audit import audit_unit, default_cache
+from thorn.frontends import get_frontend
 from thorn.latex import extract_units
 from thorn.models import AuditFinding, Severity, TheoremUnit, UnitAudit
 
@@ -26,6 +27,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-dir", type=Path, default=Path(".thorn/cache"))
     parser.add_argument("--min-confidence", type=float, default=0.65)
     parser.add_argument("--fail-on", choices=("never", "error", "warning"), default="error")
+    parser.add_argument(
+        "--frontend",
+        choices=("current", "regex", "pylatexenc"),
+        default="current",
+        help="LaTeX parser frontend (development/A-B option; default: current)",
+    )
     return parser
 
 
@@ -109,8 +116,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        units = extract_units(args.file)
-    except (OSError, UnicodeError) as exc:
+        frontend = get_frontend(args.frontend)
+        units = extract_units(args.file, frontend=frontend)
+    except (OSError, UnicodeError, RuntimeError, ValueError) as exc:
         print(f"thorn: could not read project: {exc}", file=sys.stderr)
         return 2
 
