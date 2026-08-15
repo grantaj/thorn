@@ -1,78 +1,65 @@
-# Semantic parser bake-off
+# Local linguistic parser benchmark
 
 Issue: #29
 
-This experiment tests a fragile part of Thorn's offline architecture: recovering linguistic relationships between mathematical objects without turning the project into an ever-growing dictionary of English cue phrases.
+This directory preserves the parser-independent evidence behind Thorn's first local linguistic frontend decision. It is **research/benchmark material**, not a second production NLP stack.
 
-## Principle
+## Architectural boundary
 
-Thorn should own **mathematical types and provenance**, not reimplement general NLP.
-
-The intended boundary is:
+Offline Thorn should extract plausible mathematical structure, not resolve mathematical meaning.
 
 ```text
 LaTeX source
   -> source-preserving LaTeX frontend
-  -> typed projection
+  -> typed reversible projection
        THORNRESULT1
        THORNEQUATION1
        THORNMATH1
        THORNREFERENCE1
-  -> mature local linguistic/semantic parser
-  -> normalized linguistic relations
-  -> Thorn mathematical IR
+  -> Thorn-owned LinguisticFrontend
+  -> local dependency parser (spaCy first)
+  -> normalized Thorn linguistic relations
+  -> ambiguity/evidence-bearing Math IR
 ```
 
-The typed projection prevents a general English parser from having to understand TeX syntax. Every placeholder maps exactly back to the original source span. The NLP component is then evaluated only on the linguistic relation between those atomic mathematical objects.
+Thorn owns mathematical types, exact source provenance, claims/support edges, uncertainty/evidence, and lint policy. A linguistic parser supplies general grammatical/dependency structure only. Candidate-parser objects must not leak into Math IR.
 
-## Ground truth
+## Durable benchmark artifacts
 
-`cases.json` is parser-independent. It specifies semantic tasks such as:
+- `cases.json` is a 70-case parser-independent metamorphic/adversarial corpus.
+- `src/thorn/semantic_projection.py` projects TeX/math/reference syntax into typed atomic placeholders while retaining exact reverse mappings to source spans.
+- `tests/test_semantic_projection.py` checks that projection contract against both current LaTeX frontends.
+- `run_dependency_bakeoff.py` is an optional research harness for comparing dependency parsers without making either parser a core Thorn dependency.
 
-- a result reference genuinely supports a claim;
-- a result reference is merely expository and must **not** become support;
-- one claim is presented as a consequence of a previous claim;
-- a mathematical object is introduced, defined, or used as a trailing binder.
+The benchmark is intentionally defined in terms of mathematical-prose relations rather than spaCy/Stanza-native dependency labels. Equivalent paraphrases share expected relations; adversarial controls deliberately reuse misleading surface words.
 
-Equivalent paraphrases share the same expected relation. Adversarial controls deliberately contain misleading lexical overlap such as `so far`, `by the way`, `by contrast`, and expository references.
+## Evidence and decision
 
-The benchmark must never define correctness in terms of a candidate parser's native tree labels.
+The 70-case experiment established enough signal to stop the open-ended parser bake-off:
 
-## Candidate layers
+- spaCy collapsed 15 prior-claim conclusion paraphrases to one structural dependency template with zero adversarial collisions;
+- six trailing-binder variants collapsed to one template;
+- 13 introduction phrasings reduced to three templates;
+- result-support language remains structurally confusable with deliberately expository controls.
 
-The experiment is intentionally broader than a single parser API.
+Stanza was exercised on the same dependency benchmark but did not add enough value to justify maintaining a second production parser. RST/discourse parsing, AMR, CoreNLP, and SRL remain possible research comparators, but their integration cost is not justified for Thorn's current goal.
 
-### Dependency parsing
+**Production decision:** use spaCy dependency parsing as the first implementation behind a Thorn-owned `LinguisticFrontend` interface. Preserve support-vs-exposition uncertainty in the IR instead of patching the ambiguity with a larger cue-word dictionary.
 
-- **spaCy**: lightweight Python/production baseline; MIT.
-- **Stanza**: Universal Dependencies neural parser; Apache-2.0.
+## Dependency and CI policy
 
-`run_dependency_bakeoff.py` measures how much pure dependency structure compresses the paraphrase problem without using predicate words in its signatures. In particular it reports the number of distinct structural templates required within each positive paraphrase family and whether positive templates collide with adversarial negatives.
+Nothing in this benchmark is allowed to make default CI depend on an NLP model or a remote service. Core Thorn must remain lightweight, deterministic, paid-call-free, and usable without spaCy.
 
-A high template ratio is evidence that dependency parsing alone does not normalize enough semantics; it is not an invitation to add more Thorn-specific phrase rules.
+Production spaCy/model tests belong in a separate heavier CI path introduced with #30. The parser-independent corpus remains the regression oracle and must not be weakened merely to make a parser pass.
 
-### Discourse parsing
+## Running the optional comparator
 
-RST/PDTB-style discourse parsing is especially relevant to proof structure because it explicitly models relations such as cause, result, background, elaboration, contrast, and evidence-like connections between discourse units. IUDEX/DMRST is a current local candidate and should be evaluated against the cross-claim cases.
+With a candidate parser and its English model already installed locally:
 
-### Semantic role / semantic graph parsing
+```bash
+python research/semantic-parser-bakeoff/run_dependency_bakeoff.py \
+  --candidate spacy \
+  --output spacy-report.json
+```
 
-SRL and AMR are comparators for predicate-argument normalization. They should have to demonstrate useful paraphrase invariance and acceptable CPU/model cost before being considered production dependencies.
-
-CoreNLP Natural Logic/OpenIE remains a useful research comparator, but its GPL licensing makes it unattractive as an embedded dependency if Thorn later has proprietary distributed components.
-
-## Dependency policy
-
-No candidate parser is a normal Thorn dependency during this experiment. Default CI remains small, deterministic, keyless, and model-free. Candidate packages and model downloads run only in the dedicated bake-off workflow.
-
-The eventual recommendation must consider:
-
-1. paraphrase invariance;
-2. adversarial false positives;
-3. source/provenance recoverability;
-4. parser disagreement visibility;
-5. CPU runtime and cold start;
-6. model/download size;
-7. packaging and licensing.
-
-The goal is not to find the cleverest regex replacement. It is to determine the lightest mature linguistic layer that materially strengthens Thorn's mathematical IR.
+The harness also retains Stanza as a research comparator. This does not imply a supported production Stanza frontend.
