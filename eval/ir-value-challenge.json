@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "issue": 47,
+  "frozen": true,
+  "description": "Pre-registered representation challenge set for raw vs compact IR vs raw plus compact IR. Do not change cases in response to model outcomes.",
+  "cases": [
+    {
+      "metadata": "eval/cases/ladder/03_hypotheses/clean_nonzero_cancellation.json",
+      "pair": "cancellation",
+      "role": "clean"
+    },
+    {
+      "metadata": "eval/cases/ladder/03_hypotheses/missing_nonzero_hypothesis.json",
+      "pair": "cancellation",
+      "role": "defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_well_definedness/clean_quotient_map.json",
+      "pair": "quotient_well_definedness",
+      "role": "clean"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_well_definedness/quotient_map_not_well_defined.json",
+      "pair": "quotient_well_definedness",
+      "role": "defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_logic/clean_wlog_symmetry.json",
+      "pair": "wlog",
+      "role": "clean"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_logic/invalid_wlog.json",
+      "pair": "wlog",
+      "role": "defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/06_dependencies/clean_dependency.json",
+      "pair": "dependency",
+      "role": "clean"
+    },
+    {
+      "metadata": "eval/cases/ladder/06_dependencies/bad_lemma_breaks_theorem.json",
+      "pair": "dependency",
+      "role": "defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/06_support_structure/expository_prose_clean.json",
+      "pair": "load_bearing_prose",
+      "role": "clean"
+    },
+    {
+      "metadata": "eval/cases/ladder/06_support_structure/sneaky_prose_downstream.json",
+      "pair": "load_bearing_prose",
+      "role": "defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/02_readability/clean_unusual_notation.json",
+      "pair": "notation",
+      "role": "clean"
+    },
+    {
+      "metadata": "eval/cases/ladder/02_readability/notation_collision.json",
+      "pair": "notation",
+      "role": "defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/05_logic/quantifier_swap.json",
+      "pair": null,
+      "role": "hard_defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_proof_sufficiency/rolle_gap.json",
+      "pair": null,
+      "role": "hard_defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/09_hidden_assumptions/riemann_hypothesis_dependency.json",
+      "pair": null,
+      "role": "hard_defect"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_proof_sufficiency/proves_only_weaker_statement.json",
+      "pair": null,
+      "role": "hard_defect"
+    }
+  ]
+}
