@@ -19,7 +19,7 @@ The matrix starts with four families.
 | Family | Question |
 | --- | --- |
 | `correctness` | Is the stated mathematics supported by the supplied argument and assumptions? |
-| `specification` | Is the mathematical claim unambiguous and sufficiently specified to have a stable meaning? |
+| `specification` | Is the mathematical claim unambiguous and does the stated theorem match the scope actually established? |
 | `readability` | Is there an objective notation or presentation problem that materially impedes mathematical interpretation? |
 | `scholarship` | Do citations, attribution, and novelty claims match external evidence? |
 
@@ -59,13 +59,16 @@ future scoring; they are not hints passed to the model.
 | locality | `line`, `proof`, `section`, `paper`, `external` |
 | fault class | free stable identifier such as `quantifier_swap` or `invalid_wlog` |
 | detection method | counterexample, dependency tracing, type/domain check, scaling, theorem-hypothesis check, etc. |
-| reader consequence | `fatal`, `risky`, `clarity` |
+| reader consequence | `fatal`, `risky`, `clarity`, `opportunity`, `not_applicable` |
 | deception level | `obvious`, `plausible`, `sneaky` |
 | downstream impact | `isolated`, `one_result`, `multiple_results` |
 | repairability | `trivial`, `local`, `statement`, `structural`, `none` |
+| theorem/proof scope | `exact`, `proof_narrower`, `proof_stronger`, `incomparable`, `unknown` |
+| hypothesis relation | `exact`, `proof_requires_more`, `theorem_has_surplus`, `unknown` |
+| conclusion relation | `exact`, `proof_establishes_less`, `proof_establishes_more`, `incomparable`, `unknown` |
 
 The most important dimensions are independent. In particular, Thorn must learn that theorem truth and
-proof validity are not the same thing.
+proof validity are not the same thing, and that theorem/proof scope is a separate question again.
 
 We want all of these cells represented:
 
@@ -74,11 +77,60 @@ We want all of these cells represented:
 - true theorem, invalid proof;
 - true theorem, proof with a genuine gap;
 - true theorem, valid proof that looks suspicious;
+- true theorem whose supplied proof establishes a narrower result;
+- true theorem whose supplied proof demonstrably establishes a stronger result;
 - vacuous theorem that is logically true but mathematically empty;
 - clean but unconventional mathematics that should not be normalized away.
 
-False positives on the last two clean categories are especially damaging. A linter that reflexively
-objects to unusual mathematics is not useful to mathematicians.
+False positives on clean and unusual cases are especially damaging. A linter that reflexively objects to
+unusual mathematics is not useful to mathematicians.
+
+## Theorem/proof scope
+
+The theorem statement and the actual logical reach of its proof should be compared explicitly.
+Suppose a theorem announces `H -> C`, while the supplied proof in fact establishes `H' -> C'`.
+There are several materially different cases.
+
+| Relation | Typical example | Thorn treatment |
+| --- | --- | --- |
+| exact | proof uses the stated hypotheses and reaches the stated conclusion | clean |
+| proof narrower: stronger hypotheses | theorem says all real x; proof assumes x>0 | correctness error |
+| proof narrower: weaker conclusion | theorem says an extremum is attained; proof shows only boundedness | correctness error |
+| proof stronger: weaker hypotheses | theorem assumes x>=0; proof explicitly works for every real x | informational opportunity |
+| proof stronger: stronger conclusion | theorem claims positivity; proof proves a quantitative lower bound | informational opportunity |
+| incomparable | proof establishes a different property that does not imply the theorem | correctness error |
+
+The direction matters. If the proof is narrower than the theorem, the stated result is unsupported even
+when the theorem happens to be true. If the proof is stronger, there is no correctness defect. Thorn may
+surface the surplus only as an informational authoring opportunity.
+
+### Surplus hypotheses
+
+A theorem may retain a hypothesis that the proof no longer needs after revisions. This can be useful to
+flag, but only when the redundancy is demonstrated rather than guessed. Hypothesis-use tracing must
+include definitions and dependencies. A hypothesis that is not mentioned syntactically in the final
+proof paragraph may still be required by a cited lemma.
+
+The suite therefore contains both:
+
+- a theorem whose proof explicitly works without one of its stated hypotheses; and
+- a clean theorem where a superficially unused hypothesis is required by a cited result.
+
+### Stronger conclusions
+
+Likewise, if the supplied proof explicitly derives a sharper inequality, stronger regularity property,
+or otherwise stronger conclusion than the theorem states, Thorn may report that as information. The
+proof must actually contain the stronger result; a plausible extension is not enough.
+
+### No speculative generalization
+
+"The proof proves more" is very different from "this argument looks as though it could be generalized."
+Default Thorn should report only **demonstrated surplus scope**.
+
+It should not propose a new parameter, weaker regularity class, larger ambient category, Banach-space
+version, noncommutative analogue, or other research generalization merely because a proof pattern looks
+reusable. Those are research suggestions, not lint diagnostics. A clean regression case deliberately
+uses an argument that invites abstraction while proving exactly the theorem stated.
 
 ## Fault classes
 
@@ -178,6 +230,18 @@ treated as first-class detection strategies.
 - floating-point evidence treated as exact proof;
 - code verifying a subtly different proposition from the manuscript.
 
+### Theorem/proof relationship
+
+- proof requires stronger hypotheses than the theorem states;
+- proof proves only a weaker conclusion;
+- proof proves a related but incomparable statement;
+- theorem contains a demonstrably surplus hypothesis;
+- proof explicitly establishes a stronger conclusion;
+- theorem statement changed during revision but proof still targets the old scope.
+
+The first three are correctness failures. The next two are informational opportunities. The last can fall
+in either class depending on the direction of the mismatch.
+
 ### Dependencies and foundations
 
 - theorem depends on a false lemma;
@@ -214,8 +278,9 @@ Every new capability should preferably be introduced as a small pair or cluster:
 2. a nearby clean control that uses similar surface language;
 3. when useful, a second case that changes theorem truth while preserving the proof fault.
 
-Examples include invalid versus valid uses of "without loss of generality", a quotient map that is and is
-not representative-independent, or arbitrary versus finite choice in ZF.
+For theorem/proof scope, useful clusters contain both directions: a narrower proof that is an error, a
+stronger proof that is only informational, and a clean neighbour preventing speculative generalization
+or naive unused-hypothesis detection.
 
 The development loop remains:
 
@@ -233,13 +298,16 @@ A matrix-aware fixture may include fields like:
 {
   "family": "correctness",
   "statement_truth": "true",
-  "proof_status": "invalid",
+  "proof_status": "gap",
   "locality": "proof",
-  "fault_class": "invalid_wlog",
-  "detection_methods": ["symmetry check", "counterexample"],
+  "fault_class": "proof_weaker_than_statement",
+  "detection_methods": ["proof-goal comparison"],
   "reader_consequence": "fatal",
   "deception_level": "plausible",
-  "downstream_impact": "one_result"
+  "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "proof_establishes_less"
 }
 ```
 
@@ -256,6 +324,9 @@ A mature Thorn suite should be able to answer questions such as:
 - Do we test true theorems with invalid proofs, not only false theorems?
 - Do we have paper-wide and external failures, not only local algebra?
 - Are quantifier, induction, well-definedness, limit, and local/global errors represented?
+- Do we distinguish proof-narrower correctness failures from proof-stronger opportunities?
+- Can we trace hypothesis use through dependencies before declaring a hypothesis surplus?
+- Do we refuse speculative generalizations that the supplied proof does not actually establish?
 - Do objective readability checks have clean unconventional controls?
 - Can a dependency be flawed without tainting unrelated downstream results?
 - Does every high-severity class have at least one adversarial clean neighbour?
