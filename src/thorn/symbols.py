@@ -4,7 +4,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from thorn.frontend import SourceSpan
+from thorn.frontend import ParsedProject, SourceSpan
 
 
 class ScopeKind(StrEnum):
@@ -150,3 +150,11 @@ class SymbolTable(BaseModel):
             if symbol.name == name:
                 return symbol
         return None
+
+
+def extract_symbol_table(project: ParsedProject, regions: list[ResultRegion]) -> SymbolTable:
+    """Compatibility entry point for the symbol extraction pass."""
+
+    from thorn.symbol_extract import extract_symbol_table as run_extractor
+
+    return run_extractor(project, regions)
