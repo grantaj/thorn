@@ -3,6 +3,7 @@
   "kind": "finding",
   "source": "Synthetic matrix case",
   "accepted_categories": [
+    "scope_mismatch",
     "unsupported_claim",
     "invalid_implication"
   ],
@@ -22,5 +23,8 @@
   "reader_consequence": "fatal",
   "deception_level": "plausible",
   "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "proof_establishes_less",
   "notes": "The theorem is true, but boundedness alone does not imply the extrema are attained."
 }
