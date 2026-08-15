@@ -11,6 +11,7 @@ from thorn.check import CheckFinding, check_project
 from thorn.frontends import get_frontend
 from thorn.latex import extract_project
 from thorn.models import AuditFinding, Severity, TheoremUnit, UnitAudit
+from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -19,8 +20,9 @@ def _parser() -> argparse.ArgumentParser:
         usage="thorn [check|review] FILE [options]",
         description="Correctness linting for mathematical LaTeX manuscripts.",
         epilog=(
-            "Modes: 'check' is deterministic and makes no model calls; 'review' runs the "
-            "model-backed adversarial audit. Omitting the mode preserves legacy review behavior."
+            "Modes: 'check' makes deterministic lint decisions with local analysis and no "
+            "model/API calls; 'review' runs the model-backed adversarial audit. Omitting the "
+            "mode preserves legacy review behavior."
         ),
     )
     parser.add_argument("file", type=Path, help="main LaTeX file")
@@ -38,6 +40,14 @@ def _parser() -> argparse.ArgumentParser:
         choices=("current", "regex", "pylatexenc"),
         default="current",
         help="LaTeX parser frontend (development/A-B option; default: current)",
+    )
+    parser.add_argument(
+        "--structural-only",
+        action="store_true",
+        help=(
+            "disable the normal local linguistic frontend; intended for debugging, constrained "
+            "environments, and lightweight deterministic tests"
+        ),
     )
     return parser
 
@@ -157,7 +167,19 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         frontend = get_frontend(args.frontend)
-        project = extract_project(args.file, frontend=frontend)
+        linguistic_frontend = None if args.structural_only else SpacyLinguisticFrontend()
+        project = extract_project(
+            args.file,
+            frontend=frontend,
+            linguistic_frontend=linguistic_frontend,
+        )
+    except LinguisticFrontendUnavailable as exc:
+        print(
+            "thorn: local linguistic frontend unavailable: "
+            f"{exc}. Install the local spaCy model or rerun with --structural-only.",
+            file=sys.stderr,
+        )
+        return 2
     except (OSError, UnicodeError, RuntimeError, ValueError) as exc:
         print(f"thorn: could not read project: {exc}", file=sys.stderr)
         return 2
