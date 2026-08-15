@@ -1,0 +1,20 @@
+{
+  "name": "clean explicit theorem equation definition and property support",
+  "kind": "clean",
+  "modes": ["check"],
+  "source": "Synthetic support-IR control",
+  "level": 6,
+  "capability": "explicit support relationship extraction",
+  "target_identifier": "thm:explicit-support",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "clean_explicit_support",
+  "detection_methods": ["support_graph"],
+  "reader_consequence": "not_applicable",
+  "deception_level": "obvious",
+  "downstream_impact": "isolated",
+  "notes": "Exercises result-reference, equation-reference, definition, and named-property support kinds without semantic validity inference."
+}

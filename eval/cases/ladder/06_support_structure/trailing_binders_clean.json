@@ -1,0 +1,20 @@
+{
+  "name": "clean trailing binders remain attached to their displays",
+  "kind": "clean",
+  "modes": ["check"],
+  "source": "Synthetic support-IR control",
+  "level": 6,
+  "capability": "trailing binder representation",
+  "target_identifier": "thm:trailing-binders",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "clean_trailing_binder",
+  "detection_methods": ["support_graph"],
+  "reader_consequence": "not_applicable",
+  "deception_level": "obvious",
+  "downstream_impact": "isolated",
+  "notes": "Repeated spelling x denotes distinct recovered binding occurrences; source order alone must not produce a scope warning."
+}

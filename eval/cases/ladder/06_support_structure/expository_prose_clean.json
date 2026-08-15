@@ -1,0 +1,20 @@
+{
+  "name": "clean expository prose is not load-bearing",
+  "kind": "clean",
+  "modes": ["check"],
+  "source": "Synthetic support-IR control",
+  "level": 6,
+  "capability": "non-load-bearing prose representation",
+  "target_identifier": "thm:expository",
+  "repairability": "none",
+  "family": "readability",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "clean_expository_prose",
+  "detection_methods": ["support_graph"],
+  "reader_consequence": "not_applicable",
+  "deception_level": "obvious",
+  "downstream_impact": "isolated",
+  "notes": "The first sentence may be represented as prose, but because no recovered claim consumes it, it is not an unsupported load-bearing candidate."
+}
