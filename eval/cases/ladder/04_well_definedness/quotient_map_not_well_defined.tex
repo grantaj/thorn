@@ -1,0 +1,22 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+Let $\mathbb Z/2\mathbb Z$ denote the integers modulo the relation
+$n\sim m$ iff $n-m$ is even.
+
+\begin{theorem}\label{thm:quotient-bad}
+The rule
+\[
+  F([n])=n
+\]
+defines a function $F:\mathbb Z/2\mathbb Z\to\mathbb Z$.
+\end{theorem}
+\begin{proof}
+Every equivalence class $[n]$ has an integer representative $n$, so assign
+to the class that representative. This gives an integer for each class and
+therefore defines $F$.
+\end{proof}
+
+\end{document}

@@ -1,0 +1,27 @@
+{
+  "name": "invalid without loss of generality",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "invalid_implication",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 4,
+  "capability": "check that a WLOG reduction preserves the actual conclusion",
+  "target_identifier": "thm:bad-wlog",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "invalid_wlog",
+  "detection_methods": [
+    "symmetry check",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "notes": "The hypotheses are symmetric in x,y but the conclusion is not. x=-1,y=2 is a counterexample."
+}

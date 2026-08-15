@@ -1,0 +1,14 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{theorem}\label{thm:bad-wlog}
+For all real numbers $x,y$, if $x+y>0$, then $x>0$.
+\end{theorem}
+\begin{proof}
+Without loss of generality assume $x\ge y$. Then
+$2x\ge x+y>0$, so $x>0$.
+\end{proof}
+
+\end{document}

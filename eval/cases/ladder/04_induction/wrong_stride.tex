@@ -1,0 +1,18 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{theorem}\label{thm:stride-induction}
+For every integer $n\ge 1$, one has $2^n\ge n+1$.
+\end{theorem}
+\begin{proof}
+For $n=1$, equality holds. Assume $2^n\ge n+1$. Then
+\[
+  2^{n+2}=4\,2^n\ge 4(n+1)\ge n+3,
+\]
+so the statement holds at $n+2$. By induction the result follows for all
+$n\ge1$.
+\end{proof}
+
+\end{document}

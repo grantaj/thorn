@@ -1,0 +1,23 @@
+{
+  "name": "clean symmetric WLOG",
+  "kind": "clean",
+  "source": "Synthetic matrix control",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 4,
+  "capability": "avoid flagging a legitimate symmetry-based WLOG reduction",
+  "target_identifier": "thm:clean-wlog",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "invalid_wlog_control",
+  "detection_methods": [
+    "symmetry check"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "notes": "The full statement is invariant under swapping x and y."
+}

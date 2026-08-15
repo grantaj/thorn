@@ -1,0 +1,19 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{theorem}\label{thm:extreme-value-gap}
+Every continuous function $f:[0,1]\to\mathbb R$ attains both a maximum and
+a minimum.
+\end{theorem}
+\begin{proof}
+The interval $[0,1]$ is compact, and the continuous image of a compact set
+is bounded. Hence there exist real numbers $m,M$ with
+\[
+  m\le f(x)\le M
+\]
+for every $x\in[0,1]$. Therefore $f$ attains its minimum and maximum.
+\end{proof}
+
+\end{document}
