@@ -5,7 +5,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from thorn.dependencies import DependencyResolution, ExtractedProject
+from thorn.dependencies import DependencyNode, DependencyResolution, ExtractedProject
+from thorn.frontend import SourceSpan
 from thorn.models import Severity, SourceRange
 from thorn.symbols import Symbol, SymbolRole, SymbolTable
 
@@ -68,7 +69,7 @@ def _check_dependencies(project: ExtractedProject) -> list[CheckFinding]:
     graph = project.dependency_graph
     findings: list[CheckFinding] = []
 
-    by_label: dict[str, list[object]] = defaultdict(list)
+    by_label: dict[str, list[DependencyNode]] = defaultdict(list)
     for node in graph.nodes:
         if node.label is not None:
             by_label[node.label].append(node)
@@ -151,7 +152,12 @@ def _scope_result_identifier(table: SymbolTable, scope_identifier: str) -> str |
     return None
 
 
-def _later_visible_declarations(table: SymbolTable, name: str, scope_identifier: str, source) -> list[Symbol]:
+def _later_visible_declarations(
+    table: SymbolTable,
+    name: str,
+    scope_identifier: str,
+    source: SourceSpan,
+) -> list[Symbol]:
     chain = set(table.scope_chain(scope_identifier))
     return sorted(
         (
