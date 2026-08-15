@@ -162,7 +162,12 @@ def _locally_related(
     right_positions = [claim_order[item] for item in right_ids if item in claim_order]
     if not left_positions or not right_positions:
         return False
-    return min(abs(left_pos - right_pos) for left_pos in left_positions for right_pos in right_positions) <= 1
+    distance = min(
+        abs(left_pos - right_pos)
+        for left_pos in left_positions
+        for right_pos in right_positions
+    )
+    return distance <= 1
 
 
 def _group_trigger_edges(
