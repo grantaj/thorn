@@ -28,7 +28,20 @@ jobs:
       - name: Run known-case semantic evaluation
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: >-
-          thorn-eval eval/cases
-          --model "${{ inputs.model }}"
-          --min-confidence "${{ inputs.min_confidence }}"
+        run: |
+          set -o pipefail
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "model=${{ inputs.model }}"
+            echo "min_confidence=${{ inputs.min_confidence }}"
+            thorn-eval eval/cases \
+              --model "${{ inputs.model }}" \
+              --min-confidence "${{ inputs.min_confidence }}"
+          } | tee live-eval.txt
+      - name: Preserve evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-eval-${{ github.run_id }}
+          path: live-eval.txt
+          if-no-files-found: error
