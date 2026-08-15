@@ -210,7 +210,7 @@ Here $x=x$.
         use
         for use in table.uses
         if use.name == "x"
-        and use.source.start_line == 7
+        and use.source.start_line == 6
         and use.resolved_symbol_identifier is not None
     ]
     assert first_proof_uses
@@ -225,7 +225,7 @@ Here $x=x$.
         use
         for use in table.uses
         if use.name == "x"
-        and use.source.start_line == 13
+        and use.source.start_line == 12
         and use.resolved_symbol_identifier is not None
     ]
     assert len(second_proof_uses) == 2
