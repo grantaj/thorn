@@ -5,7 +5,7 @@ import json
 from pydantic import BaseModel
 
 from thorn.dependencies import DependencyNode
-from thorn.evidence import StructuralEvidence
+from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import SourceSpan
 from thorn.models import SourceRange
 from thorn.semantic_review import ReviewSourceContext, SemanticReviewItem
@@ -66,44 +66,52 @@ def _format_range(source: SourceRange) -> str:
     return f"{source.file}:{source.start_line}-{source.end_line}"
 
 
-def _evidence_sort_key(item: StructuralEvidence) -> tuple[object, ...]:
+def _evidence_sort_key(
+    item: StructuralEvidence,
+) -> tuple[str, int, int, int, int, int, int, str, int, int, int, int, int, int, str, str]:
     target = _span_key(item.target) if item.target is not None else ("", 0, 0, 0, 0, 0, 0)
     return (*_span_key(item.source), *target, item.reason, item.context)
 
 
-def _claim_sort_key(item: Claim) -> tuple[object, ...]:
+def _claim_sort_key(item: Claim) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(item.source), item.identifier)
 
 
-def _qualifier_sort_key(item: ClaimQualifier) -> tuple[object, ...]:
+def _qualifier_sort_key(
+    item: ClaimQualifier,
+) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(item.source), item.identifier)
 
 
-def _relation_sort_key(item: SupportEdge) -> tuple[object, ...]:
+def _relation_sort_key(item: SupportEdge) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(item.source), item.identifier)
 
 
-def _constraint_sort_key(item: Constraint) -> tuple[object, ...]:
+def _constraint_sort_key(item: Constraint) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(item.source), item.identifier)
 
 
-def _definition_sort_key(item: Definition) -> tuple[object, ...]:
+def _definition_sort_key(item: Definition) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(item.source), item.identifier)
 
 
-def _symbol_sort_key(item: Symbol) -> tuple[object, ...]:
+def _symbol_sort_key(item: Symbol) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(item.source), item.identifier)
 
 
-def _candidate_sort_key(item: SymbolIntroductionCandidate) -> tuple[object, ...]:
+def _candidate_sort_key(
+    item: SymbolIntroductionCandidate,
+) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(item.source), item.identifier)
 
 
-def _dependency_sort_key(item: DependencyNode) -> tuple[object, ...]:
+def _dependency_sort_key(item: DependencyNode) -> tuple[str, int, int, str]:
     return (*_range_key(item.source), item.identifier)
 
 
-def _context_sort_key(item: ReviewSourceContext) -> tuple[object, ...]:
+def _context_sort_key(
+    item: ReviewSourceContext,
+) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(item.source), item.text)
 
 
@@ -192,7 +200,7 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
             relation
             for relation in item.support_relations
             if relation.identifier not in trigger_ids
-            and relation.status.value == "confident"
+            and relation.status == InferenceStatus.CONFIDENT
         ),
         key=_relation_sort_key,
     )
