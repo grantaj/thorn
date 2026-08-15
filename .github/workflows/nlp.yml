@@ -15,15 +15,21 @@ on:
       - "src/thorn/latex.py"
       - "src/thorn/linguistic*.py"
       - "src/thorn/local_nlp.py"
+      - "src/thorn/semantic_experiment.py"
       - "src/thorn/semantic_projection.py"
       - "src/thorn/semantic_review.py"
+      - "src/thorn/semantic_review_compact.py"
       - "src/thorn/support*.py"
       - "src/thorn/symbols.py"
       - "eval/README.md"
+      - "eval/IR_VALUE_EXPERIMENT.md"
+      - "eval/ir-value-challenge.json"
+      - "scripts/prepare_ir_value_experiment.py"
       - "research/semantic-parser-bakeoff/**"
       - "tests/test_cli_analysis.py"
       - "tests/test_eval*.py"
       - "tests/test_linguistic_*.py"
+      - "tests/test_semantic_experiment.py"
       - "tests/test_semantic_projection.py"
 
 jobs:
@@ -44,7 +50,7 @@ jobs:
           python -m spacy download en_core_web_sm
       - name: Run parser-neutral unit contracts
         run: |
-          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py
+          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py
       - name: Check Thorn-owned spaCy behavior over the 70-case corpus
         run: python research/semantic-parser-bakeoff/check_spacy_contract.py
       - name: Exercise the normal CLI linguistic path
@@ -57,3 +63,5 @@ jobs:
           thorn-eval eval/cases --targeted-preflight --case-filter quotient_map_not_well_defined
           thorn-eval eval/cases --targeted-preflight --case-filter rolle_gap
           thorn-eval eval/cases --targeted-preflight --case-filter bad_lemma_breaks_theorem
+      - name: Build keyless IR-value experiment inventory
+        run: python scripts/prepare_ir_value_experiment.py
