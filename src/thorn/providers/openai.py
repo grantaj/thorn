@@ -5,6 +5,7 @@ from importlib.resources import files
 from openai import OpenAI
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
+from thorn.semantic_review_render import SemanticReviewRequest, render_semantic_review_request
 
 
 def _read_prompt(name: str) -> str:
@@ -64,6 +65,20 @@ class OpenAIProvider:
         self._record_usage(response)
         if response.output_parsed is None:
             raise RuntimeError("attacker returned no structured result")
+        return response.output_parsed
+
+    def review_semantic(self, request: SemanticReviewRequest) -> AttackReport:
+        response = self.client.responses.parse(
+            model=self.model,
+            input=[
+                {"role": "system", "content": _read_prompt("semantic_reviewer.md")},
+                {"role": "user", "content": render_semantic_review_request(request)},
+            ],
+            text_format=AttackReport,
+        )
+        self._record_usage(response)
+        if response.output_parsed is None:
+            raise RuntimeError("semantic reviewer returned no structured result")
         return response.output_parsed
 
     def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
