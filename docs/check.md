@@ -46,7 +46,7 @@ The IR continues to retain those facts because they may become useful once Thorn
 
 ## Full-matrix specification
 
-Every public synthetic evaluation case has an explicit deterministic expectation in:
+Every check-enabled public synthetic case has an explicit deterministic expectation in:
 
 ```text
 eval/check-expectations.json
@@ -58,11 +58,29 @@ Run the deterministic matrix with:
 thorn-eval eval/cases --check
 ```
 
-The manifest must cover every evaluation case exactly. An empty rule list is meaningful: it says the current deterministic checker is expected to stay silent on that paper even when the paper contains a semantic mathematical defect.
+The manifest must cover every check-enabled case exactly. An empty rule list is meaningful: it says the current deterministic checker is expected to stay silent on that paper even when the paper contains a semantic mathematical defect.
 
-This is important to Thorn's capability boundary. A false theorem, invalid compactness step, hidden conjecture dependency, or quantifier error should not acquire a structural warning merely because the offline checker cannot understand it. At the #18 stage, the two planted circular-dependency papers are expected to trigger `TH104`; the remaining existing matrix cases are explicit silence controls unless a future deterministic rule is added with justified expectations.
+The matrix now contains **52 check-enabled cases**:
 
-Default CI runs this complete matrix with `OPENAI_API_KEY` blank.
+- the original 46 semantic/review cases, which double as broad false-positive controls for `thorn check`;
+- six additional **check-only** cases that exercise the surviving structural rule families end to end without adding future model cost.
+
+The check-only tranche includes:
+
+- duplicate theorem labels → `TH101`;
+- a reference to a duplicated theorem label → `TH101` + `TH102`;
+- a missing internal theorem reference → `TH103`;
+- explicit same-scope scalar/map role conflict → `TH113`;
+- an existing equation label as a clean non-result-reference control;
+- compatible map/function introductions as a clean callable-role control.
+
+The two existing L7 circular-dependency papers exercise `TH104`.
+
+Case metadata has a `modes` field. Existing cases default to both `check` and `review`; structural fixtures can declare `"modes": ["check"]`. As a result, the deterministic matrix can grow without silently increasing paid semantic-review runs. The live review suite remains at 46 cases.
+
+This is important to Thorn's capability boundary. A false theorem, invalid compactness step, hidden conjecture dependency, or quantifier error should not acquire a structural warning merely because the offline checker cannot understand it.
+
+Default CI runs the complete 52-case deterministic matrix with `OPENAI_API_KEY` blank.
 
 ## False-positive boundary
 
