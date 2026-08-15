@@ -176,7 +176,8 @@ class ReplayProvider:
             raise ReplayError(f"invalid recording {path}: {exc}") from exc
         if exchange.fingerprint != fingerprint:
             raise ReplayStaleError(
-                f"recording {path} declares fingerprint {exchange.fingerprint}, expected {fingerprint}"
+                f"recording {path} declares fingerprint {exchange.fingerprint}, "
+                f"expected {fingerprint}"
             )
         if exchange.request.canonical_json() != envelope.canonical_json():
             raise ReplayStaleError(
