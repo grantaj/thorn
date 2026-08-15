@@ -315,12 +315,13 @@ def test_rendering_is_bounded_to_selected_review_item() -> None:
 
 def test_request_boundary_is_provider_neutral() -> None:
     request = build_semantic_review_request(_review_item())
+    canonical = request.canonical_json().lower()
 
     assert set(SemanticReviewRequest.model_fields) == {"item"}
     assert "prompt" not in SemanticReviewItem.model_fields
     assert "messages" not in SemanticReviewItem.model_fields
-    assert "openai" not in request.canonical_json().lower()
-    assert "\"role\"" not in request.canonical_json().lower()
+    assert "openai" not in canonical
+    assert "\"content\"" not in canonical
 
 
 def test_raw_theorem_unit_path_still_coexists() -> None:
