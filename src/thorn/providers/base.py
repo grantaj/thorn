@@ -31,9 +31,20 @@ class EvaluationProvider(AuditProvider, SemanticReviewProvider, Protocol):
     zero while recorded historical usage remains in the recording fixture itself.
     """
 
-    requests: int
-    live_requests: int
-    replay_hits: int
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
+    @property
+    def requests(self) -> int: ...
+
+    @property
+    def live_requests(self) -> int: ...
+
+    @property
+    def replay_hits(self) -> int: ...
+
+    @property
+    def input_tokens(self) -> int: ...
+
+    @property
+    def output_tokens(self) -> int: ...
+
+    @property
+    def total_tokens(self) -> int: ...
