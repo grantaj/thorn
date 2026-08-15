@@ -227,9 +227,11 @@ def _cue_for_math(
         match = pattern.search(left)
         if match is None:
             continue
-        if kind == IntroductionKind.LET:
-            if re.match(r"\s+be\b", right, flags=re.IGNORECASE) is None:
-                continue
+        if (
+            kind == IntroductionKind.LET
+            and re.match(r"\s+be\b", right, flags=re.IGNORECASE) is None
+        ):
+            continue
         return kind, left_start + match.start()
     return None
 
@@ -433,7 +435,9 @@ def _add_uses(
                         scope_identifier=math_scope,
                         source=source,
                         raw=source.text(file.raw),
-                        resolved_symbol_identifier=resolved.identifier if resolved is not None else None,
+                        resolved_symbol_identifier=(
+                            resolved.identifier if resolved is not None else None
+                        ),
                     )
                 )
 
