@@ -12,6 +12,11 @@ on:
         required: true
         default: "0.65"
         type: string
+      case_filter:
+        description: Optional case-name or fixture-path substring
+        required: false
+        default: ""
+        type: string
 
 jobs:
   eval:
@@ -28,7 +33,30 @@ jobs:
       - name: Run known-case semantic evaluation
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: >-
-          thorn-eval eval/cases
-          --model "${{ inputs.model }}"
-          --min-confidence "${{ inputs.min_confidence }}"
+          THORN_EVAL_MODEL: ${{ inputs.model }}
+          THORN_EVAL_MIN_CONFIDENCE: ${{ inputs.min_confidence }}
+          THORN_EVAL_CASE_FILTER: ${{ inputs.case_filter }}
+        run: |
+          set -o pipefail
+          args=(
+            eval/cases
+            --model "$THORN_EVAL_MODEL"
+            --min-confidence "$THORN_EVAL_MIN_CONFIDENCE"
+          )
+          if [[ -n "$THORN_EVAL_CASE_FILTER" ]]; then
+            args+=(--case-filter "$THORN_EVAL_CASE_FILTER")
+          fi
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "model=$THORN_EVAL_MODEL"
+            echo "min_confidence=$THORN_EVAL_MIN_CONFIDENCE"
+            echo "case_filter=$THORN_EVAL_CASE_FILTER"
+            thorn-eval "${args[@]}"
+          } | tee live-eval.txt
+      - name: Preserve evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-eval-${{ github.run_id }}
+          path: live-eval.txt
+          if-no-files-found: error

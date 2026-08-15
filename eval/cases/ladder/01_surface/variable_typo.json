@@ -5,8 +5,8 @@
   "level": 1,
   "capability": "surface mathematical consistency",
   "target_identifier": "thm:typo",
-  "accepted_categories": ["definition_mismatch", "unsupported_claim", "other"],
+  "accepted_categories": ["definition_mismatch", "unsupported_claim", "invalid_implication", "other"],
   "minimum_severity": "warning",
   "repairability": "trivial",
-  "notes": "The intended y was accidentally written as z; this is a typo with mathematical effect, not a style complaint."
+  "notes": "The intended y was accidentally written as z; this is a typo with mathematical effect, not a style complaint. An invalid-implication diagnosis is acceptable when it explicitly identifies the switch to an unrelated variable."
 }

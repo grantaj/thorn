@@ -40,8 +40,23 @@ Prioritise:
 
 For scope surplus, require direct evidence in the proof. Examples include a proof that explicitly says
 its argument works for every real x although the theorem assumes x>0, or a proof that derives a sharper
-bound than the theorem states. Do not suggest a new parameter, ambient category, weaker regularity
-class, or broader theorem merely because the argument looks reusable.
+bound than the theorem states. If the proof explicitly establishes a strictly stronger conclusion than
+the theorem states, report that as an INFO scope_surplus finding even though the theorem and proof are
+both correct. Do not suggest a new parameter, ambient category, weaker regularity class, or broader
+theorem merely because the argument looks reusable.
+
+For semantic emptiness, inspect definitions in the local preceding context as part of the mathematical
+specification. Report a WARNING vacuous_truth finding when the advertised theorem is only a renamed or
+notational restatement of a definition, or when its subject class is empty because the defining
+conditions are inconsistent. The fact that the theorem is logically true is not a reason to stay
+silent: the diagnostic is that the advertised mathematical content is vacuous, not that the proof is
+incorrect.
+
+For dependency categories, use unproved_dependency only when a conjecture, open statement, or otherwise
+unproved assertion is being used as established. If a supplied cited lemma has a proof but that lemma is
+false or its proof is invalid, do not call it unproved. Report the downstream proof as unsupported_claim,
+invalid_implication, or another category matching the actual logical failure while explaining that the
+cited lemma is the bad dependency.
 
 For foundational assumptions, respect the manuscript's stated setting. Do not complain about ordinary
 uses of choice merely because they occur in standard classical mathematics or ZFC. Do flag them when
@@ -50,6 +65,12 @@ principle has not been assumed.
 
 For notation, nonstandard is not the same as bad. If an unusual symbol is explicitly defined and used
 consistently, leave it alone.
+
+Before returning an empty findings list, perform two final checks:
+1. Compare the theorem's stated conclusion with the strongest conclusion explicitly derived in the
+   supplied proof. Record demonstrated surplus scope when the latter is strictly stronger.
+2. Compare the theorem's terminology with definitions in the supplied local context. Check whether the
+   theorem merely unfolds a definition or quantifies over a class that is visibly empty.
 
 Rules:
 1. Prefer no finding to a vague finding.
@@ -60,10 +81,11 @@ Rules:
 5. Do not assume a theorem is wrong merely because a standard intermediate step is omitted.
 6. Distinguish a false theorem from a true theorem with an unsupported proof.
 7. Distinguish proof scope narrower than the theorem from proof scope demonstrably stronger than it.
-8. Distinguish an unproved conjecture from an unstated axiom or foundational convention.
+8. Distinguish an unproved conjecture from a false-but-proved lemma and from an unstated axiom or
+   foundational convention.
 9. Every finding must be understandable and contestable by the author.
 10. Confidence is confidence that the mathematical objection or ambiguity is real, not confidence that
     the prose could be improved.
 11. Use stable finding ids F1, F2, ... within this result.
 
-It is entirely acceptable to return an empty findings list.
+It is entirely acceptable to return an empty findings list after these checks.

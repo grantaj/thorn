@@ -26,7 +26,14 @@ class FakeResponses:
 
     def parse(self, **kwargs: object) -> SimpleNamespace:
         self.calls.append(kwargs)
-        return SimpleNamespace(output_parsed=next(self.outputs))
+        return SimpleNamespace(
+            output_parsed=next(self.outputs),
+            usage=SimpleNamespace(
+                input_tokens=100,
+                output_tokens=20,
+                total_tokens=120,
+            ),
+        )
 
 
 class FakeClient:
@@ -92,6 +99,11 @@ def test_openai_provider_attack_defend_pipeline_is_keyless(monkeypatch: pytest.M
     assert result.findings[0].defender_verdict == DefenseVerdict.SURVIVES
     assert result.findings[0].confidence == 0.85
 
+    assert provider.requests == 2
+    assert provider.input_tokens == 200
+    assert provider.output_tokens == 40
+    assert provider.total_tokens == 240
+
     assert len(client.responses.calls) == 2
     attacker_call, defender_call = client.responses.calls
 
@@ -99,7 +111,10 @@ def test_openai_provider_attack_defend_pipeline_is_keyless(monkeypatch: pytest.M
     assert attacker_call["text_format"] is AttackReport
     attacker_input = attacker_call["input"]
     assert isinstance(attacker_input, list)
-    assert "hostile mathematical correctness checker" in attacker_input[0]["content"]
+    attacker_system = attacker_input[0]["content"]
+    assert "hostile mathematical correctness checker" in attacker_system
+    assert "Before returning an empty findings list" in attacker_system
+    assert "use unproved_dependency only" in attacker_system
     attacker_packet = attacker_input[1]["content"]
     assert "ID: thm:test" in attacker_packet
     assert "Every widget is stable." in attacker_packet
@@ -111,7 +126,9 @@ def test_openai_provider_attack_defend_pipeline_is_keyless(monkeypatch: pytest.M
     assert defender_call["text_format"] is DefenseReport
     defender_input = defender_call["input"]
     assert isinstance(defender_input, list)
-    assert "Thorn's defender" in defender_input[0]["content"]
+    defender_system = defender_input[0]["content"]
+    assert "Thorn's defender" in defender_system
+    assert "semantic-emptiness findings" in defender_system
     defender_packet = defender_input[1]["content"]
     assert "# Proposed findings to defend against" in defender_packet
     assert "[F1] Real defect" in defender_packet
@@ -126,6 +143,8 @@ def test_empty_attack_skips_defender_call(monkeypatch: pytest.MonkeyPatch) -> No
     result = audit_unit(_unit(), provider, use_defender=True, cache=None)
 
     assert result.findings == []
+    assert provider.requests == 1
+    assert provider.total_tokens == 120
     assert len(client.responses.calls) == 1
 
 
@@ -136,3 +155,6 @@ def test_missing_structured_attacker_result_fails_closed(monkeypatch: pytest.Mon
 
     with pytest.raises(RuntimeError, match="attacker returned no structured result"):
         provider.attack(_unit())
+
+    assert provider.requests == 1
+    assert provider.total_tokens == 120

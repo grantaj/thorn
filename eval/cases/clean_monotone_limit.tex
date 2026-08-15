@@ -3,16 +3,20 @@
 \newtheorem{theorem}{Theorem}
 \begin{document}
 
-Suppose a map $H(u)$ is continuous under bounded decreasing convergence: if
-$u_j\downarrow u$, then $H(u_j)\to H(u)$.
-
 \begin{theorem}\label{thm:monotone}
-If $(u_j)$ is uniformly bounded and $u_j\downarrow u$, then
-$H(u_j)\to H(u)$.
+Let $(u_j)$ be a decreasing sequence of real numbers that is bounded below. Then
+\[
+  u_j\to \inf_{k\ge 1} u_k.
+\]
 \end{theorem}
 \begin{proof}
-This is exactly the assumed continuity of $H$ under bounded decreasing
-convergence.
+Set $u=\inf_{k\ge 1}u_k$. Given $\varepsilon>0$, the definition of the infimum
+gives an index $N$ with $u_N<u+\varepsilon$. Since the sequence is decreasing,
+for every $j\ge N$ we have
+\[
+  u\le u_j\le u_N<u+\varepsilon.
+\]
+Hence $|u_j-u|<\varepsilon$ for every $j\ge N$, so $u_j\to u$.
 \end{proof}
 
 \end{document}

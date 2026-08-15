@@ -38,6 +38,19 @@ class OpenAIProvider:
     def __init__(self, model: str = "gpt-5.6") -> None:
         self.model = model
         self.client = OpenAI()
+        self.requests = 0
+        self.input_tokens = 0
+        self.output_tokens = 0
+        self.total_tokens = 0
+
+    def _record_usage(self, response: object) -> None:
+        self.requests += 1
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        self.input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
+        self.output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
+        self.total_tokens += int(getattr(usage, "total_tokens", 0) or 0)
 
     def attack(self, unit: TheoremUnit) -> AttackReport:
         response = self.client.responses.parse(
@@ -48,6 +61,7 @@ class OpenAIProvider:
             ],
             text_format=AttackReport,
         )
+        self._record_usage(response)
         if response.output_parsed is None:
             raise RuntimeError("attacker returned no structured result")
         return response.output_parsed
@@ -73,6 +87,7 @@ class OpenAIProvider:
             ],
             text_format=DefenseReport,
         )
+        self._record_usage(response)
         if response.output_parsed is None:
             raise RuntimeError("defender returned no structured result")
         return response.output_parsed
