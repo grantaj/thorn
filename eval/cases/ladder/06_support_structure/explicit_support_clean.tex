@@ -1,0 +1,28 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{lemma}\label{lem:explicit-base}
+A base result is available.
+\end{lemma}
+\begin{proof}
+By continuity, the base result follows.
+\end{proof}
+
+\begin{equation}\label{eq:explicit-bound}
+1 \le 2.
+\end{equation}
+
+\begin{theorem}\label{thm:explicit-support}
+A conclusion follows from explicit support.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:explicit-base}, choose the required object.
+By continuity, its image has the required limit.
+By definition, it is admissible.
+From \eqref{eq:explicit-bound}, the numerical bound follows.
+\end{proof}
+
+\end{document}
