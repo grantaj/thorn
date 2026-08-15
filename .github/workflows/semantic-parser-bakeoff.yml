@@ -38,7 +38,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ "$CANDIDATE" = "spacy" ]; then
-            python -m pip install "spacy==3.8.14"
+            # spaCy 3.8.14's current dependency resolution can leave its CLI
+            # without click on a clean environment, so make that runtime
+            # dependency explicit for this reproducible benchmark.
+            python -m pip install "click>=8.1" "spacy==3.8.14"
             python -m spacy download en_core_web_sm
           else
             python -m pip install "stanza==1.14.0"
