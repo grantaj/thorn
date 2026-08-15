@@ -1,7 +1,7 @@
 {
   "name": "clean trailing binders remain attached to their displays",
   "kind": "clean",
-  "modes": ["check"],
+  "modes": ["analyze"],
   "source": "Synthetic support-IR control",
   "level": 6,
   "capability": "trailing binder representation",

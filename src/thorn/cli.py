@@ -7,29 +7,31 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-from thorn.check import CheckFinding, check_project
+from thorn.analysis import AnalysisFinding, analyze_project
+from thorn.dependencies import ExtractedProject
 from thorn.frontends import get_frontend
 from thorn.latex import extract_project
 from thorn.models import AuditFinding, Severity, TheoremUnit, UnitAudit
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
+_MODES = {"analyze", "ir", "review"}
+
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="thorn",
-        usage="thorn [check|review] FILE [options]",
-        description="Correctness linting for mathematical LaTeX manuscripts.",
+        usage="thorn [analyze|ir|review] FILE [options]",
+        description="Mathematical document analysis and semantic review for LaTeX manuscripts.",
         epilog=(
-            "Modes: 'check' makes deterministic lint decisions with local analysis and no "
-            "model/API calls; 'review' runs the model-backed adversarial audit. Omitting the "
-            "mode preserves legacy review behavior."
+            "Modes: 'analyze' runs deterministic structural analysis over Thorn Math IR; "
+            "'ir' inspects or exports that IR; 'review' runs model-backed mathematical review. "
+            "Omitting the mode means 'review'."
         ),
     )
     parser.add_argument("file", type=Path, help="main LaTeX file")
-    parser.add_argument("--dry-run", action="store_true", help="extract units without API calls")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     parser.add_argument("--model", default=os.getenv("THORN_MODEL", "gpt-5.6"))
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--limit", type=int, default=None, help="review only the first N results")
     parser.add_argument("--no-defender", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--cache-dir", type=Path, default=Path(".thorn/cache"))
@@ -55,7 +57,7 @@ def _parser() -> argparse.ArgumentParser:
 def _parse_mode(argv: list[str] | None) -> tuple[str, argparse.Namespace]:
     raw = list(sys.argv[1:] if argv is None else argv)
     mode = "review"
-    if raw and raw[0] in {"check", "review"}:
+    if raw and raw[0] in _MODES:
         mode = raw.pop(0)
     return mode, _parser().parse_args(raw)
 
@@ -71,6 +73,20 @@ def _print_units(units: list[TheoremUnit], as_json: bool) -> None:
             f"{unit.statement_range.file}:{unit.statement_range.start_line} "
             f"{unit.environment}{title} ({proof}) id={unit.identifier}"
         )
+
+
+def _print_ir(project: ExtractedProject, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(project.model_dump(mode="json"), indent=2))
+        return
+
+    print(f"Thorn Math IR: {project.main_file}")
+    print(f"  theorem/result units: {len(project.units)}")
+    print(f"  dependency edges: {len(project.dependency_graph.edges)}")
+    print(f"  symbols: {len(project.symbol_table.symbols)}")
+    if project.units:
+        print()
+        _print_units(project.units, False)
 
 
 def _visible_findings(audits: list[UnitAudit], threshold: float) -> list[AuditFinding]:
@@ -119,9 +135,9 @@ def _print_review_json(audits: list[UnitAudit], threshold: float) -> None:
     print(json.dumps(payload, indent=2))
 
 
-def _print_check_text(findings: list[CheckFinding]) -> None:
+def _print_analysis_text(findings: list[AnalysisFinding]) -> None:
     if not findings:
-        print("thorn check: no deterministic structural diagnostics")
+        print("thorn analyze: no deterministic structural diagnostics")
         return
     for finding in findings:
         source = finding.source
@@ -135,11 +151,11 @@ def _print_check_text(findings: list[CheckFinding]) -> None:
         print()
 
 
-def _print_check_json(findings: list[CheckFinding]) -> None:
+def _print_analysis_json(findings: list[AnalysisFinding]) -> None:
     print(
         json.dumps(
             {
-                "mode": "check",
+                "mode": "analyze",
                 "findings": [finding.model_dump(mode="json") for finding in findings],
             },
             indent=2,
@@ -184,21 +200,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"thorn: could not read project: {exc}", file=sys.stderr)
         return 2
 
+    if mode == "ir":
+        _print_ir(project, args.format == "json")
+        return 0
+
+    if mode == "analyze":
+        analysis_findings = analyze_project(project)
+        if args.format == "json":
+            _print_analysis_json(analysis_findings)
+        else:
+            _print_analysis_text(analysis_findings)
+        return _exit_code((finding.severity for finding in analysis_findings), args.fail_on)
+
     units = project.units
     if args.limit is not None:
         units = units[: args.limit]
-
-    if args.dry_run:
-        _print_units(units, args.format == "json")
-        return 0
-
-    if mode == "check":
-        check_findings = check_project(project)
-        if args.format == "json":
-            _print_check_json(check_findings)
-        else:
-            _print_check_text(check_findings)
-        return _exit_code((finding.severity for finding in check_findings), args.fail_on)
 
     if not units:
         print("thorn: no theorem-like environments found", file=sys.stderr)
@@ -206,7 +222,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not os.getenv("OPENAI_API_KEY"):
         print(
-            "thorn review: OPENAI_API_KEY is not set; run `thorn check` for local analysis",
+            "thorn review: OPENAI_API_KEY is not set; use `thorn analyze` for deterministic "
+            "structural diagnostics or `thorn ir --format json` to inspect the extracted IR",
             file=sys.stderr,
         )
         return 2

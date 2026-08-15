@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from thorn.check import check_project
+from thorn.analysis import analyze_project
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import SourceSpan
 from thorn.latex import extract_project
@@ -283,7 +283,7 @@ Via Lemma~\ref{lem:base}, the conclusion follows.
     assert candidate.evidence[0].dependency_path == ["PROPN:obl", "VERB:ROOT"]
     assert candidate.evidence[0].frontend == "static-dependencies"
     assert project.proof_support_graph.confident_incoming_edges(claim.identifier) == []
-    assert check_project(project) == []
+    assert analyze_project(project) == []
 
 
 def test_expository_reference_never_becomes_confident_from_parser_alone(
@@ -316,4 +316,4 @@ See Lemma~\ref{lem:base} for background; the conclusion is our goal.
     assert len(candidates) == 1
     assert candidates[0].status == InferenceStatus.AMBIGUOUS
     assert project.proof_support_graph.confident_incoming_edges(claim.identifier) == []
-    assert check_project(project) == []
+    assert analyze_project(project) == []

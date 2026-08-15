@@ -18,7 +18,8 @@ jobs:
       - run: python -m pip install -e '.[dev]'
       - run: pytest -q
       - run: thorn-eval eval/cases --validate-only
-      - run: thorn-eval eval/cases --check
-      - run: thorn check examples/demo.tex --structural-only
+      - run: thorn-eval eval/cases --analyze
+      - run: thorn analyze examples/demo.tex --structural-only
+      - run: thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
       - run: ruff check .
       - run: mypy src

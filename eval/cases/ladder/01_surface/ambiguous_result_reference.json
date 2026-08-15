@@ -1,7 +1,7 @@
 {
   "name": "reference to duplicate theorem label is ambiguous",
   "kind": "finding",
-  "modes": ["check"],
+  "modes": ["analyze"],
   "source": "Synthetic deterministic matrix case",
   "level": 1,
   "capability": "ambiguous result reference detection",
@@ -9,5 +9,5 @@
   "accepted_categories": ["other"],
   "minimum_severity": "error",
   "repairability": "trivial",
-  "notes": "Check-only case: the reference target has two theorem-like definitions, so TH101 and TH102 should both fire."
+  "notes": "Analyze-only case: the reference target has two theorem-like definitions, so TH101 and TH102 should both fire."
 }

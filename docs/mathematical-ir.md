@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Thorn should not treat zero-inference checking as a small collection of cheap lint rules. The offline pass should be the deterministic mathematical front-end for the entire system.
+Thorn's deterministic layer is a **mathematical document frontend**, not an offline mathematical correctness checker. Its main job is to recover a compact, source-preserving representation that later analyses and reviewers can consume.
 
 The core pipeline is:
 
@@ -13,45 +13,30 @@ LaTeX project
 source-preserving LaTeX frontend
     |
     v
-Thorn mathematical IR
-    |-- results and theorem dependencies
+Thorn Math IR
+    |-- theorem/result units and dependencies
     |-- symbols, definitions, roles, and scopes
     |-- claims and explicit support relationships
+    |-- ambiguity/evidence
     `-- exact provenance back to source
     |
-    +--> thorn check
-    |       deterministic structural/support analysis
+    +--> thorn analyze
+    |       deterministic structural diagnostics
+    |
+    +--> thorn ir
+    |       inspect/export the representation
     |
     `--> thorn review
-            selective semantic judgment over distilled structure
+            semantic mathematical judgment
 ```
 
-The result-level dependency graph introduced in #12 is the first layer of this IR. This document describes how to grow that layer without coupling Thorn to one LaTeX parser or pretending that syntactic parsing is mathematical understanding.
+The result-level dependency graph introduced in #12 is the first layer of this IR. The symbol, linguistic, and proof-support work extends the same Thorn-owned representation.
 
 ## Architectural rule: separate parsing from mathematical interpretation
 
-A parser backend should answer syntactic questions such as:
+A parser backend should answer syntactic questions such as which files form the project, where environments and macro calls occur, and what exact source spans produced them. It should not decide that a sentence is mathematically true, that an implication follows, or that a proof is valid.
 
-- which files form the project;
-- where environments begin and end;
-- which macro calls occur and what arguments they contain;
-- where inline and displayed mathematics occur;
-- where text spans occur;
-- exact byte/character offsets and line/column locations;
-- enough error information to continue on imperfect input.
-
-A parser backend should **not** decide that:
-
-- `Let $f:X\to Y$` introduces a map;
-- a sentence is a mathematical claim;
-- `by compactness` supports a particular proof step;
-- a use of a symbol is out of scope;
-- prose is load-bearing;
-- an implication is mathematically valid.
-
-Those are Thorn concepts and belong above the parser boundary.
-
-This gives us the key dependency direction:
+Those concepts belong above the parser boundary:
 
 ```text
 parser-specific syntax
@@ -60,329 +45,107 @@ parser-specific syntax
 frontend-neutral source model
         |
         v
-Thorn mathematical IR
+Thorn Math IR
         |
-        v
-analyses / review
+        +--> structural analysis
+        `--> semantic review
 ```
 
-Nothing in the mathematical IR or analysis layers should import parser-specific node classes.
+Nothing in the mathematical IR or analysis layers should depend directly on parser-specific node classes.
 
-## 1. Frontend abstraction
+## Frontend abstraction
 
-Introduce a narrow frontend interface owned by Thorn. The exact Python names can evolve, but conceptually it should look like:
-
-```python
-class LatexFrontend(Protocol):
-    def parse_project(self, main_file: Path) -> ParsedProject: ...
-```
-
-`ParsedProject` should contain frontend-neutral nodes or events sufficient for Thorn's extractors. Candidate primitives include:
-
-- `ParsedFile`
-- `EnvironmentSpan`
-- `MacroCall`
-- `MathSpan`
-- `TextSpan`
-- `ParseDiagnostic`
-- `SourceRange`
-
-Every frontend-neutral node must retain exact source provenance and raw source text (or stable access to it).
-
-The initial implementation may adapt the current parser behind this interface. A later `pylatexenc`, Tree-sitter, or other backend should be able to implement the same contract.
-
-### Backend selection
-
-During development, backend selection should be explicit enough to support A/B tests, for example:
+Thorn owns a replaceable LaTeX frontend contract. During development, backend selection remains explicit enough to support A/B testing:
 
 ```text
-thorn check paper.tex --frontend=current
-thorn check paper.tex --frontend=pylatexenc
-thorn check paper.tex --frontend=treesitter
+thorn analyze paper.tex --frontend=current
+thorn analyze paper.tex --frontend=pylatexenc
 ```
 
-This need not remain a permanent public CLI option. It is primarily a development and regression mechanism.
+A backend change that alters recovered result units, references, dependencies, or source provenance is not automatically wrong, but the difference must be testable and explained.
 
-## 2. Conformance harness
+## Mathematical IR
 
-Parser choice should be empirical. Each backend must run through the same source corpus and produce normalized structural facts that can be compared.
+### Results and dependencies
 
-The conformance corpus should cover at least:
+The result layer represents theorem-like units, proof association, labels, references, direct/reverse/transitive dependencies, ambiguous dependencies, cycles, and exact source provenance.
 
-- theorem/lemma/proposition/corollary environments;
-- custom `\newtheorem` declarations;
-- theorem-to-proof association;
-- labels and references;
-- `\input` and `\include` across multiple files;
-- inline and displayed mathematics;
-- nested groups and environments;
-- macros with optional and mandatory arguments;
-- comments and escaped characters;
-- malformed or incomplete LaTeX where useful recovery is possible;
-- source ranges spanning included files;
-- duplicate labels and ambiguous references;
-- realistic user-defined macros around mathematical notation.
+### Symbols, definitions, and scopes
 
-### Golden invariant from #12
+The symbol layer conservatively records explicitly introduced mathematical objects, uses, roles, constraints, and scopes. Unknown or ambiguous structure should remain unknown or ambiguous rather than being forced into a confident interpretation.
 
-The first-level theorem/result dependency graph is already a valuable compatibility oracle.
+Conventional mathematical notation must not generate noise merely because it lacks a local declaration.
 
-For every backend, the harness should ask:
+### Claims and support
 
-> Does this backend reproduce the expected result units, labels, references, edge resolutions, source locations, transitive dependencies, and cycles?
+The proof-support layer records explicit and sufficiently well-supported relationships such as citations to earlier results, named definitions/properties, and prose assertions that later steps depend on.
 
-A backend change that alters the graph is not automatically wrong, but every difference must be visible and explained. Parser replacement must never silently change Thorn's mathematical interpretation.
+A support edge can exist without Thorn knowing whether it is mathematically valid. This is a central design boundary:
 
-### Backend evaluation dimensions
+> **The frontend represents argument structure; semantic review judges mathematically nontrivial validity.**
 
-Record at least:
+### Load-bearing prose
 
-- structural correctness against fixtures;
-- exact source-location fidelity;
-- macro/environment handling;
-- recovery on malformed/incomplete input;
-- multi-file project handling;
-- performance;
-- dependency and packaging complexity;
-- amount of backend-specific adapter code;
-- incremental parsing potential;
-- stability/maintenance of the upstream dependency.
+Mathematical assertions do not cease to matter because they are written in prose. The IR should retain load-bearing assertions regardless of whether they appear in displayed mathematics or prose, while avoiding irrelevant expository text where possible.
 
-The goal is not to choose a parser forever. The goal is to make parser choice reversible.
+## Provenance is mandatory
 
-## 3. Thorn mathematical IR
+Every IR object derived from source must retain enough information to return to the manuscript location: file, range/offsets, line information where practical, and raw source or stable access to it.
 
-The mathematical IR is Thorn-owned and must remain independent of the syntax frontend.
-
-### 3.1 Results
-
-The result layer already includes theorem-like units and the result dependency graph from #12.
-
-It should continue to represent:
-
-- result identity and environment;
-- statement;
-- proof association;
-- labels;
-- direct/reverse/transitive dependencies;
-- ambiguous dependencies;
-- cycles;
-- exact source provenance.
-
-### 3.2 Symbols, definitions, and scopes
-
-The next layer should conservatively represent explicitly introduced mathematical objects.
-
-Candidate concepts:
-
-```text
-Symbol
-Definition
-Use
-Scope
-Role
-Constraint
-```
-
-Examples of high-confidence introductions include:
-
-```latex
-Let $X$ be a compact space.
-Let $f:X\to\mathbb R$ be continuous.
-For $\epsilon>0$, choose $N$ ...
-Define $g(x)=...$.
-Set $A := ...$.
-```
-
-The IR should allow unknown or partial roles rather than forcing a guess. For example, if Thorn can establish that `f` is introduced but cannot determine its mathematical type, that is still useful.
-
-Conventional mathematical notation must not generate undefined-symbol noise merely because it lacks a local declaration.
-
-### 3.3 Claims and support
-
-The proof layer should grow incrementally. Start with support relationships that are explicit in the source rather than attempting general proof understanding.
-
-Examples include:
-
-- `by Lemma~\ref{...}`;
-- `from (12)`;
-- `by definition`;
-- named properties such as `by compactness` or `by continuity`;
-- sufficiently clear `since ... therefore ...` relationships;
-- a prose assertion that is subsequently depended on as a mathematical claim.
-
-A possible conceptual model is:
-
-```text
-Claim
-  source
-  raw source
-  normalized content (optional/partial)
-
-SupportEdge
-  source claim(s)
-  target claim
-  justification kind
-  justification source
-  explicitness/confidence
-```
-
-Crucially, a support edge can exist without Thorn knowing whether it is mathematically valid.
-
-This gives the central division of responsibility:
-
-> **Offline Thorn finds structural defects and suspicious support edges; semantic review judges whether mathematically nontrivial edges are valid.**
-
-### 3.4 Load-bearing prose
-
-Issue #14 treats load-bearing or "sneaky" prose as a first-class correctness risk.
-
-The IR must therefore preserve mathematical assertions regardless of whether they appear in displayed mathematics or prose. Expository prose need not survive into distilled review context unless it carries mathematical dependency weight.
-
-A useful future property is that the argument/support graph itself determines much of what prose is retained for semantic review.
-
-## 4. Provenance is mandatory
-
-Every IR object derived from source should retain enough information to return to the exact manuscript location.
-
-At minimum:
-
-```text
-source file
-source range / offsets
-line and column information where practical
-raw source span or stable access to it
-```
-
-This is required for:
-
-- precise diagnostics;
-- browsable reports;
-- review prompts containing the original wording;
-- revision-aware caching;
-- explaining parser disagreements;
-- safe future autofix.
+This supports precise diagnostics, browsable reports, review prompts containing original wording, revision-aware caching, parser comparisons, and future safe autofix.
 
 Normalization must never destroy the route back to original source.
 
-## 5. `thorn check`
+## Deterministic analysis
 
-`thorn check` consumes the mathematical IR and reports only mechanically justified findings.
+`thorn analyze` consumes the Math IR and reports only mechanically justified findings. Current examples include duplicate/conflicting labels, ambiguous or broken result dependencies, dependency cycles, and incompatible explicit symbol roles.
 
-Early high-confidence checks should include:
+The presence of rich IR does **not** imply that every suspicious IR fact should become a diagnostic. In particular, parser ambiguity, unresolved uses, missing explicit support, or unusual notation may be evidence for later review without establishing a user-facing defect.
 
-- duplicate/conflicting labels;
-- ambiguous or broken result dependencies where resolvable structurally;
-- result dependency cycles;
-- explicit use-before-definition where scope/order make this objective;
-- high-confidence undefined symbols;
-- incompatible explicit redefinitions;
-- conflicting symbol roles where both roles are explicit;
-- explicit arity inconsistencies;
-- scope violations;
-- support references to unavailable results/definitions;
-- structurally load-bearing claims with no identifiable incoming support when the claim/use relationship is sufficiently certain.
+A deterministic diagnostic must never claim that a nontrivial mathematical implication is false merely because Thorn cannot establish it.
 
-A zero-inference diagnostic must not claim that a nontrivial mathematical implication is false simply because the checker cannot establish it.
-
-False positives are especially costly because this mode is intended to run routinely.
-
-## 6. `thorn review`
+## Semantic review
 
 The semantic reviewer should increasingly consume IR-derived context rather than rediscovering project structure from raw LaTeX.
 
-A review request should eventually be able to contain only the relevant load-bearing material:
+A review packet can contain a bounded result statement, definitions/symbols in scope, dependencies, proof claims/support, uncertainty evidence, and the exact raw source spans needed to resolve wording.
 
-```text
-THEOREM
-statement
-hypotheses
+This is the purpose of the IR-assisted review work in issue #20. The current raw-`TheoremUnit` path remains useful as an A/B baseline while IR-based review is evaluated; it is not the architectural endpoint.
 
-SYMBOLS / DEFINITIONS IN SCOPE
-...
+## First-class IR output
 
-DEPENDENCIES
-...
+The representation is inspectable independently of either diagnostics or semantic review:
 
-PROOF CLAIMS
-P1 ...
-P2 ... because ...
-P3 ... because ...
-
-STRUCTURAL CONCERNS
-P3 has no explicit incoming support
+```bash
+thorn ir paper.tex
+thorn ir paper.tex --format json > thorn-ir.json
 ```
 
-Raw source remains available and should be included where wording matters.
+This matters because semantic review is only one possible consumer. Other future consumers can include dependency visualisation, document navigation, specialised local models, report generation, and bounded formalisation/proof-assistant backends.
 
-This architecture enables selective escalation: deterministic analysis can identify the small number of edges or claims that require semantic judgment rather than paying a strong model to reread an entire paper indiscriminately.
-
-## 7. Incremental implementation plan
-
-Keep #6 as the umbrella for zero-inference mathematical IR and checking. Implement it through independently mergeable steps.
-
-### Stage A — frontend abstraction and conformance
-
-1. Define the frontend-neutral parser contract.
-2. Wrap the current extraction path behind it without changing #12 behaviour.
-3. Build the conformance corpus and normalized comparison harness.
-4. Treat the existing result dependency graph as a golden compatibility layer.
-
-### Stage B — parser backend experiment
-
-1. Implement a serious alternative backend (initially `pylatexenc`).
-2. Optionally spike a Tree-sitter backend.
-3. Run both through the same conformance harness.
-4. Document differences and choose a default based on evidence.
-
-### Stage C — symbol/definition/scope IR
-
-1. Define Thorn-owned symbol, definition, use, role, and scope models.
-2. Extract only high-confidence introductions first.
-3. Add synthetic bad cases plus nearby clean controls.
-4. Add deterministic diagnostics only after the IR is stable enough to support them.
-
-### Stage D — explicit proof/support skeleton
-
-1. Add claim/support primitives.
-2. Capture explicit citations and named justifications.
-3. Add conservative prose-derived claims where structure is clear.
-4. Exercise the sneaky-prose cases from #14.
-
-### Stage E — semantic review over IR
-
-1. Render model context from the IR.
-2. Compare raw-LaTeX and IR-assisted review on the synthetic corpus.
-3. Measure accuracy, false positives, requests, and token cost.
-4. Use the result to drive selective escalation and dependency-aware caching.
-
-## 8. Design invariants
-
-The following should remain true as the implementation evolves:
+## Design invariants
 
 1. **Parser backends are replaceable.** Mathematical analysis never depends directly on parser-specific node classes.
-2. **Parser differences are testable.** All backends run through the same conformance harness.
-3. **#12 behaviour is protected.** The result dependency graph is an early golden compatibility oracle.
-4. **Provenance is never discarded.** Every derived mathematical object can point back to source.
-5. **Unknown is preferable to guessed.** The deterministic IR may be partial.
-6. **Offline does not masquerade as proof verification.** Structural absence of support and semantic invalidity are different findings.
-7. **Prose can be mathematical.** Load-bearing prose belongs in the argument representation.
-8. **The IR serves both modes.** `thorn check` and `thorn review` should share extraction and structure rather than maintaining parallel interpretations of the manuscript.
-9. **False-positive control is a feature.** Every deterministic rule requires planted failures and nearby clean controls.
-10. **Architecture should permit A/B testing.** Parser and later extraction strategies should be comparable on the same corpus before becoming defaults.
+2. **Parser differences are testable.** Backends run through the same conformance expectations.
+3. **Provenance is never discarded.** Derived mathematical objects point back to source.
+4. **Unknown is preferable to guessed.** The IR may be partial or explicitly ambiguous.
+5. **Deterministic analysis does not masquerade as proof verification.** Structural facts and mathematical validity are different things.
+6. **Prose can be mathematical.** Load-bearing prose belongs in the argument representation.
+7. **One IR serves multiple consumers.** Analysis, semantic review, and future tooling share the same extracted structure.
+8. **False-positive control is a feature.** Deterministic diagnostics require planted failures and nearby clean controls.
+9. **Architecture permits A/B testing.** Parser and semantic-review strategies can be compared on the same corpus before becoming defaults.
 
-## 9. What success looks like
+## What success looks like
 
 A mature Thorn run should look less like "send a paper to a model" and more like a compiler/static-analysis toolchain:
 
 ```text
 LaTeX
   -> source-preserving parse
-  -> mathematical IR
-  -> deterministic analyses
-  -> argument/support graph
-  -> selective semantic review
-  -> source-linked diagnostics/report
+  -> Thorn Math IR
+  -> structural diagnostics
+  -> dependency-aware semantic review
+  -> source-linked findings/report
 ```
 
-The difficult mathematical judgment remains a semantic task, but it is performed over a much cleaner, smaller, dependency-aware representation. The offline checker is therefore not a reduced version of Thorn; it is the structural foundation on which deep review depends.
+The difficult mathematical judgment remains semantic unless and until a bounded obligation is handed to a formal backend. The deterministic frontend is valuable because it gives every downstream consumer a stable mathematical representation, not because it can certify the paper offline.

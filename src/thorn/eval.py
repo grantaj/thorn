@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from thorn.check import CheckFinding, check_project
+from thorn.analysis import AnalysisFinding, analyze_project
 from thorn.dependencies import ExtractedProject
 from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
@@ -27,13 +27,13 @@ from thorn.semantic_review import ReviewContext, build_review_context
 
 # Test seam retained without importing the OpenAI provider in zero-inference modes.
 OpenAIProvider: Callable[[str], EvaluationProvider] | None = None
-CaseMode = Literal["check", "review"]
+CaseMode = Literal["analyze", "review"]
 ReviewContextChoice = Literal["raw", "ir", "targeted"]
 ReviewStrategy = Literal["legacy", "raw", "ir", "targeted"]
 
 
 def _default_case_modes() -> list[CaseMode]:
-    return ["check", "review"]
+    return ["analyze", "review"]
 
 
 class CaseExpectation(BaseModel):
@@ -213,9 +213,9 @@ def _parser() -> argparse.ArgumentParser:
         help="validate fixtures and extraction without making API calls",
     )
     mode.add_argument(
-        "--check",
+        "--analyze",
         action="store_true",
-        help="run deterministic thorn check expectations with no model/API calls",
+        help="run deterministic structural-analysis expectations with no model/API calls",
     )
     return parser
 
@@ -242,11 +242,11 @@ def _load_cases(case_dir: Path) -> list[tuple[Path, CaseExpectation]]:
     return cases
 
 
-def _load_check_expectations(
+def _load_analysis_expectations(
     case_dir: Path,
     cases: list[tuple[Path, CaseExpectation]],
 ) -> dict[str, list[str]]:
-    path = case_dir.parent / "check-expectations.json"
+    path = case_dir.parent / "analysis-expectations.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -267,7 +267,7 @@ def _load_check_expectations(
     case_names = {
         expectation.name
         for _, expectation in cases
-        if "check" in expectation.modes
+        if "analyze" in expectation.modes
     }
     expectation_names = set(expectations)
     missing = sorted(case_names - expectation_names)
@@ -346,8 +346,8 @@ def _audit_unit(
     return audit_unit(unit, provider, use_defender=use_defender, cache=None)
 
 
-def _check_case(
-    findings: list[CheckFinding],
+def _analyze_case(
+    findings: list[AnalysisFinding],
     expected_rules: list[str],
 ) -> tuple[bool, str]:
     observed_rules = sorted(finding.rule for finding in findings)
@@ -526,8 +526,8 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     try:
         all_cases = _load_cases(args.case_dir)
-        check_expectations = (
-            _load_check_expectations(args.case_dir, all_cases) if args.check else None
+        analysis_expectations = (
+            _load_analysis_expectations(args.case_dir, all_cases) if args.analyze else None
         )
     except (OSError, ValueError) as exc:
         print(f"thorn-eval: {exc}")
@@ -553,11 +553,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"thorn-eval: no cases matched --case-filter {args.case_filter!r}")
             return 2
 
-    if args.check:
+    if args.analyze:
         cases = [
             (path, expectation)
             for path, expectation in cases
-            if "check" in expectation.modes
+            if "analyze" in expectation.modes
         ]
     elif not args.validate_only:
         cases = [
@@ -567,11 +567,11 @@ def main(argv: list[str] | None = None) -> int:
         ]
 
     provider: EvaluationProvider | None = None
-    if not args.validate_only and not args.check:
+    if not args.validate_only and not args.analyze:
         if OpenAIProvider is None and not os.getenv("OPENAI_API_KEY"):
             print(
                 "thorn-eval: OPENAI_API_KEY is required unless "
-                "--validate-only or --check is used"
+                "--validate-only or --analyze is used"
             )
             return 2
         provider = _make_openai_provider(args.model)
@@ -621,24 +621,24 @@ def main(argv: list[str] | None = None) -> int:
             )
             continue
 
-        if args.check:
-            assert check_expectations is not None
-            check_findings = check_project(project)
-            passed, detail = _check_case(
-                check_findings,
-                check_expectations[expectation.name],
+        if args.analyze:
+            assert analysis_expectations is not None
+            analysis_findings = analyze_project(project)
+            passed, detail = _analyze_case(
+                analysis_findings,
+                analysis_expectations[expectation.name],
             )
             status = "PASS" if passed else "FAIL"
-            print(f"{status} CHECK L{expectation.level} {expectation.name}: {detail}")
+            print(f"{status} ANALYZE L{expectation.level} {expectation.name}: {detail}")
             if not passed:
                 failures += 1
-                for check_finding in check_findings:
+                for analysis_finding in analysis_findings:
                     print(
                         "     observed "
-                        f"{check_finding.rule}/{check_finding.category.value}/"
-                        f"{check_finding.severity.value}: {check_finding.title} "
-                        f"at {check_finding.source.file}:"
-                        f"{check_finding.source.start_line}"
+                        f"{analysis_finding.rule}/{analysis_finding.category.value}/"
+                        f"{analysis_finding.severity.value}: {analysis_finding.title} "
+                        f"at {analysis_finding.source.file}:"
+                        f"{analysis_finding.source.start_line}"
                     )
             continue
 
@@ -673,7 +673,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"{finding.title}"
                 )
 
-    mode = "check" if args.check else "validate" if args.validate_only else "review"
+    mode = "analyze" if args.analyze else "validate" if args.validate_only else "review"
     defender = (
         not args.no_defender
         if mode != "review" or review_strategy == "legacy"
@@ -684,7 +684,7 @@ def main(argv: list[str] | None = None) -> int:
         "failures": failures,
         "mode": mode,
         "review_context": None if mode != "review" else review_strategy,
-        "model": None if args.validate_only or args.check else args.model,
+        "model": None if args.validate_only or args.analyze else args.model,
         "min_confidence": args.min_confidence,
         "defender": defender,
         "elapsed_seconds": round(time.perf_counter() - started, 3),

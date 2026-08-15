@@ -7,6 +7,7 @@ on:
       - ".github/workflows/ci.yml"
       - ".github/workflows/nlp.yml"
       - "pyproject.toml"
+      - "src/thorn/analysis.py"
       - "src/thorn/cli.py"
       - "src/thorn/evidence.py"
       - "src/thorn/latex.py"
@@ -15,7 +16,7 @@ on:
       - "src/thorn/support*.py"
       - "src/thorn/symbols.py"
       - "research/semantic-parser-bakeoff/**"
-      - "tests/test_cli_check.py"
+      - "tests/test_cli_analysis.py"
       - "tests/test_linguistic_*.py"
       - "tests/test_semantic_projection.py"
 
@@ -37,8 +38,8 @@ jobs:
           python -m spacy download en_core_web_sm
       - name: Run parser-neutral unit contracts
         run: |
-          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_check.py
+          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py
       - name: Check Thorn-owned spaCy behavior over the 70-case corpus
         run: python research/semantic-parser-bakeoff/check_spacy_contract.py
       - name: Exercise the normal CLI linguistic path
-        run: thorn check examples/demo.tex --fail-on never
+        run: thorn analyze examples/demo.tex --fail-on never

@@ -1,89 +1,53 @@
 # Proof-claim and support IR
 
-Thorn's proof-support IR is a conservative, zero-inference representation of mathematical moves and the support relationships that are **explicitly visible** in a manuscript.
+Thorn's proof-support IR is a conservative, zero-inference representation of mathematical moves and support relationships that are **explicitly visible** in a manuscript.
 
-It sits above the source-preserving LaTeX frontend and beside the result-dependency and symbol/scope layers:
+It sits above the source-preserving LaTeX frontend beside the result-dependency and symbol/scope layers:
 
 ```text
 LaTeX frontend facts
         |
         v
-+---------------- mathematical IR ----------------+
++---------------- Thorn Math IR -------------------+
 | result dependency graph                          |
 | symbol / definition / scope IR                   |
 | proof claims + explicit support edges            |
 +--------------------------------------------------+
         |
-        +--> thorn check
-        `--> later distilled thorn review
+        +--> thorn analyze
+        +--> thorn ir
+        `--> distilled thorn review
 ```
 
-The purpose of this layer is not to prove implications. It is to make the author's visible argument structure addressable, source-located, queryable, and suitable for later selective semantic review.
+The purpose of this layer is not to prove implications. It makes the author's visible argument structure addressable, source-located, queryable, and suitable for selective semantic review.
 
 ## Claims
 
-A `Claim` records a proof-local mathematical move with exact source provenance. The initial extractor distinguishes only two source forms:
+A `Claim` records a proof-local mathematical move with exact source provenance. The initial extractor distinguishes prose and display source forms. This is presentation metadata, not mathematical status: either can be load-bearing proof content.
 
-- `prose` — a sentence-sized prose claim;
-- `display` — displayed mathematics.
-
-This distinction is presentation metadata, not mathematical status. A prose assertion and a display can both be load-bearing proof content.
-
-Every claim retains its raw LaTeX and exact byte/line/column span. Claim identifiers are local to their containing theorem-like result.
+Every claim retains raw LaTeX and exact source location. Claim identifiers are local to their containing theorem-like result.
 
 ## Explicit support edges
 
-A `SupportEdge` records that the manuscript visibly presents some source as support for a claim. The initial support kinds are:
+A `SupportEdge` records that the manuscript visibly presents some source as support for a claim. Initial support kinds include result references, equation references, explicit definition use, named properties such as compactness or continuity, prior-claim conclusion cues, and mechanically clear explicit reason clauses.
 
-- `result_reference` — a theorem-like result reference presented with a local support cue such as `by`, `from`, `using`, `apply`, or `invoke`;
-- `equation_reference` — an explicit `\eqref` presented with such a support cue;
-- `definition` — an explicit `by definition` justification;
-- `named_property` — an explicit named reason such as `by compactness` or `by continuity`;
-- `prior_claim` — an explicit conclusion cue such as `Therefore`, `Hence`, or `Thus` consuming the immediately preceding recovered claim;
-- `explicit_reason` — a mechanically clear `Since ..., ...` reason clause.
+A bare reference is not guessed to be proof support merely because it occurs inside a proof. Each edge records provenance, explicitness, and extraction confidence.
 
-A plain `\ref` to a non-result object is not guessed to be proof support: it may denote a section, figure, table, equation, or something else. Likewise, a bare reference mentioned for exposition does not become a support edge merely because it occurs inside a proof.
+An edge means **the author presented this as support**. It does not mean Thorn established that the implication is mathematically valid. For example, `By compactness, pass to a convergent subsequence` can produce a named-property edge even when compactness is inapplicable in the ambient setting. That validity question belongs to semantic review.
 
-Each edge records exact source provenance, whether the extraction is explicit, and an extraction confidence. The initial mechanically recognized edges use confidence `1.0`; this field leaves room for later conservative extractors without conflating extraction confidence with mathematical validity.
+## Load-bearing prose
 
-An edge means **the author presented this as support**. It does not mean Thorn has established that the implication is mathematically valid.
+A prose assertion becomes structurally interesting when a later recovered claim explicitly consumes it. Thorn can therefore identify load-bearing claims and query which of them lack a mechanically identified incoming support edge.
 
-For example,
+Crucially, words such as `clearly` or `obviously` are not treated as support and are not themselves errors. Nor is a structurally unsupported load-bearing claim automatically an `analyze` diagnostic: it may be a genuine gap, a routine fact, a conventional background result, or an extraction limitation.
 
-```latex
-By compactness, pass to a convergent subsequence.
-```
+That distinction is central:
 
-produces a named-property support edge. Whether compactness really applies in the ambient space is semantic-review territory.
-
-## Load-bearing prose and "sneaky prose"
-
-A prose assertion becomes structurally interesting when a later recovered claim explicitly consumes it.
-
-```latex
-The limit clearly has full rank.
-Therefore the limit is admissible.
-```
-
-The initial IR records:
-
-```text
-P1  "The limit clearly has full rank."
-      |
-      |  therefore
-      v
-P2  "the limit is admissible"
-```
-
-`P1` is load-bearing because it has an outgoing `prior_claim` edge. If no explicit support enters `P1`, it appears in `unsupported_load_bearing_claim_ids()`.
-
-Crucially, **`clearly` is not treated as support and is not itself an error**. The structural observation is that a claim is consumed downstream without a mechanically identified incoming support edge.
-
-This query is deliberately **not yet a `thorn check` diagnostic**. A missing explicit edge can correspond to a real gap, a routine elementary step, a conventional background fact, or a limitation of the extractor. Turning it into a user-facing warning requires stronger evidence and matrix-tested false-positive control.
+> **The IR may record suspicious facts more aggressively than deterministic analysis is allowed to report them.**
 
 ## Qualifiers and trailing binders
 
-Issue #18 showed that source order is not a reliable mathematical binding rule. Ordinary prose permits forms such as:
+Ordinary prose permits forms such as:
 
 ```latex
 \[
@@ -92,53 +56,35 @@ Issue #18 showed that source order is not a reliable mathematical binding rule. 
 for every $x\in X$.
 ```
 
-The proof-support IR therefore attaches a conservatively recognized trailing binder to the display as a `ClaimQualifier` rather than interpreting the preceding `x` as an erroneous use-before-declaration.
-
-Each recovered binding occurrence gets its own `BoundName.identifier`. Two occurrences both spelled `x` remain distinct binding events unless a later layer has evidence that they denote the same object.
+The support IR can attach a conservatively recognized trailing binder as a `ClaimQualifier` rather than treating the preceding `x` as an erroneous use-before-declaration. Separate binding occurrences remain separate unless later evidence identifies them.
 
 ## Graph queries
 
-`ProofSupportGraph` provides:
+`ProofSupportGraph` exposes claims for a result, incoming/outgoing support edges, downstream claims, load-bearing claims, and structurally unsupported load-bearing claims.
 
-- claims for a result;
-- incoming support edges for a claim;
-- outgoing edges from a claim;
-- downstream recovered claim IDs;
-- load-bearing claim IDs;
-- structurally unsupported load-bearing claim IDs.
-
-These queries expose proof structure without asserting semantic correctness.
-
-The result-dependency graph remains separate. Together the two layers can show, for example, that an unsupported load-bearing prose claim occurs inside a lemma and that a later theorem explicitly depends on that lemma.
+The result-dependency graph remains separate. Together they can show, for example, that an unsupported load-bearing prose claim occurs inside a lemma and that a later theorem explicitly depends on that lemma—without asserting that the lemma is mathematically wrong.
 
 ## Conservative extraction boundary
 
-The first extractor intentionally recognizes only mechanically strong cues. It does **not** attempt general natural-language proof parsing, coreference resolution, semantic type inference, or reconstruction of omitted mathematical steps.
+The extractor intentionally recognizes only mechanically strong cues. It does not attempt general natural-language proof parsing, coreference resolution, semantic type inference, or reconstruction of omitted mathematical steps.
 
 In particular:
 
 - `clearly` and `obviously` are not support edges;
-- two equal symbol spellings are not automatically the same binding;
+- equal symbol spellings are not automatically the same binding;
 - prose may be represented without being classified as load-bearing;
 - bare/expository references are not automatically support;
-- a support edge may be mathematically invalid even though it is structurally explicit;
+- a support edge may be mathematically invalid even when structurally explicit;
 - absence of a support edge is not by itself a correctness finding.
-
-This preserves the principle established by the full #18 matrix audit:
-
-> **The IR may record suspicious facts more aggressively than `thorn check` is allowed to report them.**
 
 ## Public support-IR matrix
 
-`eval/support-expectations.json` specifies public structural expectations for selected synthetic cases. The initial set covers:
+`eval/support-expectations.json` specifies structural IR expectations for selected synthetic cases. These cover load-bearing prose, trailing binders, explicit theorem/equation/definition/property support, and non-load-bearing exposition.
 
-- load-bearing sneaky prose with no explicit incoming support and a downstream theorem dependency;
-- clean repeated trailing binders;
-- clean explicit theorem/equation/definition/named-property support;
-- clean non-load-bearing expository prose.
+These fixtures can strengthen deterministic IR coverage without increasing paid semantic-review runs. `tests/test_support_matrix.py` keeps that expectation manifest in keyless CI.
 
-These cases are check-only so they strengthen zero-inference coverage without increasing the paid semantic-review population. `tests/test_support_matrix.py` makes the expectation manifest a default keyless CI gate.
+## Semantic-review consumer
 
-## Next step
+Issue #20 consumes this IR to build smaller review packets. Rather than asking a model to rediscover project structure from raw LaTeX, Thorn can present the relevant result, symbols, dependencies, claims, explicit support, uncertainty evidence, and source spans directly.
 
-Issue #20 can consume this IR to build smaller semantic-review packets. Rather than repeatedly asking a model to rediscover document structure from raw LaTeX, Thorn can present the relevant result, symbols, dependencies, claims, explicit support, and structurally suspicious edges directly.
+The raw theorem-unit review path remains an A/B baseline while IR-assisted review is measured. The architectural direction is for semantic review to consume the Thorn-owned representation.

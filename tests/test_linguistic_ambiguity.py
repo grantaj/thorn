@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from thorn.check import check_project
+from thorn.analysis import analyze_project
 from thorn.evidence import InferenceStatus
 from thorn.latex import extract_project
 from thorn.linguistic import LinguisticDocument, LinguisticToken
@@ -85,7 +85,7 @@ We first establish notation. Therefore, in the next section, we discuss an examp
     assert edges[0].evidence[0].frontend == "static-dependencies"
     assert "lexical overlap alone" in edges[0].evidence[0].reason
     assert project.proof_support_graph.confident_incoming_edges(claims[1].identifier) == []
-    assert check_project(project) == []
+    assert analyze_project(project) == []
 
 
 def test_elliptical_adjacent_claim_is_retained_as_unresolved_candidate(tmp_path: Path) -> None:
@@ -121,7 +121,7 @@ A base fact. Accordingly the conclusion.
     assert edges[0].evidence[0].dependency_path == []
     assert "adjacent claims" in edges[0].evidence[0].reason
     assert project.proof_support_graph.confident_incoming_edges(claims[1].identifier) == []
-    assert check_project(project) == []
+    assert analyze_project(project) == []
 
 
 def test_reference_cue_does_not_force_support_over_exposition(tmp_path: Path) -> None:
@@ -160,4 +160,4 @@ Using coordinates is convenient here; later see Lemma~\ref{lem:base} for backgro
     assert edges[0].source.text(tex.read_text(encoding="utf-8")) == r"\ref{lem:base}"
     assert "support versus exposition" in edges[0].evidence[0].reason
     assert project.proof_support_graph.confident_incoming_edges(claim.identifier) == []
-    assert check_project(project) == []
+    assert analyze_project(project) == []
