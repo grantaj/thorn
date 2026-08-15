@@ -8,7 +8,7 @@ Thorn does not certify proofs. It tries to break them before your readers do.
 
 Thorn is designed as a **review pass**, not an authoring environment. Interactive agents and chat tools are excellent for exploring ideas, finding proof strategies, explaining mathematics, and rewriting text. Thorn assumes those tools may already be part of the author's workflow.
 
-Its job begins when a manuscript reaches a point worth checking as an artifact. Given the LaTeX source, Thorn applies a repeatable adversarial review procedure to the mathematical argument and reports specific, source-located findings. The author should not have to remember which questions to ask an agent, construct the right review prompt, or manually keep track of what has and has not been checked.
+Its job begins when a manuscript reaches a point worth checking as an artifact. Given the LaTeX source, Thorn applies repeatable structural and adversarial review procedures to the mathematical argument and reports specific, source-located findings. The author should not have to remember which questions to ask an agent, construct the right review prompt, or manually keep track of what has and has not been checked.
 
 That makes Thorn complementary to an agent in an editor: the agent helps you **write and think**; Thorn gives the resulting manuscript a **defined correctness pass** that can be rerun at useful checkpoints and, eventually, as part of a build or CI workflow.
 
@@ -21,21 +21,29 @@ Thorn is deliberately not:
 
 The intended unit of review is often larger than a line: a proof may depend on hypotheses, definitions, notation, or earlier results elsewhere in the manuscript. Thorn therefore favors bounded whole-argument review over continuous local prompting, and favors reviewable diagnostics over open-ended generated prose.
 
-The initial target is LaTeX mathematics. Thorn extracts theorem/proposition/lemma + proof units,
-builds a small local dependency context, asks an adversarial model for specific falsifiable
-objections, then gives a second model pass the job of defeating those objections before anything
-is reported.
+Thorn now has two capability levels over the same mathematical IR:
+
+```text
+LaTeX -> result graph + symbol/scope IR -> thorn check
+                                      `-> thorn review
+```
+
+`thorn check` is deterministic, local, and zero-inference. `thorn review` adds model-backed adversarial mathematical judgment.
 
 ## Status
 
-Very early prototype. The useful invariant for v0.1 is deliberately narrow:
+Very early prototype. The architecture is evolving toward:
 
 ```text
-LaTeX -> theorem/proof units -> attack -> defend -> source-located diagnostics
+LaTeX
+  -> source-preserving frontend
+  -> mathematical IR
+  -> deterministic structural analysis
+  -> selective semantic review
+  -> source-located diagnostics
 ```
 
-No formal verification is claimed. A clean Thorn run means only that no issue survived the configured
-audit.
+No formal verification is claimed. A clean Thorn run means only that no implemented check or configured review diagnostic fired.
 
 ## Install for development
 
@@ -56,40 +64,60 @@ uv sync --extra dev
 
 ## First use
 
-Inspect what Thorn sees without making any API calls:
+Run the deterministic local checker with no API key:
 
 ```bash
-thorn paper.tex --dry-run
+thorn check paper.tex
+```
+
+Inspect extracted theorem/proof units without running either checker or reviewer:
+
+```bash
+thorn check paper.tex --dry-run
+```
+
+Run model-backed adversarial review:
+
+```bash
+export OPENAI_API_KEY=...
+thorn review paper.tex
 ```
 
 Audit one result while developing prompts:
 
 ```bash
-export OPENAI_API_KEY=...
-thorn paper.tex --limit 1
+thorn review paper.tex --limit 1
 ```
 
-Audit the document and emit JSON:
+Emit JSON:
 
 ```bash
-thorn paper.tex --format json > thorn.json
+thorn check paper.tex --format json > thorn-check.json
+thorn review paper.tex --format json > thorn-review.json
 ```
+
+For compatibility, the historical form `thorn paper.tex` continues to mean `thorn review paper.tex`.
 
 Useful options:
 
 ```text
+--limit N              process only the first N extracted units in review/dry-run mode
+--fail-on LEVEL        never | error | warning
+--frontend NAME        current | regex | pylatexenc
+
+review-specific:
 --model MODEL          model used for attacker and defender
---limit N              audit only the first N extracted units
 --no-defender          show attacker findings without the defender pass
 --no-cache             ignore and do not write the local cache
 --cache-dir PATH       default: .thorn/cache
 --min-confidence FLOAT suppress lower-confidence surviving findings
---fail-on LEVEL        never | error | warning
 ```
 
-By default Thorn returns a non-zero exit status only when a surviving `error` diagnostic is emitted.
+By default Thorn returns a non-zero exit status only when an `error` diagnostic is emitted.
 
-## What the first parser handles
+See [`docs/check.md`](docs/check.md) for the current zero-inference rule set and its deliberate false-positive boundary.
+
+## What the parser handles
 
 - common theorem-like environments (`theorem`, `lemma`, `proposition`, `corollary`, `claim`)
 - theorem environments declared with `\\newtheorem` / `\\newtheorem*`
@@ -98,6 +126,7 @@ By default Thorn returns a non-zero exit status only when a surviving `error` di
 - source file + line ranges
 - direct theorem dependencies referenced through `\\ref`, `\\eqref`, `\\autoref`, `\\cref`, or
   `\\Cref` when the referenced label belongs to another extracted theorem-like unit
+- conservative symbol, definition, role, constraint, and lexical-scope IR for explicit introductions
 
 This is intentionally a pragmatic LaTeX frontend, not a complete TeX interpreter.
 
@@ -112,6 +141,8 @@ Possible hypothesis mismatch
 The proof uses gradient smoothness, but the stated assumption gives only quadratic growth.
 Defender: survives (0.94)
 ```
+
+Deterministic `thorn check` findings use lower-numbered structural rule codes and state only mechanically established facts. They do not claim that a theorem is false because a structural relation is missing or suspicious.
 
 Vague referee-style comments such as "more justification is needed" are not useful lint diagnostics.
 
