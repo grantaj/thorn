@@ -6,15 +6,13 @@ Issue #16 evaluates parser backends behind Thorn's source-preserving `LatexFront
 
 ### `regex`
 
-Thorn's compatibility frontend from #15. It is small, dependency-free, and intentionally pragmatic. It remains the default while this evaluation is in progress.
+Thorn's compatibility frontend from #15. It is small, dependency-free, and intentionally pragmatic. It remains the default after this evaluation.
 
 ### `pylatexenc`
 
 A second frontend backed by `pylatexenc.latexwalker.LatexWalker`.
 
-For this experiment Thorn uses `pylatexenc==2.10`, the current stable 2.x release, behind an optional `thorn-math[pylatexenc]` dependency. The 3.x line remains pre-release on PyPI, so this experiment does not make a pre-release parser part of Thorn's normal installation.
-
-The adapter uses pylatexenc for node/environment/math parsing and source positions. Thorn adds only normalization required by the frontend contract, such as known signatures for labels/references/newtheorem and conservative optional-argument handling for custom theorem-like environments.
+For this experiment Thorn uses `pylatexenc==2.10` behind an optional `thorn-math[pylatexenc]` dependency. The adapter uses pylatexenc for node/environment/math parsing and source positions. Thorn adds normalization required by the frontend contract, including known signatures for labels/references/newtheorem and conservative optional-argument handling for custom environments.
 
 ## Normative conformance
 
@@ -31,7 +29,15 @@ Both backends run through the same `tests/test_frontend_conformance.py` suite. T
 - exact source offsets, lines, and columns;
 - result dependency graph behavior from #12.
 
-A candidate backend must pass this suite before it can be considered interchangeable for Thorn's current mathematical analysis.
+Both backends pass the shared conformance suite. `tests/test_frontend_ab.py` additionally compares complete extracted units and the serialized #12 dependency graph for a representative result-dependency project; they match exactly.
+
+## Malformed-input recovery finding
+
+The first A/B CI run exposed a meaningful recovery difference. Given an unclosed `proof` environment, pylatexenc's strict parser correctly reports an error, but its tolerant recovery may return an environment node whose apparent span extends to a later closing environment even though no `\\end{proof}` occurs in the source.
+
+That behavior is useful for general document recovery but is too permissive for Thorn provenance: Thorn must not invent a closed proof span. The pylatexenc adapter therefore accepts recovered environment nodes only when the node's raw source actually contains its matching closing token. The parse diagnostic is retained. A regression test freezes this contract.
+
+This is a good example of why Thorn owns the frontend contract rather than exposing parser-native nodes directly.
 
 ## Explicit disagreement policy
 
@@ -56,27 +62,39 @@ thorn paper.tex --dry-run --frontend=regex
 thorn paper.tex --dry-run --frontend=pylatexenc
 ```
 
-`current` remains an alias for the default backend.
+`current` remains an alias for the default backend (`regex`).
 
-## Evaluation dimensions
+## Evaluation results
 
-The final #16 disposition should record:
+CI run 31875577724 used a generated two-file project containing 40 lemma/theorem pairs (80 result environments plus proofs), 11,332 source bytes, and 20 timed iterations after warm-up.
 
 | Dimension | regex | pylatexenc |
 | --- | --- | --- |
-| Shared conformance | pending CI | pending CI |
-| #12 graph compatibility | pending CI | pending CI |
-| Source fidelity | pending CI | pending CI |
-| Malformed-input recovery | pending CI | pending CI |
-| Multi-file handling | pending CI | pending CI |
-| Unknown macro policy | greedy brace groups | conservative without signature |
-| Runtime dependency | none | optional pure-Python dependency |
-| Adapter complexity | compatibility baseline | to measure from landed adapter |
-| Incremental parsing | no | no (LatexWalker reparses file) |
-| Performance | pending benchmark | pending benchmark |
+| Shared conformance | pass | pass |
+| #12 graph compatibility | pass | pass; exact A/B snapshot match |
+| Source fidelity | pass | pass |
+| Malformed-input recovery | conservative pairing; reports malformed structure | strict error + tolerant recovery; Thorn filters synthetic closures |
+| Multi-file handling | pass | pass |
+| Unknown macro policy | consumes following brace group | conservative without known signature |
+| Runtime dependency | none | optional `pylatexenc==2.10` |
+| Incremental parsing | no | no; current adapter reparses each file |
+| Median parser time | 21.066 ms | 56.146 ms |
+| Median full extraction time | 57.347 ms | 77.784 ms |
 
-## Default-backend decision rule
+On this fixture pylatexenc parsing is 2.665x the regex parser time, while complete Thorn extraction is 1.356x the regex path. The absolute full-extraction median remains below 80 ms for both backends on this synthetic project, so parser speed is not currently a practical blocker.
 
-Do not change the default merely because a library parser sounds more sophisticated. A switch should require evidence that the candidate materially improves correctness/recovery/source fidelity without unacceptable packaging or performance cost.
+The stable pylatexenc package also adds installation complexity compared with the zero-dependency compatibility parser. For that reason it remains optional rather than becoming a core Thorn dependency in this change.
 
-Until the A/B evidence is complete, `regex` remains `current`.
+## Disposition
+
+**Keep `regex` as the `current` default and retain pylatexenc as an independent optional A/B backend.**
+
+This recommendation is based on the observed tradeoffs rather than parser preference:
+
+1. The abstraction is validated: a genuinely independent parser can reproduce Thorn's normative frontend contract and #12 mathematical structure without changing analysis code.
+2. Pylatexenc provides a useful independent interpretation and stronger parser machinery, especially for future experiments with richer LaTeX structure.
+3. It does not currently produce a material correctness improvement on Thorn's conformance corpus that justifies changing user-visible behavior.
+4. It has additional dependency/install cost and is slower, although the absolute latency is small.
+5. Macro signatures remain an important source of unavoidable ambiguity for either backend; #17's symbol/definition work is a better place to add manuscript-derived knowledge than hard-code increasingly speculative parser behavior.
+
+The default can be reconsidered later without architectural upheaval. Good triggers would be evidence from a broader corpus that one backend materially improves structural correctness/recovery, a mature parser release with better packaging, or later IR layers that benefit substantially from richer parser-native structure.
