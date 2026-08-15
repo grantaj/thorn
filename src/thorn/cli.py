@@ -171,12 +171,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if mode == "check":
-        findings = check_project(project)
+        check_findings = check_project(project)
         if args.format == "json":
-            _print_check_json(findings)
+            _print_check_json(check_findings)
         else:
-            _print_check_text(findings)
-        return _exit_code((finding.severity for finding in findings), args.fail_on)
+            _print_check_text(check_findings)
+        return _exit_code((finding.severity for finding in check_findings), args.fail_on)
 
     if not units:
         print("thorn: no theorem-like environments found", file=sys.stderr)
@@ -212,5 +212,5 @@ def main(argv: list[str] | None = None) -> int:
     else:
         _print_review_text(audits, args.min_confidence)
 
-    findings = _visible_findings(audits, args.min_confidence)
-    return _exit_code((finding.severity for finding in findings), args.fail_on)
+    review_findings = _visible_findings(audits, args.min_confidence)
+    return _exit_code((finding.severity for finding in review_findings), args.fail_on)
