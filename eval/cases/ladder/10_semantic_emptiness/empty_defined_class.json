@@ -1,0 +1,12 @@
+{
+  "name": "theorem vacuous because definition has no instances",
+  "kind": "finding",
+  "source": "Synthetic TDD case",
+  "accepted_categories": ["vacuous_truth", "definition_mismatch"],
+  "minimum_severity": "warning",
+  "level": 10,
+  "capability": "recognize a universal theorem whose defined subject class is empty",
+  "target_identifier": "thm:empty-class",
+  "repairability": "structural",
+  "notes": "The statement is logically true, but only because the definition x^2<0 has no real instances."
+}

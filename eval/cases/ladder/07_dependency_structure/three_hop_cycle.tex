@@ -1,0 +1,30 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+
+\begin{theorem}\label{thm:deep-cycle-a}
+If $x\in\mathbb R$ and $x^2=1$, then $x^6=1$.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:deep-cycle-b}, $x^4=1$. Hence
+$x^6=x^4x^2=1$.
+\end{proof}
+
+\begin{lemma}\label{lem:deep-cycle-b}
+If $x\in\mathbb R$ and $x^2=1$, then $x^4=1$.
+\end{lemma}
+\begin{proof}
+Lemma~\ref{lem:deep-cycle-c} gives $x^6=1$. Since $x^2=1$,
+we may divide to obtain $x^4=x^6/x^2=1$.
+\end{proof}
+
+\begin{lemma}\label{lem:deep-cycle-c}
+If $x\in\mathbb R$ and $x^2=1$, then $x^6=1$.
+\end{lemma}
+\begin{proof}
+This is exactly Theorem~\ref{thm:deep-cycle-a}.
+\end{proof}
+
+\end{document}

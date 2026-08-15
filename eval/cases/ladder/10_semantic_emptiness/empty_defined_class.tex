@@ -1,0 +1,20 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+Call a real number $x$ \emph{strictly compressed} if
+\[
+  x^2<0.
+\]
+
+\begin{theorem}\label{thm:empty-class}
+Every strictly compressed real number is equal to $1729$.
+\end{theorem}
+\begin{proof}
+Let $x$ be strictly compressed. By definition $x^2<0$. But no real number
+has negative square, so there are no strictly compressed real numbers.
+Hence the asserted universal statement holds.
+\end{proof}
+
+\end{document}

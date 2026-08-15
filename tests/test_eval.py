@@ -34,7 +34,13 @@ class FixtureProvider:
         "thm:depends-bad-lemma": FindingCategory.UNSUPPORTED_CLAIM,
         "thm:true-despite-bad-lemma": FindingCategory.UNSUPPORTED_CLAIM,
         "lem:cycle-b": FindingCategory.CIRCULAR_DEPENDENCY,
+        "lem:deep-cycle-c": FindingCategory.CIRCULAR_DEPENDENCY,
         "thm:fermat": FindingCategory.INVALID_IMPLICATION,
+        "thm:rh-prime-window": FindingCategory.UNPROVED_DEPENDENCY,
+        "thm:abc-finiteness": FindingCategory.UNPROVED_DEPENDENCY,
+        "thm:choice-right-inverse": FindingCategory.UNSTATED_AXIOM,
+        "thm:stable-idempotent": FindingCategory.VACUOUS_TRUTH,
+        "thm:empty-class": FindingCategory.VACUOUS_TRUTH,
     }
 
     def attack(self, unit: TheoremUnit) -> AttackReport:
@@ -74,7 +80,7 @@ class FixtureProvider:
 
 def test_eval_corpus_is_well_formed() -> None:
     cases = _load_cases(Path("eval/cases"))
-    assert len(cases) >= 18
+    assert len(cases) >= 25
 
     bad = 0
     clean = 0
@@ -101,9 +107,9 @@ def test_eval_corpus_is_well_formed() -> None:
         else:
             clean += 1
 
-    assert bad >= 14
-    assert clean >= 4
-    assert set(range(1, 9)).issubset(levels)
+    assert bad >= 20
+    assert clean >= 5
+    assert set(range(1, 11)).issubset(levels)
 
 
 def test_eval_harness_runs_all_cases_without_network(
@@ -131,10 +137,7 @@ def test_eval_max_level_filters_the_ladder(
     monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
 
     cases = _load_cases(Path("eval/cases"))
-    expected = sum(
-        expectation.level <= 2
-        for _, expectation in cases
-    )
+    expected = sum(expectation.level <= 2 for _, expectation in cases)
 
     assert main(
         [

@@ -1,0 +1,13 @@
+{
+  "name": "hidden ABC-conjecture dependency",
+  "kind": "finding",
+  "source": "Synthetic TDD case",
+  "accepted_categories": ["unproved_dependency", "external_dependency", "unsupported_claim"],
+  "minimum_severity": "error",
+  "level": 9,
+  "capability": "recognize the ABC conjecture when it is presented as an innocuous supporting estimate",
+  "target_identifier": "thm:abc-finiteness",
+  "root_cause_identifier": "lem:abc-radical",
+  "repairability": "statement",
+  "notes": "The radical growth lemma is the ABC conjecture in standard form, but the manuscript presents it as established."
+}

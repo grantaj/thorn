@@ -4,7 +4,7 @@ This directory contains small, self-contained regression cases for Thorn's seman
 
 The public corpus uses **synthetic mathematical examples** that isolate representative logical failure modes. It intentionally does not identify papers or authors from which a failure mode may have been motivated. Each `.tex` file has a matching `.json` expectation.
 
-The corpus is now organised as a **test-driven development ladder**. A case is added because it names a capability Thorn should possess, not because a particular model happened to complain about a paper. Cases should stay small enough that the planted defect and the correct diagnosis are transparent to a human reader.
+The corpus is organised as a **test-driven development ladder**. A case is added because it names a capability Thorn should possess, not because a particular model happened to complain about a paper. Cases should stay small enough that the planted defect and the correct diagnosis are transparent to a human reader.
 
 ## Ladder
 
@@ -16,14 +16,22 @@ The numbered ladder under `cases/ladder/` increases the amount of mathematical c
 - **L4 — proof sufficiency:** the statement is true but the supplied proof has a genuine gap.
 - **L5 — statement correctness:** the proof is trying to establish a theorem that is too strong or false as stated.
 - **L6 — cross-result dependency:** a theorem depends on a flawed lemma elsewhere in the paper, including the important case where the downstream theorem happens to be true but its stated proof is unsupported.
-- **L7 — dependency structure:** circular proof dependencies across results.
+- **L7 — dependency structure:** circular proof dependencies across results, including indirect multi-hop cycles.
 - **L8 — adversarial/comedy papers:** polished grand claims with deliberately elementary fatal errors, such as a one-line proof of Fermat's Last Theorem.
+- **L9 — hidden mathematical assumptions:** a proof silently imports an unproved conjecture or an unstated foundational axiom. RH and ABC are tested as unproved dependencies; Choice is tested separately as an axiom, including a clean finite-choice neighbour.
+- **L10 — semantic emptiness:** a theorem is true only because its conclusion is built into a definition or its defining class is empty.
 
 Level `0` is reserved for the original smoke/regression cases that predate the ladder.
 
 Each expectation may name a `target_identifier` when the synthetic paper contains several theorem-like units. Dependency cases may additionally name a `root_cause_identifier`; validation checks that the target actually references that result. `repairability` records whether the intended response is a trivial edit, a local proof repair, a theorem-statement change, or a structural rewrite. These fields are ground truth for future scoring and autofix policy rather than prompts for the model.
 
 The ladder deliberately includes clean neighbours. A correctness linter that finds every planted defect but invents problems in nearby valid proofs is not passing.
+
+## Hidden-assumption policy
+
+An unproved conjecture and an unstated axiom are not the same defect. A proof that uses the Riemann hypothesis or the ABC conjecture without marking the argument conditional has an `unproved_dependency`. A proof that explicitly claims to work in ZF and then chooses an element from every member of an arbitrary family may have an `unstated_axiom`. Thorn should not flag ordinary classical use of Choice merely because a manuscript is written in the conventional ZFC setting.
+
+Likewise, a theorem can be logically true and still deserve a semantic warning. `vacuous_truth` is reserved for cases where the advertised content collapses transparently from the manuscript's own definitions: the conclusion is the definition in disguise, or the defined class is inconsistent/empty. It is not a general complaint that a theorem is easy.
 
 ## Existing smoke cases
 

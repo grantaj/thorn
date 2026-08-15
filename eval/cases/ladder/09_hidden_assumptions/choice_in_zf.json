@@ -1,0 +1,12 @@
+{
+  "name": "unstated axiom of choice in ZF",
+  "kind": "finding",
+  "source": "Synthetic TDD case",
+  "accepted_categories": ["unstated_axiom", "external_dependency", "unsupported_claim"],
+  "minimum_severity": "error",
+  "level": 9,
+  "capability": "notice a choice principle that contradicts the manuscript's stated foundational setting",
+  "target_identifier": "thm:choice-right-inverse",
+  "repairability": "statement",
+  "notes": "The assertion that every surjection splits is equivalent to a choice principle over ZF; the proof chooses simultaneously from an arbitrary family of nonempty fibres."
+}

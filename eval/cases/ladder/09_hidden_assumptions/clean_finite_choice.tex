@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\paragraph{Foundational convention.}
+All set theory in this note is carried out in ZF. No form of the axiom of
+choice is assumed.
+
+\begin{theorem}\label{thm:finite-choice-right-inverse}
+If $p:X\to Y$ is surjective and $Y$ is finite, then $p$ has a right inverse.
+\end{theorem}
+\begin{proof}
+Induct on $|Y|$. The empty case is immediate. For the induction step, choose
+one $y\in Y$ and, using surjectivity once, one $x\in X$ with $p(x)=y$.
+Apply the induction hypothesis to the restriction over $Y\setminus\{y\}$,
+and extend the resulting section by sending $y$ to $x$. This uses only
+finitely many existential choices.
+\end{proof}
+
+\end{document}

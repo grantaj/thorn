@@ -22,8 +22,11 @@ class FindingCategory(StrEnum):
     CIRCULAR_DEPENDENCY = "circular_dependency"
     ALGEBRA_ERROR = "algebra_error"
     DEFINITION_MISMATCH = "definition_mismatch"
+    VACUOUS_TRUTH = "vacuous_truth"
     EXTERNAL_DEPENDENCY = "external_dependency"
     UNSUPPORTED_CLAIM = "unsupported_claim"
+    UNPROVED_DEPENDENCY = "unproved_dependency"
+    UNSTATED_AXIOM = "unstated_axiom"
     OTHER = "other"
 
 
@@ -33,12 +36,15 @@ RULE_CODES: dict[FindingCategory, str] = {
     FindingCategory.CONVERGENCE_MISMATCH: "TH203",
     FindingCategory.QUANTIFIER_ERROR: "TH204",
     FindingCategory.DEFINITION_MISMATCH: "TH205",
+    FindingCategory.VACUOUS_TRUTH: "TH206",
     FindingCategory.ALGEBRA_ERROR: "TH301",
     FindingCategory.COUNTEREXAMPLE: "TH302",
     FindingCategory.BOUNDARY_CASE: "TH303",
     FindingCategory.CIRCULAR_DEPENDENCY: "TH401",
     FindingCategory.EXTERNAL_DEPENDENCY: "TH501",
     FindingCategory.UNSUPPORTED_CLAIM: "TH502",
+    FindingCategory.UNPROVED_DEPENDENCY: "TH503",
+    FindingCategory.UNSTATED_AXIOM: "TH504",
     FindingCategory.OTHER: "TH999",
 }
 

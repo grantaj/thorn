@@ -1,0 +1,12 @@
+{
+  "name": "clean finite choice in ZF",
+  "kind": "clean",
+  "source": "Synthetic TDD control",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 9,
+  "capability": "avoid over-reporting finite choices as an axiom-of-choice dependency",
+  "target_identifier": "thm:finite-choice-right-inverse",
+  "repairability": "none",
+  "notes": "Finite choice is provable in ZF; the word 'choose' by itself is not evidence of an AC dependency."
+}

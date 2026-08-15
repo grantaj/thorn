@@ -1,0 +1,13 @@
+{
+  "name": "hidden Riemann-hypothesis dependency",
+  "kind": "finding",
+  "source": "Synthetic TDD case",
+  "accepted_categories": ["unproved_dependency", "external_dependency", "unsupported_claim"],
+  "minimum_severity": "error",
+  "level": 9,
+  "capability": "recognize a disguised use of the Riemann hypothesis in a supporting lemma",
+  "target_identifier": "thm:rh-prime-window",
+  "root_cause_identifier": "lem:rh-square-root",
+  "repairability": "statement",
+  "notes": "The lemma's proof silently treats every nontrivial zeta zero as having real part 1/2. The downstream theorem is therefore only conditionally supported."
+}
