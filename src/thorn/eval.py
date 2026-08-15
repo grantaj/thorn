@@ -25,6 +25,7 @@ from thorn.models import (
     UnitAudit,
 )
 from thorn.providers.base import EvaluationProvider
+from thorn.providers.replay import RecordingProvider, ReplayError, ReplayProvider
 from thorn.semantic_audit import SemanticReviewResult, review_semantic_context
 from thorn.semantic_review import ReviewContext, build_review_context
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
@@ -133,6 +134,8 @@ class ObservedFinding(BaseModel):
 
 class ProviderUsage(BaseModel):
     requests: int = Field(default=0, ge=0)
+    live_requests: int = Field(default=0, ge=0)
+    replay_hits: int = Field(default=0, ge=0)
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
     total_tokens: int = Field(default=0, ge=0)
@@ -140,6 +143,8 @@ class ProviderUsage(BaseModel):
     def minus(self, earlier: ProviderUsage) -> ProviderUsage:
         return ProviderUsage(
             requests=self.requests - earlier.requests,
+            live_requests=self.live_requests - earlier.live_requests,
+            replay_hits=self.replay_hits - earlier.replay_hits,
             input_tokens=self.input_tokens - earlier.input_tokens,
             output_tokens=self.output_tokens - earlier.output_tokens,
             total_tokens=self.total_tokens - earlier.total_tokens,
@@ -157,6 +162,8 @@ class EvaluationResult(BaseModel):
     detail: str
     observed_findings: list[ObservedFinding] = Field(default_factory=list)
     semantic_request_count: int = Field(ge=0)
+    live_request_count: int = Field(ge=0)
+    replay_hit_count: int = Field(ge=0)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     total_tokens: int = Field(ge=0)
@@ -226,6 +233,23 @@ def _parser() -> argparse.ArgumentParser:
             "select a controlled semantic-review strategy: raw and ir are attack-only "
             "one-request context A/B modes; targeted reviews only deterministic IR "
             "items selected for escalation"
+        ),
+    )
+    recording = parser.add_mutually_exclusive_group()
+    recording.add_argument(
+        "--record-dir",
+        type=Path,
+        help=(
+            "record each successful live provider exchange in this directory for exact "
+            "zero-API replay"
+        ),
+    )
+    recording.add_argument(
+        "--replay-dir",
+        type=Path,
+        help=(
+            "replay exact recorded provider exchanges from this directory without an "
+            "API key or live provider client"
         ),
     )
     parser.add_argument(
@@ -415,6 +439,8 @@ def _provider_usage_snapshot(provider: EvaluationProvider | None) -> ProviderUsa
         return ProviderUsage()
     return ProviderUsage(
         requests=provider.requests,
+        live_requests=getattr(provider, "live_requests", provider.requests),
+        replay_hits=getattr(provider, "replay_hits", 0),
         input_tokens=provider.input_tokens,
         output_tokens=provider.output_tokens,
         total_tokens=provider.total_tokens,
@@ -646,6 +672,8 @@ def _run_review_strategy(
         detail=detail,
         observed_findings=findings,
         semantic_request_count=usage.requests,
+        live_request_count=usage.live_requests,
+        replay_hit_count=usage.replay_hits,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         total_tokens=usage.total_tokens,
@@ -664,6 +692,13 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     if args.targeted_preflight and args.review_context not in {None, "targeted"}:
         print("thorn-eval: --targeted-preflight is only compatible with targeted review context")
+        return 2
+    if (args.record_dir or args.replay_dir) and (
+        args.validate_only or args.analyze or args.targeted_preflight
+    ):
+        print(
+            "thorn-eval: --record-dir/--replay-dir are only valid for semantic review runs"
+        )
         return 2
 
     try:
@@ -709,14 +744,25 @@ def main(argv: list[str] | None = None) -> int:
         ]
 
     provider: EvaluationProvider | None = None
+    provider_mode: str | None = None
     if not args.validate_only and not args.analyze and not args.targeted_preflight:
-        if OpenAIProvider is None and not os.getenv("OPENAI_API_KEY"):
-            print(
-                "thorn-eval: OPENAI_API_KEY is required unless --validate-only, "
-                "--analyze, or --targeted-preflight is used"
-            )
-            return 2
-        provider = _make_openai_provider(args.model)
+        if args.replay_dir is not None:
+            provider = ReplayProvider(model=args.model, directory=args.replay_dir)
+            provider_mode = "replay"
+        else:
+            if OpenAIProvider is None and not os.getenv("OPENAI_API_KEY"):
+                print(
+                    "thorn-eval: OPENAI_API_KEY is required for live/record review; "
+                    "use --replay-dir for zero-API replay"
+                )
+                return 2
+            live_provider = _make_openai_provider(args.model)
+            if args.record_dir is not None:
+                provider = RecordingProvider(live_provider, args.record_dir)
+                provider_mode = "record"
+            else:
+                provider = live_provider
+                provider_mode = "live"
 
     review_strategy: ReviewStrategy = (
         "targeted" if args.targeted_preflight else args.review_context or "legacy"
@@ -824,16 +870,20 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         assert provider is not None
-        result, visible = _run_review_strategy(
-            tex_path=tex_path,
-            project=project,
-            unit=unit,
-            expectation=expectation,
-            provider=provider,
-            strategy=review_strategy,
-            min_confidence=args.min_confidence,
-            use_defender=not args.no_defender,
-        )
+        try:
+            result, visible = _run_review_strategy(
+                tex_path=tex_path,
+                project=project,
+                unit=unit,
+                expectation=expectation,
+                provider=provider,
+                strategy=review_strategy,
+                min_confidence=args.min_confidence,
+                use_defender=not args.no_defender,
+            )
+        except ReplayError as exc:
+            print(f"thorn-eval: replay failed for {expectation.name}: {exc}")
+            return 2
         review_results.append(result)
 
         status = "PASS" if result.passed else "FAIL"
@@ -880,6 +930,9 @@ def main(argv: list[str] | None = None) -> int:
         "model": None if mode != "review" else args.model,
         "min_confidence": args.min_confidence,
         "defender": defender,
+        "provider_mode": provider_mode,
+        "record_dir": str(args.record_dir) if args.record_dir is not None else None,
+        "replay_dir": str(args.replay_dir) if args.replay_dir is not None else None,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
     }
     summary.update(_provider_usage(provider))
@@ -893,6 +946,8 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "provider_instantiated": False,
                 "requests": 0,
+                "live_requests": 0,
+                "replay_hits": 0,
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "total_tokens": 0,
