@@ -28,6 +28,10 @@ _NAMED_PROPERTY_RE = re.compile(
     r"\bby\s+(compactness|continuity|linearity|monotonicity|convexity)\b",
     re.IGNORECASE,
 )
+_REFERENCE_SUPPORT_CUE_RE = re.compile(
+    r"\b(?:by|from|using|apply|applying|invoke|invoking)\b",
+    re.IGNORECASE,
+)
 _REF_MACROS = {"ref", "eqref", "autoref", "cref", "Cref"}
 
 
@@ -128,6 +132,17 @@ def _macros_in_span(file: FrontendFile, span: SourceSpan) -> list[FrontendMacro]
     ]
 
 
+def _reference_is_explicit_support(
+    file: FrontendFile,
+    claim: Claim,
+    macro: FrontendMacro,
+) -> bool:
+    prefix = file.raw[claim.source.start_offset : macro.span.start_offset]
+    # Keep the cue local to the reference rather than treating an unrelated
+    # word near the start of a long sentence as evidence for every later ref.
+    return _REFERENCE_SUPPORT_CUE_RE.search(prefix[-96:]) is not None
+
+
 def _add_edge(
     edges: list[SupportEdge],
     *,
@@ -163,17 +178,22 @@ def _attach_explicit_support(
     raw = claim.raw.strip()
 
     for macro in _macros_in_span(file, claim.source):
+        if not _reference_is_explicit_support(file, claim, macro):
+            continue
         labels = _first_required_argument(macro)
         if not labels:
             continue
         for label in (item.strip() for item in labels.split(",")):
             if not label:
                 continue
-            kind = (
-                SupportKind.RESULT_REFERENCE
-                if macro.name != "eqref" and label in result_identifiers
-                else SupportKind.EQUATION_REFERENCE
-            )
+            if macro.name == "eqref":
+                kind = SupportKind.EQUATION_REFERENCE
+            elif label in result_identifiers:
+                kind = SupportKind.RESULT_REFERENCE
+            else:
+                # A plain non-result \ref may be a section, figure, table, or
+                # equation. Do not guess that it is mathematical support.
+                continue
             _add_edge(
                 edges,
                 target=claim,
