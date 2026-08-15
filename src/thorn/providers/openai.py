@@ -4,7 +4,6 @@ from openai import OpenAI
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
 from thorn.providers.request_envelope import (
-    ProviderRequestEnvelope,
     attack_request_envelope,
     defense_request_envelope,
     semantic_request_envelope,
@@ -33,36 +32,47 @@ class OpenAIProvider:
         self.output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
         self.total_tokens += int(getattr(usage, "total_tokens", 0) or 0)
 
-    def _parse(self, envelope: ProviderRequestEnvelope, text_format: object) -> object:
-        return self.client.responses.parse(
-            model=self.model,
-            input=envelope.input_messages(),
-            text_format=text_format,
-        )
-
     def attack(self, unit: TheoremUnit) -> AttackReport:
-        response = self._parse(attack_request_envelope(unit, self.model), AttackReport)
+        envelope = attack_request_envelope(unit, self.model)
+        response = self.client.responses.parse(
+            model=self.model,
+            input=[
+                {"role": "system", "content": envelope.system_prompt},
+                {"role": "user", "content": envelope.user_content},
+            ],
+            text_format=AttackReport,
+        )
         self._record_usage(response)
-        parsed = getattr(response, "output_parsed", None)
-        if parsed is None:
+        if response.output_parsed is None:
             raise RuntimeError("attacker returned no structured result")
-        return parsed
+        return response.output_parsed
 
     def review_semantic(self, request: SemanticReviewRequest) -> AttackReport:
-        response = self._parse(semantic_request_envelope(request, self.model), AttackReport)
-        self._record_usage(response)
-        parsed = getattr(response, "output_parsed", None)
-        if parsed is None:
-            raise RuntimeError("semantic reviewer returned no structured result")
-        return parsed
-
-    def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
-        response = self._parse(
-            defense_request_envelope(unit, findings, self.model),
-            DefenseReport,
+        envelope = semantic_request_envelope(request, self.model)
+        response = self.client.responses.parse(
+            model=self.model,
+            input=[
+                {"role": "system", "content": envelope.system_prompt},
+                {"role": "user", "content": envelope.user_content},
+            ],
+            text_format=AttackReport,
         )
         self._record_usage(response)
-        parsed = getattr(response, "output_parsed", None)
-        if parsed is None:
+        if response.output_parsed is None:
+            raise RuntimeError("semantic reviewer returned no structured result")
+        return response.output_parsed
+
+    def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
+        envelope = defense_request_envelope(unit, findings, self.model)
+        response = self.client.responses.parse(
+            model=self.model,
+            input=[
+                {"role": "system", "content": envelope.system_prompt},
+                {"role": "user", "content": envelope.user_content},
+            ],
+            text_format=DefenseReport,
+        )
+        self._record_usage(response)
+        if response.output_parsed is None:
             raise RuntimeError("defender returned no structured result")
-        return parsed
+        return response.output_parsed
