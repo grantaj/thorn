@@ -4,6 +4,14 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from thorn.dependencies import (
+    DependencyEdge,
+    DependencyGraph,
+    DependencyNode,
+    DependencyResolution,
+    ExtractedProject,
+    ReferenceContext,
+)
 from thorn.models import SourceRange, TheoremUnit
 
 _DEFAULT_THEOREM_ENVS = {
@@ -27,8 +35,18 @@ class _Block:
     body: str
     start: int
     end: int
+    body_start: int
+    body_end: int
     start_line: int
     end_line: int
+
+
+@dataclass(frozen=True)
+class _Reference:
+    source_identifier: str
+    target_label: str
+    source: SourceRange
+    context: ReferenceContext
 
 
 def _strip_comments(text: str) -> str:
@@ -94,13 +112,17 @@ def _find_blocks(text: str, envs: set[str]) -> list[_Block]:
         end_match = end_re.search(text, match.end())
         if end_match is None:
             continue
+        body_start = match.end()
+        body_end = end_match.start()
         blocks.append(
             _Block(
                 env=env,
                 title=match.group("title"),
-                body=text[match.end() : end_match.start()].strip(),
+                body=text[body_start:body_end].strip(),
                 start=match.start(),
                 end=end_match.end(),
+                body_start=body_start,
+                body_end=body_end,
                 start_line=_line_number(text, match.start()),
                 end_line=_line_number(text, end_match.end()),
             )
@@ -125,12 +147,15 @@ def _find_proof_after(text: str, block: _Block, next_block_start: int | None) ->
     if end_match is None:
         return None
     body_start = block.end + match.end()
+    body_end = end_match.start()
     return _Block(
         env="proof",
         title=match.group("title"),
-        body=text[body_start:end_match.start()].strip(),
+        body=text[body_start:body_end].strip(),
         start=absolute_start,
         end=end_match.end(),
+        body_start=body_start,
+        body_end=body_end,
         start_line=_line_number(text, absolute_start),
         end_line=_line_number(text, end_match.end()),
     )
@@ -143,17 +168,37 @@ def _local_context(text: str, start_line: int, lines: int = 120) -> str:
     return "\n".join(source_lines[first:last]).strip()
 
 
-def extract_units(main_file: str | Path) -> list[TheoremUnit]:
-    """Extract theorem-like result/proof units from a LaTeX project.
+def _block_references(
+    path: Path,
+    text: str,
+    block: _Block,
+    source_identifier: str,
+    context: ReferenceContext,
+) -> list[_Reference]:
+    body = text[block.body_start:block.body_end]
+    references: list[_Reference] = []
+    for match in _REF_RE.finditer(body):
+        absolute_offset = block.body_start + match.start()
+        line = _line_number(text, absolute_offset)
+        references.append(
+            _Reference(
+                source_identifier=source_identifier,
+                target_label=match.group(1),
+                source=SourceRange(file=str(path), start_line=line, end_line=line),
+                context=context,
+            )
+        )
+    return references
 
-    This is intentionally a pragmatic parser. It preserves source locations and handles common
-    theorem declarations without pretending to interpret arbitrary TeX macro expansion.
-    """
+
+def extract_project(main_file: str | Path) -> ExtractedProject:
+    """Extract theorem-like units and their structural reference graph."""
 
     main = Path(main_file).resolve()
     files = _read_project(main)
     envs = _theorem_envs(files)
     units: list[TheoremUnit] = []
+    references: list[_Reference] = []
 
     for path, text in files.items():
         blocks = sorted(_find_blocks(text, envs), key=lambda item: item.start)
@@ -163,41 +208,104 @@ def extract_units(main_file: str | Path) -> list[TheoremUnit]:
             label_match = _LABEL_RE.search(block.body)
             label = label_match.group(1) if label_match else None
             identifier = label or f"{path.name}:{block.start_line}:{block.env}"
-            units.append(
-                TheoremUnit(
-                    identifier=identifier,
-                    environment=block.env,
-                    title=block.title,
-                    label=label,
-                    statement=block.body,
-                    proof=proof.body if proof else None,
-                    statement_range=SourceRange(
-                        file=str(path), start_line=block.start_line, end_line=block.end_line
-                    ),
-                    proof_range=(
-                        SourceRange(
-                            file=str(path), start_line=proof.start_line, end_line=proof.end_line
-                        )
-                        if proof
-                        else None
-                    ),
-                    local_context=_local_context(text, block.start_line),
+            unit = TheoremUnit(
+                identifier=identifier,
+                environment=block.env,
+                title=block.title,
+                label=label,
+                statement=block.body,
+                proof=proof.body if proof else None,
+                statement_range=SourceRange(
+                    file=str(path), start_line=block.start_line, end_line=block.end_line
+                ),
+                proof_range=(
+                    SourceRange(
+                        file=str(path), start_line=proof.start_line, end_line=proof.end_line
+                    )
+                    if proof
+                    else None
+                ),
+                local_context=_local_context(text, block.start_line),
+            )
+            units.append(unit)
+            references.extend(
+                _block_references(
+                    path,
+                    text,
+                    block,
+                    identifier,
+                    ReferenceContext.STATEMENT,
                 )
             )
+            if proof is not None:
+                references.extend(
+                    _block_references(
+                        path,
+                        text,
+                        proof,
+                        identifier,
+                        ReferenceContext.PROOF,
+                    )
+                )
 
     units.sort(key=lambda unit: (unit.statement_range.file, unit.statement_range.start_line))
 
-    by_label = {unit.label: unit for unit in units if unit.label}
-    enriched: list[TheoremUnit] = []
+    by_label: dict[str, list[TheoremUnit]] = {}
     for unit in units:
-        refs = set(_REF_RE.findall(unit.statement + "\n" + (unit.proof or "")))
-        referenced: list[str] = []
-        for label in sorted(refs):
-            dependency = by_label.get(label)
-            if dependency is None or dependency.identifier == unit.identifier:
-                continue
-            referenced.append(
-                f"[{dependency.environment} {dependency.identifier}]\n{dependency.statement}"
+        if unit.label is not None:
+            by_label.setdefault(unit.label, []).append(unit)
+
+    edges: list[DependencyEdge] = []
+    for reference in references:
+        candidates = by_label.get(reference.target_label, [])
+        if not candidates:
+            # A generic LaTeX reference may target an equation, figure, section, etc. Without a
+            # project-wide label index we cannot call it a missing theorem dependency.
+            continue
+        if len(candidates) == 1:
+            edges.append(
+                DependencyEdge(
+                    source_identifier=reference.source_identifier,
+                    target_label=reference.target_label,
+                    target_identifier=candidates[0].identifier,
+                    source=reference.source,
+                    context=reference.context,
+                    resolution=DependencyResolution.RESOLVED,
+                )
             )
-        enriched.append(unit.model_copy(update={"referenced_results": referenced}))
-    return enriched
+        else:
+            edges.append(
+                DependencyEdge(
+                    source_identifier=reference.source_identifier,
+                    target_label=reference.target_label,
+                    source=reference.source,
+                    context=reference.context,
+                    resolution=DependencyResolution.AMBIGUOUS,
+                )
+            )
+
+    graph = DependencyGraph(
+        nodes=[DependencyNode.from_unit(unit) for unit in units],
+        edges=edges,
+    )
+    enriched = [
+        unit.model_copy(
+            update={"referenced_results": graph.render_dependency_context(unit.identifier)}
+        )
+        for unit in units
+    ]
+    return ExtractedProject(
+        main_file=str(main),
+        units=enriched,
+        dependency_graph=graph,
+    )
+
+
+def extract_units(main_file: str | Path) -> list[TheoremUnit]:
+    """Extract theorem-like result/proof units from a LaTeX project.
+
+    This compatibility API now delegates to :func:`extract_project`; prompt-facing dependency
+    context is rendered from the project's first-class dependency graph.
+    """
+
+    return extract_project(main_file).units
