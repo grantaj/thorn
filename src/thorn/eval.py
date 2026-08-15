@@ -289,6 +289,20 @@ def _check_case(
     return passed, detail
 
 
+def _provider_usage(provider: AuditProvider | None) -> dict[str, object]:
+    if provider is None:
+        return {}
+    requests = getattr(provider, "requests", None)
+    if not isinstance(requests, int):
+        return {}
+    return {
+        "requests": requests,
+        "input_tokens": getattr(provider, "input_tokens", 0),
+        "output_tokens": getattr(provider, "output_tokens", 0),
+        "total_tokens": getattr(provider, "total_tokens", 0),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     started = time.perf_counter()
@@ -385,12 +399,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{status} CHECK L{expectation.level} {expectation.name}: {detail}")
             if not passed:
                 failures += 1
-                for finding in check_findings:
+                for check_finding in check_findings:
                     print(
                         "     observed "
-                        f"{finding.rule}/{finding.category.value}/"
-                        f"{finding.severity.value}: {finding.title} "
-                        f"at {finding.source.file}:{finding.source.start_line}"
+                        f"{check_finding.rule}/{check_finding.category.value}/"
+                        f"{check_finding.severity.value}: {check_finding.title} "
+                        f"at {check_finding.source.file}:"
+                        f"{check_finding.source.start_line}"
                     )
             continue
 
@@ -401,9 +416,9 @@ def main(argv: list[str] | None = None) -> int:
             use_defender=not args.no_defender,
         )
         visible = [
-            finding
-            for finding in audit.findings
-            if finding.confidence >= args.min_confidence
+            audit_finding
+            for audit_finding in audit.findings
+            if audit_finding.confidence >= args.min_confidence
         ]
         matches = _matching_findings(
             visible,
@@ -433,12 +448,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{status} L{expectation.level} {expectation.name}: {detail}")
         if not passed:
             failures += 1
-            for finding in visible:
+            for audit_finding in visible:
                 print(
                     "     observed "
-                    f"{finding.rule}/{finding.category.value}/"
-                    f"{finding.severity.value} "
-                    f"confidence={finding.confidence:.2f}: {finding.title}"
+                    f"{audit_finding.rule}/{audit_finding.category.value}/"
+                    f"{audit_finding.severity.value} "
+                    f"confidence={audit_finding.confidence:.2f}: "
+                    f"{audit_finding.title}"
                 )
 
     mode = "check" if args.check else "validate" if args.validate_only else "review"
@@ -451,15 +467,7 @@ def main(argv: list[str] | None = None) -> int:
         "defender": not args.no_defender,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
     }
-    if provider is not None and hasattr(provider, "requests"):
-        summary.update(
-            {
-                "requests": provider.requests,
-                "input_tokens": provider.input_tokens,
-                "output_tokens": provider.output_tokens,
-                "total_tokens": provider.total_tokens,
-            }
-        )
+    summary.update(_provider_usage(provider))
 
     print()
     print(json.dumps(summary, indent=2))
