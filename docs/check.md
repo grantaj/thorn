@@ -20,11 +20,49 @@ The issue #18 tranche intentionally contains only checks supported by strong str
 | `TH102` | ambiguous theorem/result reference | error |
 | `TH103` | missing internal LaTeX reference | error |
 | `TH104` | circular theorem/result dependency | error |
-| `TH111` | known symbol used before its later explicit introduction | warning |
-| `TH112` | known symbol used outside its explicit lexical scope | warning |
 | `TH113` | incompatible explicit roles for the same symbol in one scope | warning |
 
-These findings report structural facts. For example, `TH112` says that Thorn can see an explicit declaration but that declaration is unavailable under the mechanically recovered scope tree; it does not claim that no implicit mathematical convention could repair the manuscript.
+`TH113` is deliberately narrow: it requires incompatible roles to be established by explicit introductions in the same recovered lexical scope. Map/function roles are treated as compatible callable evidence.
+
+## Binding facts are not yet diagnostics
+
+The symbol IR records useful facts such as unresolved uses, source ordering, and lexical scope. The first #18 implementation initially promoted two of those facts directly to warnings:
+
+- `TH111` — a known symbol appears before a later explicit introduction;
+- `TH112` — a same-named explicit declaration exists outside the use's recovered lexical scope.
+
+Running `thorn check` over the complete public synthetic matrix showed that those premises are not sufficient for a user-facing diagnostic. In particular, ordinary mathematical prose permits **trailing binders** such as
+
+```latex
+\[
+  m \le f(x) \le M
+\]
+for every $x\in[0,1]$.
+```
+
+and freely reuses locally bound names. A source-order or same-name scope relationship therefore does not establish that the author used the wrong binding.
+
+The IR continues to retain those facts because they may become useful once Thorn has a richer prose/argument structure, but `thorn check` stays silent on them for now. This is an intentional example of the distinction between **representing a suspicious fact** and having enough evidence to **lint it**.
+
+## Full-matrix specification
+
+Every public synthetic evaluation case has an explicit deterministic expectation in:
+
+```text
+eval/check-expectations.json
+```
+
+Run the deterministic matrix with:
+
+```bash
+thorn-eval eval/cases --check
+```
+
+The manifest must cover every evaluation case exactly. An empty rule list is meaningful: it says the current deterministic checker is expected to stay silent on that paper even when the paper contains a semantic mathematical defect.
+
+This is important to Thorn's capability boundary. A false theorem, invalid compactness step, hidden conjecture dependency, or quantifier error should not acquire a structural warning merely because the offline checker cannot understand it. At the #18 stage, the two planted circular-dependency papers are expected to trigger `TH104`; the remaining existing matrix cases are explicit silence controls unless a future deterministic rule is added with justified expectations.
+
+Default CI runs this complete matrix with `OPENAI_API_KEY` blank.
 
 ## False-positive boundary
 
@@ -32,12 +70,14 @@ This initial pass deliberately does **not**:
 
 - treat every mathematical token as a user-defined symbol;
 - complain about conventional notation merely because it lacks a local declaration;
+- infer binding scope from source order alone;
+- equate a repeated symbol name with identity of mathematical binding;
 - infer deep mathematical types from notation;
 - infer function arity from arbitrary expressions;
 - decide whether a nontrivial implication is mathematically valid;
 - treat prose style such as `clearly` or `obviously` as a defect.
 
-Broad undefined-symbol detection, more aggressive redefinition checks, and arity diagnostics should be added only with planted failures plus nearby clean controls demonstrating acceptable noise.
+Broad undefined-symbol detection, binding/scope diagnostics, more aggressive redefinition checks, and arity diagnostics should be added only with planted failures plus nearby clean controls demonstrating acceptable noise.
 
 ## `check` versus `review`
 
