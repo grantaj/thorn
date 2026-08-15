@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{theorem}\label{thm:uniform-null-set}
+Let $\{f_t:t\in[0,1]\}$ be measurable functions on $[0,1]$. If for every
+$t$ one has $f_t(x)=0$ for almost every $x$, then there is a single null
+set $N$ such that
+\[
+  f_t(x)=0
+\]
+for every $t\in[0,1]$ and every $x\notin N$.
+\end{theorem}
+\begin{proof}
+For each $t$, let $N_t$ be the null set on which $f_t$ may be nonzero.
+Set $N=\bigcup_{t\in[0,1]}N_t$. A union of null sets is null, and outside
+$N$ all of the functions vanish.
+\end{proof}
+
+\end{document}

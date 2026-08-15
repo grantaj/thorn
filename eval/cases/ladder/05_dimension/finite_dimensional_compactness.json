@@ -1,0 +1,28 @@
+{
+  "name": "finite-dimensional compactness used in arbitrary normed space",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "hypothesis_mismatch",
+    "counterexample",
+    "invalid_implication"
+  ],
+  "minimum_severity": "error",
+  "level": 5,
+  "capability": "notice a finite-dimensional theorem used without the dimension hypothesis",
+  "target_identifier": "thm:unit-ball-compact",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "finite_to_infinite_dimension",
+  "detection_methods": [
+    "theorem hypothesis check",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "notes": "In l2 the standard basis lies in the unit ball and has no convergent subsequence."
+}

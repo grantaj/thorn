@@ -1,0 +1,28 @@
+{
+  "name": "forall-exists witness becomes exists-forall",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "quantifier_error",
+    "invalid_implication",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 5,
+  "capability": "detect an illegal quantifier-order swap and witness reuse",
+  "target_identifier": "thm:quantifier-swap",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "quantifier_swap",
+  "detection_methods": [
+    "quantifier check",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "notes": "The premise is true in R, but R has no greatest element."
+}

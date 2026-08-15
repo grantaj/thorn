@@ -1,0 +1,26 @@
+{
+  "name": "asymptotic variable and uniformity are unspecified",
+  "kind": "finding",
+  "source": "Synthetic matrix case",
+  "accepted_categories": [
+    "specification_ambiguity",
+    "hypothesis_mismatch"
+  ],
+  "minimum_severity": "warning",
+  "level": 3,
+  "capability": "notice asymptotic notation whose varying parameters and uniformity are materially ambiguous",
+  "target_identifier": "thm:ambiguous-big-o",
+  "repairability": "statement",
+  "family": "specification",
+  "statement_truth": "unknown",
+  "proof_status": "valid",
+  "locality": "section",
+  "fault_class": "asymptotic_uniformity_ambiguous",
+  "detection_methods": [
+    "asymptotic scope check"
+  ],
+  "reader_consequence": "risky",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "notes": "The proof establishes O(n) for each fixed m with a constant depending on m; a uniform-in-m reading is false."
+}

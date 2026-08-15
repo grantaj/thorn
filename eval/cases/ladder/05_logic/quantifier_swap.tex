@@ -1,0 +1,17 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\begin{theorem}\label{thm:quantifier-swap}
+Suppose that for every real number $x$ there exists a real number $y$ with
+$y>x$. Then there exists a real number $y$ such that $y>x$ for every real
+number $x$.
+\end{theorem}
+\begin{proof}
+For each $x$, choose a witness $y_x>x$. Since such a witness exists for
+every $x$, choose one of these witnesses and call it $y$. This $y$ is larger
+than every $x$.
+\end{proof}
+
+\end{document}
