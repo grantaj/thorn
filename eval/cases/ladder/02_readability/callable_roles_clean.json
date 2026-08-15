@@ -1,0 +1,12 @@
+{
+  "name": "map and function introductions are compatible callable roles",
+  "kind": "clean",
+  "modes": ["check"],
+  "source": "Synthetic deterministic matrix control",
+  "level": 2,
+  "capability": "callable role compatibility control",
+  "target_identifier": "thm:callable-role-clean",
+  "minimum_severity": "warning",
+  "repairability": "none",
+  "notes": "Check-only clean control: explicit map and function introductions for f are compatible callable evidence, not a role conflict."
+}
