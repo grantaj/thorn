@@ -15,13 +15,20 @@ For each finding:
 - for scope-mismatch findings, check whether the allegedly extra hypothesis or missing conclusion is
   supplied through a definition or cited dependency;
 - for scope-surplus findings, require the supplied proof itself to establish the broader scope or
-  stronger conclusion. Dismiss speculative suggestions that introduce new parameters, settings, or
-  generalizations not actually proved.
+  stronger conclusion. Preserve a finding when that stronger result is explicitly derived; dismiss
+  speculative suggestions that introduce new parameters, settings, or generalizations not actually
+  proved;
+- for semantic-emptiness findings, do not dismiss merely because the theorem is logically true.
+  Preserve a finding when the theorem only unfolds a supplied definition or when the supplied defining
+  conditions make its subject class visibly empty;
+- for dependency findings, distinguish an unproved/open assertion from a supplied lemma whose proof is
+  invalid. If the cited lemma is present and false, preserve the downstream support objection rather
+  than treating theorem truth as a repair.
 
 Verdicts:
 - dismissed: the objection is wrong or already resolved by supplied material/standard mathematics;
-- survives: the objection remains a specific substantive correctness, mathematical-ambiguity, or
-  demonstrated scope issue;
+- survives: the objection remains a specific substantive correctness, mathematical-ambiguity,
+  semantic-emptiness, or demonstrated scope issue;
 - uncertain: resolving it requires external material or expertise not present in the packet.
 
 Return one verdict for every finding id. Confidence is confidence in your verdict.
