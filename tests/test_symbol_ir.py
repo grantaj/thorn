@@ -132,6 +132,109 @@ def test_result_proof_and_local_scope_visibility(
 
 
 @pytest.mark.parametrize("frontend_factory", _FRONTENDS, ids=_frontend_id)
+def test_explicit_quantifier_scope_does_not_leak(
+    tmp_path: Path,
+    frontend_factory: FrontendFactory,
+) -> None:
+    tex = tmp_path / "main.tex"
+    tex.write_text(
+        r"""\newtheorem{theorem}{Theorem}
+\begin{theorem}\label{thm:quantifier-scope}
+Let $X$ be a set.
+\end{theorem}
+\begin{proof}
+We have $\forall z\in X,\ z=z$. Afterwards $z=z$.
+\end{proof}
+""",
+        encoding="utf-8",
+    )
+
+    table = extract_project(tex, frontend=frontend_factory()).symbol_table
+    z_symbol = next(symbol for symbol in table.symbols if symbol.name == "z")
+    assert table.scope(z_symbol.scope_identifier).kind == ScopeKind.LOCAL
+
+    z_uses = [use for use in table.uses if use.name == "z"]
+    assert len(z_uses) == 4
+    assert all(use.resolved_symbol_identifier == z_symbol.identifier for use in z_uses[:2])
+    assert all(use.resolved_symbol_identifier is None for use in z_uses[2:])
+
+
+@pytest.mark.parametrize("frontend_factory", _FRONTENDS, ids=_frontend_id)
+def test_result_scopes_isolate_symbols_and_proof_scope_can_shadow(
+    tmp_path: Path,
+    frontend_factory: FrontendFactory,
+) -> None:
+    tex = tmp_path / "main.tex"
+    tex.write_text(
+        r"""\newtheorem{theorem}{Theorem}
+\begin{theorem}\label{thm:first}
+Let $x$ be real.
+\end{theorem}
+\begin{proof}
+Define $x=1$. Hence $x=x$.
+\end{proof}
+\begin{theorem}\label{thm:second}
+Let $x$ be real.
+\end{theorem}
+\begin{proof}
+Here $x=x$.
+\end{proof}
+""",
+        encoding="utf-8",
+    )
+
+    table = extract_project(tex, frontend=frontend_factory()).symbol_table
+    x_symbols = [symbol for symbol in table.symbols if symbol.name == "x"]
+    assert len(x_symbols) == 3
+
+    first_result_x = next(
+        symbol
+        for symbol in x_symbols
+        if symbol.result_identifier == "thm:first"
+        and table.scope(symbol.scope_identifier).kind == ScopeKind.RESULT
+    )
+    first_proof_x = next(
+        symbol
+        for symbol in x_symbols
+        if symbol.result_identifier == "thm:first"
+        and table.scope(symbol.scope_identifier).kind == ScopeKind.PROOF
+    )
+    second_result_x = next(
+        symbol
+        for symbol in x_symbols
+        if symbol.result_identifier == "thm:second"
+        and table.scope(symbol.scope_identifier).kind == ScopeKind.RESULT
+    )
+
+    first_proof_uses = [
+        use
+        for use in table.uses
+        if use.name == "x"
+        and use.source.start_line == 7
+        and use.resolved_symbol_identifier is not None
+    ]
+    assert first_proof_uses
+    assert all(
+        use.resolved_symbol_identifier == first_proof_x.identifier for use in first_proof_uses
+    )
+    assert all(
+        use.resolved_symbol_identifier != first_result_x.identifier for use in first_proof_uses
+    )
+
+    second_proof_uses = [
+        use
+        for use in table.uses
+        if use.name == "x"
+        and use.source.start_line == 13
+        and use.resolved_symbol_identifier is not None
+    ]
+    assert len(second_proof_uses) == 2
+    assert all(
+        use.resolved_symbol_identifier == second_result_x.identifier for use in second_proof_uses
+    )
+
+
+@pytest.mark.parametrize("frontend_factory", _FRONTENDS, ids=_frontend_id)
 def test_unknown_roles_stay_unknown_and_standard_notation_does_not_become_symbols(
     tmp_path: Path,
     frontend_factory: FrontendFactory,
