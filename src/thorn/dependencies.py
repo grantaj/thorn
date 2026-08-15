@@ -5,6 +5,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from thorn.models import SourceRange, TheoremUnit
+from thorn.symbols import SymbolTable
 
 
 class DependencyResolution(StrEnum):
@@ -193,6 +194,7 @@ class ExtractedProject(BaseModel):
     main_file: str
     units: list[TheoremUnit] = Field(default_factory=list)
     dependency_graph: DependencyGraph
+    symbol_table: SymbolTable = Field(default_factory=SymbolTable)
 
     def unit(self, identifier: str) -> TheoremUnit:
         for unit in self.units:

@@ -21,6 +21,7 @@ from thorn.frontend import (
 from thorn.frontend import ParsedProject as FrontendProject
 from thorn.frontends import RegexLatexFrontend
 from thorn.models import SourceRange, TheoremUnit
+from thorn.symbols import ResultRegion, extract_symbol_table
 
 _DEFAULT_THEOREM_ENVS = {
     "theorem",
@@ -129,11 +130,11 @@ def extract_project(
     *,
     frontend: LatexFrontend | None = None,
 ) -> ExtractedProject:
-    """Extract theorem-like units and their structural reference graph.
+    """Extract theorem/result, dependency, and conservative symbol IR.
 
-    LaTeX syntax is supplied by a parser-neutral frontend. The theorem/result
-    interpretation and dependency graph are Thorn-owned analysis above that
-    boundary, so parser backends can be replaced or A/B tested independently.
+    LaTeX syntax is supplied by a parser-neutral frontend. All mathematical
+    interpretation remains Thorn-owned above that boundary, including the
+    result dependency graph and symbol/definition/scope layer.
     """
 
     parser = frontend or _DEFAULT_FRONTEND
@@ -141,6 +142,7 @@ def extract_project(
     _raise_missing_file_diagnostic(parsed)
     envs = _theorem_envs(parsed)
     units: list[TheoremUnit] = []
+    regions: list[ResultRegion] = []
     references: list[tuple[str, str, SourceRange, ReferenceContext]] = []
 
     for file in parsed.files:
@@ -166,6 +168,14 @@ def extract_project(
                 local_context=_local_context(file.raw, block.span.start_line),
             )
             units.append(unit)
+            regions.append(
+                ResultRegion(
+                    identifier=identifier,
+                    file=file.path,
+                    statement_span=block.span,
+                    proof_span=proof.span if proof is not None else None,
+                )
+            )
             references.extend(
                 (
                     identifier,
@@ -246,6 +256,7 @@ def extract_project(
         main_file=parsed.main_file,
         units=enriched,
         dependency_graph=graph,
+        symbol_table=extract_symbol_table(parsed, regions),
     )
 
 
