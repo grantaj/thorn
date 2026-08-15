@@ -1,0 +1,12 @@
+{
+  "name": "true theorem with an incomplete extremum argument",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 4,
+  "capability": "whole-proof sufficiency",
+  "target_identifier": "thm:missing-justification",
+  "accepted_categories": ["unsupported_claim", "boundary_case", "invalid_implication"],
+  "minimum_severity": "warning",
+  "repairability": "local",
+  "notes": "The chosen maximum need not be interior. A correct proof must handle constant functions or choose an interior extremum using both maximum and minimum."
+}

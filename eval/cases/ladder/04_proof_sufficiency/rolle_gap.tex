@@ -1,0 +1,17 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\title{An Incomplete Proof of Rolle's Theorem}
+\author{Synthetic Thorn Test}
+\maketitle
+
+\begin{theorem}\label{thm:missing-justification}
+Let $f:[0,1]\to\mathbb{R}$ be differentiable with $f(0)=f(1)=0$. Then there exists $c\in(0,1)$ such that $f'(c)=0$.
+\end{theorem}
+\begin{proof}
+By continuity, $f$ attains a maximum at some $c\in[0,1]$. A differentiable function has derivative zero at an interior maximum, so $f'(c)=0$.
+\end{proof}
+
+\end{document}

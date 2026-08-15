@@ -1,0 +1,11 @@
+{
+  "name": "clean cross-result dependency",
+  "kind": "clean",
+  "source": "Synthetic TDD ladder control",
+  "level": 6,
+  "capability": "dependency reasoning without false positives",
+  "target_identifier": "thm:clean-dependency",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "repairability": "none"
+}

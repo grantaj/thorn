@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\title{Derivative Bounds and Contractions}
+\author{Synthetic Thorn Test}
+\maketitle
+
+\begin{theorem}\label{thm:too-strong}
+If $f:\mathbb{R}\to\mathbb{R}$ is differentiable and $|f'(x)|\le1$ for every $x$, then $f$ is a contraction.
+\end{theorem}
+\begin{proof}
+By the mean value theorem,
+\[
+|f(x)-f(y)|\le |x-y|
+\]
+for all $x,y$. Hence $f$ is a contraction.
+\end{proof}
+
+\end{document}

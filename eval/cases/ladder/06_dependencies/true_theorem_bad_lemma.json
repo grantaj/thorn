@@ -1,0 +1,13 @@
+{
+  "name": "true theorem whose stated proof relies on a false lemma",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 6,
+  "capability": "distinguish theorem truth from proof support",
+  "target_identifier": "thm:true-despite-bad-lemma",
+  "root_cause_identifier": "lem:bad-sign",
+  "accepted_categories": ["unsupported_claim", "external_dependency", "invalid_implication"],
+  "minimum_severity": "warning",
+  "repairability": "local",
+  "notes": "The downstream theorem is true and easily reparable directly; Thorn should not claim it is false merely because its cited lemma is false."
+}

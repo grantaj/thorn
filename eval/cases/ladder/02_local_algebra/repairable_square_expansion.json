@@ -1,0 +1,12 @@
+{
+  "name": "false but locally repairable square expansion",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 2,
+  "capability": "local algebra checking",
+  "target_identifier": "thm:repairable-algebra",
+  "accepted_categories": ["algebra_error", "invalid_implication"],
+  "minimum_severity": "error",
+  "repairability": "local",
+  "notes": "The theorem is true; the displayed expansion is false and the proof should be repaired locally rather than the statement weakened."
+}

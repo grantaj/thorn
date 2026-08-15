@@ -1,0 +1,24 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\title{A Sum Formula With a Forgotten Endpoint}
+\author{Synthetic Thorn Test}
+\maketitle
+
+\begin{theorem}\label{thm:missing-zero-case}
+For every integer $n\ge 0$,
+\[
+\sum_{k=1}^{n} k=\frac{n(n+1)}{2}.
+\]
+\end{theorem}
+\begin{proof}
+We use induction on $n$. For $n=1$ the identity is immediate. If it holds for $n$, then
+\[
+\sum_{k=1}^{n+1} k=\frac{n(n+1)}{2}+(n+1)=\frac{(n+1)(n+2)}{2}.
+\]
+Thus the formula holds for every $n\ge 0$.
+\end{proof}
+
+\end{document}

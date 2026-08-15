@@ -1,0 +1,25 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+
+\title{A True Corollary of a Bad Lemma}
+\author{Synthetic Thorn Test}
+\maketitle
+
+\begin{lemma}\label{lem:bad-sign}
+For real numbers $u,v$, if $u^2=v^2$, then $u=v$.
+\end{lemma}
+\begin{proof}
+Taking square roots of both sides gives $u=v$.
+\end{proof}
+
+\begin{theorem}\label{thm:true-despite-bad-lemma}
+For every real $x$, if $x^2=0$, then $x=0$.
+\end{theorem}
+\begin{proof}
+Apply Lemma~\ref{lem:bad-sign} with $u=x$ and $v=0$.
+\end{proof}
+
+\end{document}

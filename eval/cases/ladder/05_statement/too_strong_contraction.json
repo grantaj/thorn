@@ -1,0 +1,12 @@
+{
+  "name": "nonexpansive map incorrectly called a contraction",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 5,
+  "capability": "statement strength checking",
+  "target_identifier": "thm:too-strong",
+  "accepted_categories": ["counterexample", "hypothesis_mismatch", "definition_mismatch", "invalid_implication"],
+  "minimum_severity": "error",
+  "repairability": "statement",
+  "notes": "f(x)=x satisfies the derivative bound but is not a strict contraction."
+}

@@ -1,0 +1,13 @@
+{
+  "name": "downstream theorem depends on a flawed lemma",
+  "kind": "finding",
+  "source": "Synthetic TDD ladder case",
+  "level": 6,
+  "capability": "cross-result root-cause reasoning",
+  "target_identifier": "thm:depends-bad-lemma",
+  "root_cause_identifier": "lem:bad-square-root",
+  "accepted_categories": ["unsupported_claim", "counterexample", "invalid_implication", "external_dependency"],
+  "minimum_severity": "error",
+  "repairability": "statement",
+  "notes": "The theorem proof is locally just an invocation chain; the fatal defect is in the earlier lemma, whose square-root step loses sign."
+}
