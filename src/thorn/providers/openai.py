@@ -1,38 +1,14 @@
 from __future__ import annotations
 
-from importlib.resources import files
-
 from openai import OpenAI
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
-from thorn.semantic_review_render import SemanticReviewRequest, render_semantic_review_request
-
-
-def _read_prompt(name: str) -> str:
-    return files("thorn.prompts").joinpath(name).read_text(encoding="utf-8")
-
-
-def _render_unit(unit: TheoremUnit) -> str:
-    refs = "\n\n".join(unit.referenced_results) or "(none extracted)"
-    proof = unit.proof or "(no proof environment extracted)"
-    return f"""# Result
-ID: {unit.identifier}
-Environment: {unit.environment}
-Source: {unit.statement_range.file}:
-  {unit.statement_range.start_line}-{unit.statement_range.end_line}
-
-## Statement
-{unit.statement}
-
-## Proof
-{proof}
-
-## Local preceding context
-{unit.local_context or "(none)"}
-
-## Explicitly referenced extracted results
-{refs}
-"""
+from thorn.providers.request_envelope import (
+    attack_request_envelope,
+    defense_request_envelope,
+    semantic_request_envelope,
+)
+from thorn.semantic_review_render import SemanticReviewRequest
 
 
 class OpenAIProvider:
@@ -40,12 +16,15 @@ class OpenAIProvider:
         self.model = model
         self.client = OpenAI()
         self.requests = 0
+        self.live_requests = 0
+        self.replay_hits = 0
         self.input_tokens = 0
         self.output_tokens = 0
         self.total_tokens = 0
 
     def _record_usage(self, response: object) -> None:
         self.requests += 1
+        self.live_requests += 1
         usage = getattr(response, "usage", None)
         if usage is None:
             return
@@ -54,11 +33,12 @@ class OpenAIProvider:
         self.total_tokens += int(getattr(usage, "total_tokens", 0) or 0)
 
     def attack(self, unit: TheoremUnit) -> AttackReport:
+        envelope = attack_request_envelope(unit, self.model)
         response = self.client.responses.parse(
             model=self.model,
             input=[
-                {"role": "system", "content": _read_prompt("attacker.md")},
-                {"role": "user", "content": _render_unit(unit)},
+                {"role": "system", "content": envelope.system_prompt},
+                {"role": "user", "content": envelope.user_content},
             ],
             text_format=AttackReport,
         )
@@ -68,11 +48,12 @@ class OpenAIProvider:
         return response.output_parsed
 
     def review_semantic(self, request: SemanticReviewRequest) -> AttackReport:
+        envelope = semantic_request_envelope(request, self.model)
         response = self.client.responses.parse(
             model=self.model,
             input=[
-                {"role": "system", "content": _read_prompt("semantic_reviewer.md")},
-                {"role": "user", "content": render_semantic_review_request(request)},
+                {"role": "system", "content": envelope.system_prompt},
+                {"role": "user", "content": envelope.user_content},
             ],
             text_format=AttackReport,
         )
@@ -82,23 +63,12 @@ class OpenAIProvider:
         return response.output_parsed
 
     def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
-        finding_text = "\n\n".join(
-            f"[{item.id}] {item.title}\n{item.explanation}\nEvidence: {item.evidence}\n"
-            f"Counterexample: {item.counterexample or '(none)'}"
-            for item in findings
-        )
+        envelope = defense_request_envelope(unit, findings, self.model)
         response = self.client.responses.parse(
             model=self.model,
             input=[
-                {"role": "system", "content": _read_prompt("defender.md")},
-                {
-                    "role": "user",
-                    "content": (
-                        _render_unit(unit)
-                        + "\n\n# Proposed findings to defend against\n"
-                        + finding_text
-                    ),
-                },
+                {"role": "system", "content": envelope.system_prompt},
+                {"role": "user", "content": envelope.user_content},
             ],
             text_format=DefenseReport,
         )
