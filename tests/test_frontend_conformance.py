@@ -6,14 +6,15 @@ import pytest
 from thorn.dependencies import DependencyResolution, ReferenceContext
 from thorn.frontend import FrontendDiagnosticKind, LatexFrontend
 from thorn.frontends import RegexLatexFrontend
+from thorn.frontends.pylatexenc import PylatexencLatexFrontend
 from thorn.latex import extract_project, extract_units
 
 FrontendFactory = Callable[[], LatexFrontend]
 
-# Issue #16 adds candidate backends here. Every backend must satisfy the same
-# source/provenance and structural contract before it can be compared or made
-# the default.
-_FRONTENDS: tuple[FrontendFactory, ...] = (RegexLatexFrontend,)
+# Every serious backend must satisfy this source/provenance and structural
+# contract. Backend-specific disagreements belong in test_frontend_ab.py rather
+# than being silently normalized here.
+_FRONTENDS: tuple[FrontendFactory, ...] = (RegexLatexFrontend, PylatexencLatexFrontend)
 
 
 def _frontend_id(factory: FrontendFactory) -> str:
