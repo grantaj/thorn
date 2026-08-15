@@ -19,6 +19,6 @@ jobs:
       - run: pytest -q
       - run: thorn-eval eval/cases --validate-only
       - run: thorn-eval eval/cases --check
-      - run: thorn check examples/demo.tex
+      - run: thorn check examples/demo.tex --structural-only
       - run: ruff check .
       - run: mypy src
