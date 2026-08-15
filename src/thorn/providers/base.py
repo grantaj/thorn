@@ -23,14 +23,17 @@ class SemanticReviewProvider(Protocol):
 
 
 class EvaluationProvider(AuditProvider, SemanticReviewProvider, Protocol):
-    """Combined evaluator boundary with per-provider usage accounting.
+    """Combined evaluator boundary with provider usage/replay accounting.
 
-    The ordinary raw and semantic-review provider protocols remain independent.
-    ``thorn-eval`` needs both boundaries on one provider so a controlled run can
-    compare them while taking usage snapshots before and after each case.
+    ``requests`` counts logical provider invocations. Live providers also increment
+    ``live_requests``; replay providers increment ``replay_hits`` instead. Token
+    counters describe tokens consumed by the current run, so replay keeps them at
+    zero while recorded historical usage remains in the recording fixture itself.
     """
 
     requests: int
+    live_requests: int
+    replay_hits: int
     input_tokens: int
     output_tokens: int
     total_tokens: int
