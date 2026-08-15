@@ -6,9 +6,8 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from thorn.dependencies import DependencyNode, DependencyResolution, ExtractedProject
-from thorn.frontend import SourceSpan
 from thorn.models import Severity, SourceRange
-from thorn.symbols import Symbol, SymbolRole, SymbolTable
+from thorn.symbols import Symbol, SymbolRole
 
 
 class CheckCategory(StrEnum):
@@ -16,8 +15,6 @@ class CheckCategory(StrEnum):
     AMBIGUOUS_REFERENCE = "ambiguous_reference"
     MISSING_REFERENCE = "missing_reference"
     CIRCULAR_DEPENDENCY = "circular_dependency"
-    USE_BEFORE_INTRODUCTION = "use_before_introduction"
-    SCOPE_VIOLATION = "scope_violation"
     ROLE_CONFLICT = "role_conflict"
 
 
@@ -37,8 +34,6 @@ _CHECK_RULES: dict[CheckCategory, str] = {
     CheckCategory.AMBIGUOUS_REFERENCE: "TH102",
     CheckCategory.MISSING_REFERENCE: "TH103",
     CheckCategory.CIRCULAR_DEPENDENCY: "TH104",
-    CheckCategory.USE_BEFORE_INTRODUCTION: "TH111",
-    CheckCategory.SCOPE_VIOLATION: "TH112",
     CheckCategory.ROLE_CONFLICT: "TH113",
 }
 
@@ -144,34 +139,6 @@ def _check_dependencies(project: ExtractedProject) -> list[CheckFinding]:
     return findings
 
 
-def _scope_result_identifier(table: SymbolTable, scope_identifier: str) -> str | None:
-    for identifier in table.scope_chain(scope_identifier):
-        result_identifier = table.scope(identifier).result_identifier
-        if result_identifier is not None:
-            return result_identifier
-    return None
-
-
-def _later_visible_declarations(
-    table: SymbolTable,
-    name: str,
-    scope_identifier: str,
-    source: SourceSpan,
-) -> list[Symbol]:
-    chain = set(table.scope_chain(scope_identifier))
-    return sorted(
-        (
-            symbol
-            for symbol in table.symbols
-            if symbol.name == name
-            and symbol.scope_identifier in chain
-            and symbol.source.file == source.file
-            and symbol.source.start_offset > source.start_offset
-        ),
-        key=lambda symbol: symbol.source.start_offset,
-    )
-
-
 def _role_family(role: SymbolRole) -> str | None:
     if role == SymbolRole.UNKNOWN:
         return None
@@ -181,71 +148,18 @@ def _role_family(role: SymbolRole) -> str | None:
 
 
 def _check_symbols(project: ExtractedProject) -> list[CheckFinding]:
+    """Emit only symbol diagnostics justified by explicit same-scope evidence.
+
+    The symbol IR also records unresolved uses and lexical-scope candidates, but
+    those facts are intentionally not diagnostics yet. Mathematical prose permits
+    trailing binders (for example, a displayed inequality followed by "for every
+    x") and repeated/local re-binding. The full synthetic-matrix audit for #18
+    showed that source order or same-name scope facts alone are not sufficient
+    evidence for a user-facing warning.
+    """
+
     table = project.symbol_table
     findings: list[CheckFinding] = []
-
-    for use in table.uses:
-        if use.resolved_symbol_identifier is not None:
-            continue
-
-        later = _later_visible_declarations(table, use.name, use.scope_identifier, use.source)
-        if later:
-            declaration = later[0]
-            findings.append(
-                _finding(
-                    CheckCategory.USE_BEFORE_INTRODUCTION,
-                    Severity.WARNING,
-                    "Symbol used before explicit introduction",
-                    (
-                        f"{use.name!r} is used before the later explicit introduction "
-                        "that would otherwise be visible in this scope."
-                    ),
-                    use.source.source_range(),
-                    unit_id=_scope_result_identifier(table, use.scope_identifier),
-                    evidence=[
-                        (
-                            f"later introduction: {declaration.raw_introduction} "
-                            f"at {declaration.source.file}:{declaration.source.start_line}"
-                        )
-                    ],
-                )
-            )
-            continue
-
-        result_identifier = _scope_result_identifier(table, use.scope_identifier)
-        chain = set(table.scope_chain(use.scope_identifier))
-        unavailable = [
-            symbol
-            for symbol in table.symbols
-            if symbol.name == use.name
-            and symbol.result_identifier == result_identifier
-            and symbol.scope_identifier not in chain
-        ]
-        if unavailable:
-            declaration = min(
-                unavailable,
-                key=lambda symbol: abs(symbol.source.start_offset - use.source.start_offset),
-            )
-            findings.append(
-                _finding(
-                    CheckCategory.SCOPE_VIOLATION,
-                    Severity.WARNING,
-                    "Symbol used outside its explicit scope",
-                    (
-                        f"{use.name!r} is used where its explicit declaration is not "
-                        "visible under Thorn's lexical scope model."
-                    ),
-                    use.source.source_range(),
-                    unit_id=result_identifier,
-                    evidence=[
-                        (
-                            f"unavailable introduction: {declaration.raw_introduction} "
-                            f"at {declaration.source.file}:{declaration.source.start_line}"
-                        )
-                    ],
-                )
-            )
-
     grouped: dict[tuple[str, str], list[Symbol]] = defaultdict(list)
     for symbol in table.symbols:
         grouped[(symbol.scope_identifier, symbol.name)].append(symbol)
