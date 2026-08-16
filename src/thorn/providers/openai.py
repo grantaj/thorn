@@ -19,6 +19,9 @@ class OpenAIProvider:
     def __init__(self, model: str = "gpt-5.6") -> None:
         self.model = model
         self.client = OpenAI()
+        # Evaluation retries must be explicit and externally accounted for. The
+        # OpenAI SDK otherwise retries selected failures twice by default.
+        self.client.max_retries = 0
         self.requests = 0
         self.live_requests = 0
         self.replay_hits = 0
