@@ -106,7 +106,9 @@ H_B \Rightarrow C
 $C$.
 \end{{theorem}}
 \begin{{proof}}
-We have ${available}$.
+\[
+{available}
+\]
 By Lemma~\ref{{lem:transfer}}, $C$.
 \end{{proof}}
 \end{{document}}
