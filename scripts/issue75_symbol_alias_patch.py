@@ -139,9 +139,7 @@ test = test.replace(
 ''',
 )
 test = test.replace(
-    '''        if symbol.name == r"A_\\tau" and symbol.result_identifier is None
-''',
-    '''        if symbol.name == r"A_\\tau" and symbol.result_identifier is None
-''',
+    '    assert r"A_\\tau" in rescue.text\n',
+    '    assert r"A_{\\tau}" in rescue.text\n',
 )
 test_path.write_text(test, encoding="utf-8")
