@@ -191,6 +191,10 @@ def test_ambiguous_unknown_rule_remains_first_class_and_does_not_discharge() -> 
     assert step.status == InferenceStatus.AMBIGUOUS
     assert obligation.status == ObligationStatus.UNRESOLVED
     assert obligation.discharging_steps == ()
+    assert proof.terminal_obligation.status == ObligationStatus.UNRESOLVED
+    terminal_step = next(item for item in proof.steps if item.address == "X0")
+    assert terminal_step.rule == ProofRuleKind.EXACT
+    assert terminal_step.status == InferenceStatus.CONFIDENT
 
 
 @pytest.mark.parametrize(
