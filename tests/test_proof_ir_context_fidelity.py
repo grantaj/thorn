@@ -192,7 +192,7 @@ Q(A_\tau)
         for item in project.symbol_table.definitions
         if item.symbol_identifier == project_symbols[0].identifier
     )
-    assert definition.operator == r"\meaningop"
+    assert definition.operator == ":="
     assert definition.expression_latex == r"F(\tau^2)"
 
     definition_source = next(source for source in document.sources if source.address == "D1")

@@ -493,7 +493,9 @@ def _project_definition_candidate(
                 name=macro_match.group("name"),
                 name_start=macro_match.start("name"),
                 name_end=macro_match.end("name"),
-                definition_operator=macro_match.group("operator"),
+                # The source spelling is preserved by provenance; the semantic
+                # symbol table records the mechanically recovered operator meaning.
+                definition_operator=":=",
                 definition_rhs=rhs,
             )
 
