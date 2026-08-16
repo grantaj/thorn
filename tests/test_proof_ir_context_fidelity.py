@@ -13,6 +13,8 @@ from thorn.llm_proof_language import (
 from thorn.proof_obligations import ObligationStatus
 from thorn.semantic_review_render import build_semantic_review_request
 from thorn.semantic_transformations import (
+    SemanticTransformation,
+    SemanticTransformationIR,
     SemanticTransformationKind,
     build_semantic_transformation_ir,
 )
@@ -94,6 +96,14 @@ def _write_precondition_case(path: Path, available: str) -> None:
 \newtheorem{{lemma}}{{Lemma}}
 \newtheorem{{theorem}}{{Theorem}}
 \begin{{document}}
+\begin{{lemma}}\label{{lem:available}}
+${available}$.
+\end{{lemma}}
+\begin{{proof}}
+\[
+{available}
+\]
+\end{{proof}}
 \begin{{lemma}}\label{{lem:transfer}}
 If $1<2$, then $0=0$.
 \end{{lemma}}
@@ -106,15 +116,29 @@ If $1<2$, then $0=0$.
 $0=0$.
 \end{{theorem}}
 \begin{{proof}}
-\[
-{available}
-\]
+By Lemma~\ref{{lem:available}}, ${available}$.
 By Lemma~\ref{{lem:transfer}}, $0=0$.
 \end{{proof}}
 \end{{document}}
 """,
         encoding="utf-8",
     )
+
+
+def _application_for(
+    semantic: SemanticTransformationIR,
+    result_identifier: str,
+) -> SemanticTransformation:
+    for transformation in semantic.transformations:
+        if transformation.kind != SemanticTransformationKind.RESULT_APPLICATION:
+            continue
+        if any(
+            semantic.support_atom(address).referenced_result_identifier
+            == result_identifier
+            for address in transformation.support_atom_addresses
+        ):
+            return transformation
+    raise AssertionError(f"missing application of {result_identifier}")
 
 
 def test_result_application_keeps_unmet_precondition_distinct_from_control(
@@ -128,29 +152,13 @@ def test_result_application_keeps_unmet_precondition_distinct_from_control(
     _bad_project, bad_ir, bad_doc = _build(bad, "thm:main")
     _good_project, good_ir, good_doc = _build(good, "thm:main")
 
-    bad_app = next(
-        item
-        for item in bad_ir.transformations
-        if item.kind == SemanticTransformationKind.RESULT_APPLICATION
-    )
-    good_app = next(
-        item
-        for item in good_ir.transformations
-        if item.kind == SemanticTransformationKind.RESULT_APPLICATION
-    )
+    bad_app = _application_for(bad_ir, "lem:transfer")
+    good_app = _application_for(good_ir, "lem:transfer")
     bad_obligation = bad_ir.obligation(bad_app.obligation_addresses[0])
     good_obligation = good_ir.obligation(good_app.obligation_addresses[0])
 
     assert bad_obligation.status == ObligationStatus.UNRESOLVED
-    proof = good_ir.higher.resolved.proof
-    context_dump = {
-        address: proof.proposition(address).model_dump(mode="json")
-        for address in good_obligation.local_context
-    }
-    assert good_obligation.status == ObligationStatus.DISCHARGED, {
-        "obligation": good_obligation.model_dump(mode="json"),
-        "context": context_dump,
-    }
+    assert good_obligation.status == ObligationStatus.DISCHARGED
     assert bad_app.status == InferenceStatus.UNRESOLVED
     assert good_app.status == InferenceStatus.CONFIDENT
     assert "NEED " in bad_doc.render_initial()
