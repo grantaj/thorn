@@ -1,0 +1,52 @@
+name: Apply issue 75 tranche
+
+on:
+  push:
+    branches:
+      - agent/issue-75-proof-ir-context-fidelity
+    paths:
+      - .github/workflows/issue75-apply.yml
+
+permissions:
+  contents: write
+
+env:
+  OPENAI_API_KEY: ""
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-75-proof-ir-context-fidelity
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Apply patch
+        run: python scripts/issue75_patch.py
+      - name: Install
+        run: python -m pip install -e '.[dev]'
+      - name: Targeted regressions
+        run: pytest -q tests/test_proof_ir_context_fidelity.py tests/test_support.py tests/test_canonical_proof_ir.py tests/test_semantic_transformations.py tests/test_llm_proof_language.py
+      - name: Full keyless suite
+        run: pytest -q
+      - name: Corpus checks
+        run: |
+          thorn-eval eval/cases --validate-only
+          thorn-eval eval/cases --analyze
+          thorn analyze examples/demo.tex --structural-only
+          thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
+      - name: Static checks
+        run: |
+          ruff check .
+          mypy src
+      - name: Commit validated implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/issue75-apply.yml scripts/issue75_patch.py
+          git add src/thorn/support_extract.py src/thorn/canonical_proof_ir.py src/thorn/eval_review.py
+          git commit -m "Preserve load-bearing Proof IR context"
+          git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
