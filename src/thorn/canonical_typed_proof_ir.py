@@ -60,12 +60,57 @@ class CanonicalTypedProofEdge(CanonicalProofEdge):
     expression_status: ExprLoweringStatus | None = None
 
 
-class CanonicalTypedProofIR(CanonicalProofIR):
+class CanonicalTypedProofIR(BaseModel):
     """Graph-derived proof IR enriched with Thorn-owned typed expressions."""
 
+    result_identifier: str
     nodes: list[CanonicalTypedProofNode] = Field(default_factory=list)
     edges: list[CanonicalTypedProofEdge] = Field(default_factory=list)
+    sources: list[CanonicalProofSource] = Field(default_factory=list)
+    pruned_claims: int = 0
+    unresolved_math_claims: int = 0
     expression_provenance: list[ExpressionProvenance] = Field(default_factory=list)
+
+    def _legacy_graph(self) -> CanonicalProofIR:
+        """Project to the issue-57 graph representation for compatible rendering."""
+
+        return CanonicalProofIR(
+            result_identifier=self.result_identifier,
+            nodes=[
+                CanonicalProofNode(
+                    address=node.address,
+                    kind=node.kind,
+                    atom=node.atom,
+                    opaque=node.opaque,
+                )
+                for node in self.nodes
+            ],
+            edges=[
+                CanonicalProofEdge(
+                    address=edge.address,
+                    kind=edge.kind,
+                    source=edge.source,
+                    target=edge.target,
+                    status=edge.status,
+                    atom=edge.atom,
+                )
+                for edge in self.edges
+            ],
+            sources=self.sources,
+            pruned_claims=self.pruned_claims,
+            unresolved_math_claims=self.unresolved_math_claims,
+        )
+
+    def render_initial(self) -> str:
+        """Retain the existing graph-derived debug rendering unchanged."""
+
+        return self._legacy_graph().render_initial()
+
+    def source(self, address: str) -> CanonicalProofSource:
+        for item in self.sources:
+            if item.address == address:
+                return item
+        raise KeyError(f"unknown canonical-proof source address {address!r}")
 
     def expression_source(
         self,
@@ -76,6 +121,10 @@ class CanonicalTypedProofIR(CanonicalProofIR):
             if item.owner_address == owner_address and item.path == path:
                 return self.source(item.source_address)
         raise KeyError(f"unknown expression source {owner_address!r} at path {path!r}")
+
+    @property
+    def opaque_nodes(self) -> int:
+        return sum(node.opaque for node in self.nodes)
 
     @property
     def expression_nodes(self) -> int:
@@ -140,7 +189,6 @@ def _node_input_text(
     if node.kind in {
         CanonicalNodeKind.RESULT,
         CanonicalNodeKind.DEPENDENCY,
-        CanonicalNodeKind.OPAQUE_PROSE,
     }:
         return source.text
     return node.atom
@@ -150,12 +198,12 @@ def _typed_node(
     node: CanonicalProofNode,
     source: CanonicalProofSource,
 ) -> CanonicalTypedProofNode:
-    lowering = lower_math_expression(_node_input_text(node, source))
-    if (
-        node.kind == CanonicalNodeKind.OPAQUE_PROSE
-        and lowering.status == ExprLoweringStatus.OPAQUE
-    ):
+    # The graph layer has already classified this as prose. Do not reinterpret a
+    # short prose fragment as an identifier merely because it is tokenizable.
+    if node.kind == CanonicalNodeKind.OPAQUE_PROSE:
         return CanonicalTypedProofNode(**node.model_dump())
+
+    lowering = lower_math_expression(_node_input_text(node, source))
     return CanonicalTypedProofNode(
         **node.model_dump(),
         expression=lowering.expression,
