@@ -201,7 +201,10 @@ def _render_proposition(
                 "only universal quantification is supported in the initial Lean subset",
                 expected=expression,
             )
-        if not isinstance(expression.binder.domain, IdentifierExpr) or expression.binder.domain.name != "N":
+        if (
+            not isinstance(expression.binder.domain, IdentifierExpr)
+            or expression.binder.domain.name != "N"
+        ):
             raise _LeanUnsupported(
                 "the initial Lean subset requires a mechanically recovered natural-number domain",
                 expected=expression,
@@ -324,7 +327,10 @@ def _result_application_term(
         SemanticTransformationKind.RESULT_SPECIALIZATION,
     }:
         raise _LeanUnsupported(
-            f"semantic transformation {transformation.kind.value!r} is outside the initial Lean subset",
+            (
+                f"semantic transformation {transformation.kind.value!r} "
+                "is outside the initial Lean subset"
+            ),
             source_addresses=transformation.source_addresses,
         )
     if transformation.status == InferenceStatus.AMBIGUOUS:
@@ -332,7 +338,10 @@ def _result_application_term(
             "ambiguous semantic transformations are never selected for Lean proof terms",
             source_addresses=transformation.source_addresses,
         )
-    if any(binding.status != InferenceStatus.CONFIDENT for binding in transformation.parameter_bindings):
+    if any(
+        binding.status != InferenceStatus.CONFIDENT
+        for binding in transformation.parameter_bindings
+    ):
         raise _LeanUnsupported(
             "unresolved result instantiation cannot become a Lean proof term",
             source_addresses=transformation.source_addresses,
@@ -369,9 +378,15 @@ def _result_application_term(
         pieces.append(argument)
         hole_lines.extend(lines)
 
-    if transformation.status == InferenceStatus.UNRESOLVED and unresolved_application_obligations == 0:
+    if (
+        transformation.status == InferenceStatus.UNRESOLVED
+        and unresolved_application_obligations == 0
+    ):
         raise _LeanUnsupported(
-            "an unresolved result application without an explicit missing precondition is not exportable",
+            (
+                "an unresolved result application without an explicit missing precondition "
+                "is not exportable"
+            ),
             source_addresses=transformation.opaque_source_addresses
             or transformation.source_addresses,
         )
