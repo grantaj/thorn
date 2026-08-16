@@ -1,0 +1,44 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_result_application_keeps_unmet_precondition_distinct_from_control ____
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_result_application_keeps_0')
+
+    def test_result_application_keeps_unmet_precondition_distinct_from_control(
+        tmp_path: Path,
+    ) -> None:
+        bad = tmp_path / "precondition-bad.tex"
+        good = tmp_path / "precondition-good.tex"
+        _write_precondition_case(bad, "H_A")
+        _write_precondition_case(good, "H_B")
+    
+        _bad_project, bad_ir, bad_doc = _build(bad, "thm:main")
+        _good_project, good_ir, good_doc = _build(good, "thm:main")
+    
+        bad_app = next(
+            item
+            for item in bad_ir.transformations
+            if item.kind == SemanticTransformationKind.RESULT_APPLICATION
+        )
+        good_app = next(
+            item
+            for item in good_ir.transformations
+            if item.kind == SemanticTransformationKind.RESULT_APPLICATION
+        )
+        bad_obligation = bad_ir.obligation(bad_app.obligation_addresses[0])
+        good_obligation = good_ir.obligation(good_app.obligation_addresses[0])
+    
+        assert bad_obligation.status == ObligationStatus.UNRESOLVED
+>       assert good_obligation.status == ObligationStatus.DISCHARGED
+E       AssertionError: assert <ObligationSt... 'unresolved'> == <ObligationSt... 'discharged'>
+E         
+E         - discharged
+E         + unresolved
+
+tests/test_proof_ir_context_fidelity.py:143: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_proof_ir_context_fidelity.py::test_result_application_keeps_unmet_precondition_distinct_from_control - AssertionError: assert <ObligationSt... 'unresolved'> == <ObligationSt... 'discharged'>
+  
+  - discharged
+  + unresolved
+1 failed in 0.24s
