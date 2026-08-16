@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from thorn.proof_skeleton import ProofSkeleton
 
@@ -287,9 +287,9 @@ def _select_dictionary(syntax_lines: list[list[str]]) -> tuple[str, ...]:
     for candidate, count in counts.items():
         if count < 2:
             continue
-        reference_bytes = len("@00;".encode("utf-8"))
+        reference_bytes = len(b"@00;")
         candidate_bytes = len(candidate.encode("utf-8"))
-        entry_bytes = candidate_bytes + len("00=\n".encode("utf-8"))
+        entry_bytes = candidate_bytes + len(b"00=\n")
         estimated = count * (candidate_bytes - reference_bytes) - entry_bytes
         if estimated > 0:
             ranked.append((estimated, candidate_bytes, candidate))
