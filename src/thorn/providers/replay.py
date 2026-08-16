@@ -6,11 +6,13 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
+from thorn.proof_language_review import ProofReviewModelResponse, ProofReviewTurnRequest
 from thorn.providers.base import EvaluationProvider
 from thorn.providers.request_envelope import (
     ProviderRequestEnvelope,
     attack_request_envelope,
     defense_request_envelope,
+    proof_review_request_envelope,
     semantic_request_envelope,
 )
 from thorn.semantic_review_render import SemanticReviewRequest
@@ -61,12 +63,7 @@ class RecordedExchange(BaseModel):
 
 
 class RecordingProvider:
-    """Record successful responses from another evaluation provider.
-
-    Files are keyed by the canonical request fingerprint. Recording happens only
-    after the delegate returns a valid structured response, so failed live calls do
-    not produce replayable fixtures.
-    """
+    """Record successful responses from another evaluation provider."""
 
     def __init__(self, delegate: EvaluationProvider, directory: Path) -> None:
         self._delegate = delegate
@@ -132,6 +129,17 @@ class RecordingProvider:
         self._write(envelope, response, usage)
         return response
 
+    def review_proof_turn(
+        self,
+        request: ProofReviewTurnRequest,
+    ) -> ProofReviewModelResponse:
+        envelope = proof_review_request_envelope(request, self.model)
+        before = RecordedUsage.snapshot(self._delegate)
+        response = self._delegate.review_proof_turn(request)
+        usage = RecordedUsage.snapshot(self._delegate).minus(before)
+        self._write(envelope, response, usage)
+        return response
+
     def defend(
         self,
         unit: TheoremUnit,
@@ -168,7 +176,7 @@ class ReplayProvider:
             raise ReplayMissError(
                 "no recording for "
                 f"{envelope.kind} fingerprint {fingerprint}; the model, prompt, "
-                "rendered input, output schema, or recording set has changed"
+                "rendered input, output schema, protocol metadata, or recording set has changed"
             )
         try:
             exchange = RecordedExchange.model_validate_json(path.read_text(encoding="utf-8"))
@@ -201,6 +209,15 @@ class ReplayProvider:
     def review_semantic(self, request: SemanticReviewRequest) -> AttackReport:
         exchange = self._load(semantic_request_envelope(request, self.model))
         response = AttackReport.model_validate(exchange.response)
+        self._record_hit(exchange)
+        return response
+
+    def review_proof_turn(
+        self,
+        request: ProofReviewTurnRequest,
+    ) -> ProofReviewModelResponse:
+        exchange = self._load(proof_review_request_envelope(request, self.model))
+        response = ProofReviewModelResponse.model_validate(exchange.response)
         self._record_hit(exchange)
         return response
 

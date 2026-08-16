@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "issue": 78,
+  "frozen": true,
+  "description": "Pre-registered keyless challenge set for raw vs thorn-proof/1 vs thorn-proof/1 plus one bounded exact source rescue. Do not tune cases, prompts, protocol, or proof-language rendering in response to live outcomes.",
+  "thorn_base_revision": "86dd3ed3e779c8e558dc865d4d7a339f5e8befd0",
+  "prompt_version": "proof_language_reviewer_v1",
+  "protocol_version": "thorn-proof-review/1",
+  "representation_arms": [
+    "raw",
+    "proof_ir",
+    "proof_ir_rescue"
+  ],
+  "intended_scoring": {
+    "primary": [
+      "planted_defect_recall",
+      "false_positives_on_clean_controls",
+      "mathematical_explanation_correct"
+    ],
+    "secondary": [
+      "source_rescue_frequency",
+      "source_addresses_requested",
+      "initial_input_size",
+      "rescued_source_size",
+      "input_tokens",
+      "output_tokens",
+      "total_tokens",
+      "request_count",
+      "cost",
+      "replay_fingerprint"
+    ],
+    "rule": "A finding counts as correct only when its explanation identifies the planted mathematical issue; taxonomy-category agreement alone is insufficient."
+  },
+  "cases": [
+    {
+      "metadata": "eval/cases/ladder/03_hypotheses/clean_nonzero_cancellation.json",
+      "pair": "missing_precondition",
+      "role": "clean",
+      "expected_issue": "clean control: cancellation is explicitly restricted to a nonzero factor"
+    },
+    {
+      "metadata": "eval/cases/ladder/03_hypotheses/missing_nonzero_hypothesis.json",
+      "pair": "missing_precondition",
+      "role": "defect",
+      "expected_issue": "cancellation divides by a without assuming a != 0; a=0 is a counterexample"
+    },
+    {
+      "metadata": "eval/cases/ladder/06_dependencies/clean_dependency.json",
+      "pair": "upstream_dependency",
+      "role": "clean",
+      "expected_issue": "clean control: the downstream result uses a valid upstream lemma"
+    },
+    {
+      "metadata": "eval/cases/ladder/06_dependencies/bad_lemma_breaks_theorem.json",
+      "pair": "upstream_dependency",
+      "role": "defect",
+      "expected_issue": "the downstream theorem relies on a flawed lemma whose square-root step loses sign"
+    },
+    {
+      "metadata": "eval/cases/ladder/06_support_structure/expository_prose_clean.json",
+      "pair": "load_bearing_prose",
+      "role": "clean",
+      "expected_issue": "clean control: expository prose is not consumed as mathematical support"
+    },
+    {
+      "metadata": "eval/cases/ladder/06_support_structure/sneaky_prose_downstream.json",
+      "pair": "load_bearing_prose",
+      "role": "defect",
+      "expected_issue": "an unsupported full-rank assertion in prose is consumed by a downstream mathematical step"
+    },
+    {
+      "metadata": "eval/cases/ladder/02_readability/clean_unusual_notation.json",
+      "pair": "notation_scope",
+      "role": "clean",
+      "expected_issue": "clean control: unusual notation is consistently scoped and unambiguous"
+    },
+    {
+      "metadata": "eval/cases/ladder/02_readability/notation_collision.json",
+      "pair": "notation_scope",
+      "role": "defect",
+      "expected_issue": "the same notation is reused for incompatible roles, making the mathematical reference ambiguous"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_well_definedness/clean_quotient_map.json",
+      "pair": "definition_well_definedness",
+      "role": "clean",
+      "expected_issue": "clean control: the quotient-map definition is independent of representative"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_well_definedness/quotient_map_not_well_defined.json",
+      "pair": "definition_well_definedness",
+      "role": "defect",
+      "expected_issue": "the proposed quotient-map value depends on the representative, so the definition is not well-defined"
+    },
+    {
+      "metadata": "eval/cases/ladder/05_logic/quantifier_swap.json",
+      "pair": null,
+      "role": "hard_defect",
+      "expected_issue": "a forall-exists witness is illegitimately reused as one exists-forall witness"
+    },
+    {
+      "metadata": "eval/cases/ladder/04_proof_sufficiency/proves_only_weaker_statement.json",
+      "pair": null,
+      "role": "hard_defect",
+      "expected_issue": "the proof establishes boundedness only, not attainment of extrema as the theorem claims"
+    },
+    {
+      "metadata": "eval/cases/ladder/09_hidden_assumptions/riemann_hypothesis_dependency.json",
+      "pair": null,
+      "role": "hard_defect",
+      "expected_issue": "a supporting lemma silently assumes every nontrivial zeta zero has real part 1/2, i.e. RH"
+    }
+  ]
+}

@@ -1,0 +1,261 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from typing import Annotated, Literal, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from thorn.llm_proof_language import (
+    DEFAULT_MAX_SOURCE_REQUESTS,
+    LLMProofLanguage,
+    parse_source_rescue_request,
+    render_source_rescue,
+)
+from thorn.models import AttackReport, CandidateFinding
+
+PROTOCOL_VERSION: Literal["thorn-proof-review/1"] = "thorn-proof-review/1"
+Representation = Literal["raw", "thorn-proof/1"]
+ReviewStage = Literal["initial", "rescue"]
+ReviewAction = Literal["review", "need_source"]
+SourceAddress = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z][A-Za-z0-9:._-]*$"),
+]
+
+
+_SOURCE_HANDLE_RE = re.compile(
+    r"@([A-Za-z][A-Za-z0-9:._-]*(?:,[A-Za-z][A-Za-z0-9:._-]*)*)"
+)
+
+
+def advertised_source_addresses(document: LLMProofLanguage) -> tuple[str, ...]:
+    """Return only source handles visibly advertised in the exact initial packet."""
+
+    seen: dict[str, None] = {}
+    for match in _SOURCE_HANDLE_RE.finditer(document.render_initial()):
+        for address in match.group(1).split(","):
+            seen.setdefault(address, None)
+    return tuple(seen)
+
+
+class ProofReviewProtocolError(RuntimeError):
+    """Raised when a proof-language review violates Thorn's bounded protocol."""
+
+
+class ProofReviewModelResponse(BaseModel):
+    """One structured model response in the proof-language review protocol."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    action: ReviewAction
+    findings: tuple[CandidateFinding, ...] = ()
+    source_addresses: tuple[SourceAddress, ...] = ()
+
+    @model_validator(mode="after")
+    def _validate_action_payload(self) -> ProofReviewModelResponse:
+        if self.action == "review" and self.source_addresses:
+            raise ValueError("review responses must not request source")
+        if self.action == "need_source" and self.findings:
+            raise ValueError("source requests must not include findings")
+        if self.action == "need_source" and not self.source_addresses:
+            raise ValueError("source requests must contain at least one address")
+        return self
+
+    def canonical_json(self) -> str:
+        return json.dumps(
+            self.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+
+
+class ProofReviewTurnRequest(BaseModel):
+    """Provider-neutral description of one transport turn."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    protocol_version: Literal["thorn-proof-review/1"] = PROTOCOL_VERSION
+    representation: Representation
+    stage: ReviewStage
+    initial_packet_fingerprint: str
+    user_content: str
+    source_rescue_allowed: bool
+    requested_source_addresses: tuple[str, ...] = ()
+    initial_user_content: str | None = None
+    prior_response: ProofReviewModelResponse | None = None
+
+    @model_validator(mode="after")
+    def _validate_stage(self) -> ProofReviewTurnRequest:
+        if self.stage == "initial" and self.requested_source_addresses:
+            raise ValueError("initial turns cannot contain requested source addresses")
+        if (
+            self.stage == "initial"
+            and (self.initial_user_content is not None or self.prior_response is not None)
+        ):
+            raise ValueError("initial turns cannot contain rescue transcript fields")
+        if self.stage == "rescue" and not self.requested_source_addresses:
+            raise ValueError("rescue turns require source addresses")
+        if (
+            self.stage == "rescue"
+            and (self.initial_user_content is None or self.prior_response is None)
+        ):
+            raise ValueError("rescue turns require the exact initial turn and prior response")
+        if self.stage == "rescue" and self.source_rescue_allowed:
+            raise ValueError("source rescue is exhausted after the first request")
+        return self
+
+
+class ProofLanguageReviewRequest(BaseModel):
+    """Thorn-owned request for semantic review over one ``thorn-proof/1`` packet."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    protocol_version: Literal["thorn-proof-review/1"] = PROTOCOL_VERSION
+    document: LLMProofLanguage
+    allow_source_rescue: bool = True
+    max_source_addresses: int = Field(
+        default=DEFAULT_MAX_SOURCE_REQUESTS,
+        ge=1,
+        le=DEFAULT_MAX_SOURCE_REQUESTS,
+    )
+
+
+class ProofReviewTransport(Protocol):
+    model: str
+
+    def review_proof_turn(self, request: ProofReviewTurnRequest) -> ProofReviewModelResponse: ...
+
+
+def _content_fingerprint(representation: Representation, content: str) -> str:
+    payload = representation + "\n" + content
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _initial_user_content(
+    *,
+    representation: Representation,
+    packet_fingerprint: str,
+    content: str,
+    source_rescue_allowed: bool,
+) -> str:
+    rescue = "allowed-once" if source_rescue_allowed else "disabled"
+    return (
+        "THORN-REVIEW 1\n"
+        f"REPRESENTATION {representation}\n"
+        f"INITIAL_PACKET_FINGERPRINT {packet_fingerprint}\n"
+        f"SOURCE_RESCUE {rescue}\n\n"
+        f"{content}"
+    )
+
+
+def build_raw_review_turn(content: str) -> ProofReviewTurnRequest:
+    fingerprint = _content_fingerprint("raw", content)
+    return ProofReviewTurnRequest(
+        representation="raw",
+        stage="initial",
+        initial_packet_fingerprint=fingerprint,
+        user_content=_initial_user_content(
+            representation="raw",
+            packet_fingerprint=fingerprint,
+            content=content,
+            source_rescue_allowed=False,
+        ),
+        source_rescue_allowed=False,
+    )
+
+
+def build_proof_review_turn(
+    request: ProofLanguageReviewRequest,
+) -> ProofReviewTurnRequest:
+    document = request.document
+    return ProofReviewTurnRequest(
+        representation="thorn-proof/1",
+        stage="initial",
+        initial_packet_fingerprint=document.fingerprint(),
+        user_content=_initial_user_content(
+            representation="thorn-proof/1",
+            packet_fingerprint=document.fingerprint(),
+            content=document.render_initial(),
+            source_rescue_allowed=request.allow_source_rescue,
+        ),
+        source_rescue_allowed=request.allow_source_rescue,
+    )
+
+
+def _source_command(addresses: tuple[str, ...]) -> str:
+    return "NEED_SOURCE " + ",".join(addresses)
+
+
+def build_rescue_turn(
+    request: ProofLanguageReviewRequest,
+    initial_turn: ProofReviewTurnRequest,
+    source_request: ProofReviewModelResponse,
+) -> ProofReviewTurnRequest:
+    if initial_turn.representation != "thorn-proof/1":
+        raise ProofReviewProtocolError("raw review does not support source rescue")
+    if not request.allow_source_rescue or not initial_turn.source_rescue_allowed:
+        raise ProofReviewProtocolError("source rescue is disabled for this review arm")
+    if source_request.action != "need_source":
+        raise ProofReviewProtocolError("rescue turn requires a structured source request")
+    if initial_turn.initial_packet_fingerprint != request.document.fingerprint():
+        raise ProofReviewProtocolError("initial turn does not match the proof-language packet")
+
+    advertised = set(advertised_source_addresses(request.document))
+    unadvertised = [
+        address for address in source_request.source_addresses if address not in advertised
+    ]
+    if unadvertised:
+        raise ProofReviewProtocolError(
+            "source address was not advertised in the initial packet: "
+            + ", ".join(unadvertised)
+        )
+
+    try:
+        parsed = parse_source_rescue_request(
+            request.document,
+            _source_command(source_request.source_addresses),
+            max_addresses=request.max_source_addresses,
+            round_number=1,
+        )
+        rescue = render_source_rescue(request.document, parsed)
+    except (KeyError, ValueError) as exc:
+        raise ProofReviewProtocolError(str(exc)) from exc
+
+    return ProofReviewTurnRequest(
+        representation="thorn-proof/1",
+        stage="rescue",
+        initial_packet_fingerprint=request.document.fingerprint(),
+        user_content=(
+            "THORN-REVIEW SOURCE-RESCUE 1\n"
+            f"INITIAL_PACKET_FINGERPRINT {request.document.fingerprint()}\n"
+            "SOURCE_RESCUE exhausted\n\n"
+            f"{rescue.text}"
+        ),
+        source_rescue_allowed=False,
+        requested_source_addresses=parsed.addresses,
+        initial_user_content=initial_turn.user_content,
+        prior_response=source_request,
+    )
+
+
+def review_proof_language(
+    request: ProofLanguageReviewRequest,
+    transport: ProofReviewTransport,
+) -> AttackReport:
+    """Review a proof-language packet with at most one exact source-rescue round."""
+
+    initial_turn = build_proof_review_turn(request)
+    first = transport.review_proof_turn(initial_turn)
+    if first.action == "review":
+        return AttackReport(findings=list(first.findings))
+    if not request.allow_source_rescue:
+        raise ProofReviewProtocolError("model requested source but source rescue is disabled")
+
+    rescue_turn = build_rescue_turn(request, initial_turn, first)
+    second = transport.review_proof_turn(rescue_turn)
+    if second.action != "review":
+        raise ProofReviewProtocolError("a second source-rescue request is not allowed")
+    return AttackReport(findings=list(second.findings))

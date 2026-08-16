@@ -22,5 +22,6 @@ jobs:
       - run: thorn analyze examples/demo.tex --structural-only
       - run: thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
       - run: python scripts/measure_typed_formula_ir.py --output /tmp/typed-formula-ir.json
+      - run: python scripts/prepare_proof_review_experiment.py --structural-only --output /tmp/proof-review-inventory.json
       - run: ruff check .
       - run: mypy src
