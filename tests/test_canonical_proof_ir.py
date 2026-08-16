@@ -79,7 +79,7 @@ def test_safe_mathematical_vocabulary_normalizes_to_symbols() -> None:
 
     assert first == second == "∀x∈ X.(P(x)⇒Q(x))"
     assert normalize_latex_math(
-        r"\\forall x\\in X, P(x)\\Rightarrow Q(x)"
+        r"\forall x\in X, P(x)\Rightarrow Q(x)"
     ) == "∀ x∈ X, P(x)⇒ Q(x)"
 
 
