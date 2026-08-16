@@ -64,7 +64,7 @@ class LLMProofLanguage(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    format_version: Literal["thorn-proof/1"] = FORMAT_VERSION
+    format_version: Literal["thorn-proof/1"] = "thorn-proof/1"
     result_identifier: str
     lines: tuple[str, ...] = ()
     sources: tuple[ProofLanguageSourceHandle, ...] = ()
