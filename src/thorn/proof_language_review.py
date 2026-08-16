@@ -28,16 +28,102 @@ SourceAddress = Annotated[
 _SOURCE_HANDLE_RE = re.compile(
     r"@([A-Za-z][A-Za-z0-9:._-]*(?:,[A-Za-z][A-Za-z0-9:._-]*)*)"
 )
+_OBLIGATION_CONTEXT_RE = re.compile(
+    r"^(?:HOLE|GOAL)\s+\S+\s+([A-Za-z][A-Za-z0-9:._-]*):"
+    r".*?\|\s*ctx\s+([^|]+?)\s*\|"
+)
+
+_PROOF_IR_REVIEW_POLICY = (
+    "REVIEW_POLICY unresolved Proof-IR recovery markers (?, ~, HOLE, NEED) are "
+    "not mathematical defects. Use source rescue when needed. Never report a "
+    "defect solely because deterministic recovery remains unresolved."
+)
+_FINAL_RESCUE_POLICY = (
+    "FINAL_RESCUE_POLICY source rescue is now exhausted. If deterministic "
+    "recovery remains unresolved, do not convert that uncertainty into a "
+    "mathematical finding unless the supplied mathematical content itself "
+    "establishes the defect."
+)
+
+
+def _source_addresses_in_text(text: str) -> tuple[str, ...]:
+    seen: dict[str, None] = {}
+    for match in _SOURCE_HANDLE_RE.finditer(text):
+        for address in match.group(1).split(","):
+            seen.setdefault(address, None)
+    return tuple(seen)
 
 
 def advertised_source_addresses(document: LLMProofLanguage) -> tuple[str, ...]:
     """Return only source handles visibly advertised in the exact initial packet."""
 
-    seen: dict[str, None] = {}
-    for match in _SOURCE_HANDLE_RE.finditer(document.render_initial()):
-        for address in match.group(1).split(","):
-            seen.setdefault(address, None)
-    return tuple(seen)
+    return _source_addresses_in_text(document.render_initial())
+
+
+def _expanded_source_addresses(
+    document: LLMProofLanguage,
+    requested: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Expand requested source to unresolved Proof-IR prerequisite context.
+
+    ``HOLE`` and ``GOAL`` lines already expose the deterministic local context of
+    unresolved propositions.  When the model asks for a proposition's exact
+    source, include the exact source for unresolved context propositions first.
+    This is a bounded source-selection operation over the existing proof-language
+    packet; it does not infer any new mathematical edge.
+    """
+
+    contexts: dict[str, tuple[str, ...]] = {}
+    proposition_source: dict[str, str] = {}
+    for line in document.lines:
+        match = _OBLIGATION_CONTEXT_RE.match(line)
+        if match is None:
+            continue
+        proposition = match.group(1)
+        raw_context = match.group(2).strip()
+        contexts[proposition] = tuple(
+            item.strip()
+            for item in raw_context.split(",")
+            if item.strip() and item.strip() != "-"
+        )
+        handles = _source_addresses_in_text(line)
+        if proposition in handles:
+            proposition_source[proposition] = proposition
+        elif handles:
+            proposition_source[proposition] = handles[-1]
+
+    source_proposition = {
+        source: proposition for proposition, source in proposition_source.items()
+    }
+    advertised = set(advertised_source_addresses(document))
+    expanded: list[str] = []
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def add_source(address: str) -> None:
+        if address in advertised and address not in expanded:
+            expanded.append(address)
+
+    def visit(proposition: str) -> None:
+        if proposition in visited or proposition in visiting:
+            return
+        visiting.add(proposition)
+        for dependency in contexts.get(proposition, ()):
+            visit(dependency)
+        visiting.remove(proposition)
+        visited.add(proposition)
+        source = proposition_source.get(proposition)
+        if source is not None:
+            add_source(source)
+
+    for address in requested:
+        proposition = address if address in contexts else source_proposition.get(address)
+        if proposition is None:
+            add_source(address)
+        else:
+            visit(proposition)
+
+    return tuple(expanded)
 
 
 class ProofReviewProtocolError(RuntimeError):
@@ -142,11 +228,17 @@ def _initial_user_content(
     source_rescue_allowed: bool,
 ) -> str:
     rescue = "allowed-once" if source_rescue_allowed else "disabled"
+    policy = (
+        f"\n{_PROOF_IR_REVIEW_POLICY}\n"
+        if representation == "thorn-proof/1"
+        else ""
+    )
     return (
         "THORN-REVIEW 1\n"
         f"REPRESENTATION {representation}\n"
         f"INITIAL_PACKET_FINGERPRINT {packet_fingerprint}\n"
-        f"SOURCE_RESCUE {rescue}\n\n"
+        f"SOURCE_RESCUE {rescue}\n"
+        f"{policy}\n"
         f"{content}"
     )
 
@@ -213,10 +305,14 @@ def build_rescue_turn(
             + ", ".join(unadvertised)
         )
 
+    expanded_addresses = _expanded_source_addresses(
+        request.document,
+        source_request.source_addresses,
+    )
     try:
         parsed = parse_source_rescue_request(
             request.document,
-            _source_command(source_request.source_addresses),
+            _source_command(expanded_addresses),
             max_addresses=request.max_source_addresses,
             round_number=1,
         )
@@ -231,7 +327,8 @@ def build_rescue_turn(
         user_content=(
             "THORN-REVIEW SOURCE-RESCUE 1\n"
             f"INITIAL_PACKET_FINGERPRINT {request.document.fingerprint()}\n"
-            "SOURCE_RESCUE exhausted\n\n"
+            "SOURCE_RESCUE exhausted\n"
+            f"{_FINAL_RESCUE_POLICY}\n\n"
             f"{rescue.text}"
         ),
         source_rescue_allowed=False,
