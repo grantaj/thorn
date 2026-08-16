@@ -1119,11 +1119,14 @@ def _substitution_operations(proof: ProofObligationIR) -> list[SubstitutionOpera
         if conclusion.expression is not None:
             for equality_address, equality in equality_premises:
                 for input_proposition in input_premises:
+                    input_expression = input_proposition.expression
+                    if input_expression is None:
+                        continue
                     for reverse in (False, True):
                         old = equality.right if reverse else equality.left
                         new = equality.left if reverse else equality.right
                         replacement = _match_exact_replacement(
-                            input_proposition.expression,
+                            input_expression,
                             conclusion.expression,
                             old=old,
                             new=new,
