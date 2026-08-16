@@ -41,12 +41,6 @@ class Quantifier(StrEnum):
     EXISTS = "∃"
 
 
-class BuiltinDomain(StrEnum):
-    """Standard domains whose identity was mechanically explicit in source."""
-
-    NATURALS = "naturals"
-
-
 class _ExprModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -54,13 +48,6 @@ class _ExprModel(BaseModel):
 class IdentifierExpr(_ExprModel):
     kind: Literal["identifier"] = "identifier"
     name: str
-
-
-class BuiltinDomainExpr(_ExprModel):
-    """A standard mathematical domain, distinct from a same-named manuscript symbol."""
-
-    kind: Literal["builtin_domain"] = "builtin_domain"
-    domain: BuiltinDomain
 
 
 class LiteralExpr(_ExprModel):
@@ -130,7 +117,6 @@ class QuantifiedExpr(_ExprModel):
 
 MathExpr: TypeAlias = Annotated[
     IdentifierExpr
-    | BuiltinDomainExpr
     | LiteralExpr
     | OpaqueExpr
     | ApplyExpr
@@ -407,7 +393,7 @@ class _Parser:
         if token.kind == "NUMBER":
             return LiteralExpr(value=token.text)
         if token.kind == "DOMAIN":
-            return BuiltinDomainExpr(domain=BuiltinDomain.NATURALS)
+            return LiteralExpr(value="ℕ")
         if token.kind == "IDENT":
             return IdentifierExpr(name=token.text)
         if token.text == "(":
@@ -708,10 +694,6 @@ def render_math_expr(expression: MathExpr) -> str:
 
     if isinstance(expression, IdentifierExpr):
         return expression.name
-    if isinstance(expression, BuiltinDomainExpr):
-        if expression.domain == BuiltinDomain.NATURALS:
-            return "ℕ"
-        raise TypeError(f"unsupported built-in domain {expression.domain!r}")
     if isinstance(expression, LiteralExpr):
         return expression.value
     if isinstance(expression, OpaqueExpr):

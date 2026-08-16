@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from thorn.formula_ir import (
-    BuiltinDomain,
-    BuiltinDomainExpr,
     IdentifierExpr,
+    LiteralExpr,
     QuantifiedExpr,
     lower_math_expression,
     render_math_expr,
@@ -19,7 +18,7 @@ def test_builtin_naturals_are_distinct_from_named_domain_n() -> None:
     assert isinstance(mathbb_n.expression, QuantifiedExpr)
     assert isinstance(named_n.expression, QuantifiedExpr)
 
-    builtin = BuiltinDomainExpr(domain=BuiltinDomain.NATURALS)
+    builtin = LiteralExpr(value="ℕ")
     assert natural_word.expression.binder.domain == builtin
     assert mathbb_n.expression.binder.domain == builtin
     assert named_n.expression.binder.domain == IdentifierExpr(name="N")

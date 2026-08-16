@@ -8,8 +8,6 @@ from pydantic import BaseModel, ConfigDict
 from thorn.evidence import InferenceStatus
 from thorn.formula_ir import (
     ApplyExpr,
-    BuiltinDomain,
-    BuiltinDomainExpr,
     IdentifierExpr,
     LiteralExpr,
     LogicalExpr,
@@ -177,8 +175,8 @@ def _collect_nat_predicates(
         next_bound = bound_nat
         if (
             expression.quantifier == Quantifier.FOR_ALL
-            and isinstance(expression.binder.domain, BuiltinDomainExpr)
-            and expression.binder.domain.domain == BuiltinDomain.NATURALS
+            and isinstance(expression.binder.domain, LiteralExpr)
+            and expression.binder.domain.value == "ℕ"
         ):
             next_bound = bound_nat | {expression.binder.name.name}
         result.update(_collect_nat_predicates(expression.body, bound_nat=next_bound))
@@ -247,8 +245,8 @@ def _render_proposition(
                 expected=expression,
             )
         if (
-            not isinstance(expression.binder.domain, BuiltinDomainExpr)
-            or expression.binder.domain.domain != BuiltinDomain.NATURALS
+            not isinstance(expression.binder.domain, LiteralExpr)
+            or expression.binder.domain.value != "ℕ"
         ):
             raise _LeanUnsupported(
                 "the initial Lean subset requires a mechanically recovered built-in natural-number domain",
