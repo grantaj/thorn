@@ -202,6 +202,8 @@ Q(A_\tau)
         document,
         parse_source_rescue_request(document, "NEED_SOURCE D1"),
     )
+    # Canonical IR records the recovered semantic operator as :=, while rescue
+    # remains an exact source view and therefore retains the manuscript macro.
     assert r"\meaningop" in rescue.text
     assert r"\tau^2" in rescue.text
 
