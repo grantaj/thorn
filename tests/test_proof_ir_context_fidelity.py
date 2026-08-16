@@ -142,7 +142,15 @@ def test_result_application_keeps_unmet_precondition_distinct_from_control(
     good_obligation = good_ir.obligation(good_app.obligation_addresses[0])
 
     assert bad_obligation.status == ObligationStatus.UNRESOLVED
-    assert good_obligation.status == ObligationStatus.DISCHARGED
+    proof = good_ir.higher.resolved.proof
+    context_dump = {
+        address: proof.proposition(address).model_dump(mode="json")
+        for address in good_obligation.local_context
+    }
+    assert good_obligation.status == ObligationStatus.DISCHARGED, {
+        "obligation": good_obligation.model_dump(mode="json"),
+        "context": context_dump,
+    }
     assert bad_app.status == InferenceStatus.UNRESOLVED
     assert good_app.status == InferenceStatus.CONFIDENT
     assert "NEED " in bad_doc.render_initial()
