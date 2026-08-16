@@ -52,7 +52,7 @@ rich / uncertainty-bearing Thorn Math IR
 
 Thorn is intended to sit between ordinary mathematical practice and increasingly capable AI systems.
 
-A mathematician should be able to keep writing normal mathematics while Thorn provides a stable shared representation that an AI reviewer, proof assistant, editor, navigator, or specialised mathematical model can consume. The human-facing source remains the manuscript; the machine-facing source of truth is increasingly the canonical Proof IR plus exact correspondence back to the manuscript.
+A mathematician should be able to keep writing normal mathematics while Thorn provides a stable shared representation that an AI reviewer, proof assistant, editor, navigator, or specialised mathematical model can consume. The human-facing source remains the manuscript; the machine-facing working representation is increasingly the canonical Proof IR plus exact correspondence back to the manuscript.
 
 This gives AI a better interface than raw LaTeX alone. Instead of repeatedly inferring that a sentence introduced a witness, instantiated a theorem, discharged an obligation, or reused a definition, Thorn should encode those operations structurally whenever it has enough evidence.
 
@@ -231,6 +231,14 @@ AI semantic review is a primary intended consumer, but the canonical representat
 ### Offline diagnostics do not define the architecture
 
 A useful deterministic rule is welcome, but inability to check a mathematical fact locally is not a reason to omit it from the IR. The representation should capture the strongest faithful mathematical structure Thorn can recover; different consumers can apply different assurance regimes to it.
+
+## Diagnostic and readability boundary
+
+A Thorn finding should be specific enough that an author can either fix it or refute it. Model-backed findings should identify a concrete mathematical concern rather than produce vague referee prose.
+
+Deterministic `thorn analyze` findings state only mechanically established facts. Ambiguous or unresolved relations can remain useful IR without becoming findings, and Thorn must not claim that a theorem is false merely because a relation is missing or linguistically uncertain.
+
+Thorn also distinguishes objective mathematical readability from subjective style. A simultaneous notation collision or materially ambiguous convention can be reviewable; merely preferring a different symbol, prose rhythm, or house style is not. Style rules should come from an explicitly adopted external style guide rather than model taste.
 
 ## Test-driven specification
 
