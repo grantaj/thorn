@@ -72,12 +72,18 @@ def test_skeleton_addresses_are_unique_deterministic_and_not_source_payloads() -
     rendered = first.render_initial()
     for source in first.sources:
         assert source.address in rendered
-        if source.kind in {
-            SkeletonSourceKind.RESULT,
-            SkeletonSourceKind.CLAIM,
-            SkeletonSourceKind.SUPPORT,
-        } and not any(marker in source.text for marker in ("$", "\\[", "\\(")):
-            assert source.text.strip() not in rendered
+        source_text = source.text.strip()
+        if (
+            source_text
+            and source.kind
+            in {
+                SkeletonSourceKind.RESULT,
+                SkeletonSourceKind.CLAIM,
+                SkeletonSourceKind.SUPPORT,
+            }
+            and not any(marker in source.text for marker in ("$", "\\[", "\\("))
+        ):
+            assert source_text not in rendered
 
 
 def test_unknown_source_address_fails_loudly() -> None:
