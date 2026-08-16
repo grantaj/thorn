@@ -70,7 +70,7 @@ def test_positive_latex_reaches_complete_deterministic_lean() -> None:
         "theorem thorn_thm_main (P Q : Nat → Prop) (r1 : P 0) "
         "(r2 : ∀ x : Nat, P x → Q x) : Q 0 := by\n"
         "  have c1 : P 0 := r1\n"
-        "  have c2 : Q 0 := r2 0 c1\n"
+        "  have c2 : Q 0 := r2 0 r1\n"
         "  exact c2\n"
     )
 
