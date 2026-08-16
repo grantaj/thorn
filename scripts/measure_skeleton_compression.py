@@ -11,7 +11,8 @@ from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
 from thorn.local_nlp import select_linguistic_frontend
 from thorn.models import TheoremUnit
-from thorn.proof_skeleton import build_proof_skeleton
+from thorn.proof_skeleton import ProofSkeleton, build_proof_skeleton
+from thorn.proof_skeleton_codec import encode_skeleton_bundle
 from thorn.providers.request_envelope import render_theorem_unit
 from thorn.semantic_review_compact import render_compact_semantic_review_request
 from thorn.semantic_review_render import build_semantic_review_request
@@ -22,7 +23,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Measure raw vs compact-IR vs source-addressable proof-skeleton size "
-            "without constructing a semantic provider."
+            "and exact reversible skeleton coding without constructing a semantic provider."
         )
     )
     parser.add_argument("case_dir", type=Path, nargs="?", default=Path("eval/cases"))
@@ -90,6 +91,7 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
         factory=SpacyLinguisticFrontend,
     )
     records: list[dict[str, Any]] = []
+    skeletons: list[ProofSkeleton] = []
 
     for tex_path, expectation in _load_cases(case_dir):
         project = extract_project(tex_path, linguistic_frontend=linguistic_frontend)
@@ -104,10 +106,13 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
         raw = render_theorem_unit(unit)
         compact = render_compact_semantic_review_request(request)
         skeleton = build_proof_skeleton(unit, request)
+        skeletons.append(skeleton)
         initial = skeleton.render_initial()
         raw_size = _size(raw)
         compact_size = _size(compact)
         skeleton_size = _size(initial)
+        syntax_only = encode_skeleton_bundle([skeleton], use_dictionary=False)
+        reversible = encode_skeleton_bundle([skeleton])
         withheld_lines = sum("~" in line for line in skeleton.lines)
 
         records.append(
@@ -118,8 +123,14 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
                 "raw": raw_size,
                 "compact_ir": compact_size,
                 "skeleton": skeleton_size,
+                "reversible_standalone": _size(reversible.wire_text),
+                "reversible_syntax_only_standalone": _size(syntax_only.wire_text),
+                "reversible_dictionary_entries": len(reversible.dictionary),
                 "raw_over_skeleton": _ratio(
                     raw_size["characters"], skeleton_size["characters"]
+                ),
+                "raw_over_reversible_standalone": _ratio(
+                    raw_size["characters"], reversible.characters
                 ),
                 "compact_over_skeleton": _ratio(
                     compact_size["characters"], skeleton_size["characters"]
@@ -130,10 +141,17 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
             }
         )
 
+    suite_syntax_only = encode_skeleton_bundle(skeletons, use_dictionary=False)
+    suite_reversible = encode_skeleton_bundle(skeletons)
+
     raw_chars = sum(record["raw"]["characters"] for record in records)
     compact_chars = sum(record["compact_ir"]["characters"] for record in records)
     skeleton_chars = sum(record["skeleton"]["characters"] for record in records)
+    standalone_reversible_chars = sum(
+        record["reversible_standalone"]["characters"] for record in records
+    )
     raw_ratios = [record["raw_over_skeleton"] for record in records]
+    reversible_ratios = [record["raw_over_reversible_standalone"] for record in records]
     compact_ratios = [record["compact_over_skeleton"] for record in records]
 
     summary = {
@@ -147,17 +165,51 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
             "raw": raw_chars,
             "compact_ir": compact_chars,
             "skeleton": skeleton_chars,
+            "reversible_standalone_total": standalone_reversible_chars,
+            "reversible_suite_syntax_only_bundle": suite_syntax_only.characters,
+            "reversible_suite_dictionary_bundle": suite_reversible.characters,
+        },
+        "utf8_bytes": {
+            "reversible_suite_syntax_only_bundle": suite_syntax_only.utf8_bytes,
+            "reversible_suite_dictionary_bundle": suite_reversible.utf8_bytes,
         },
         "aggregate_compression": {
             "raw_over_skeleton": _ratio(raw_chars, skeleton_chars),
             "compact_over_skeleton": _ratio(compact_chars, skeleton_chars),
+            "raw_over_reversible_standalone_total": _ratio(
+                raw_chars, standalone_reversible_chars
+            ),
+            "raw_over_reversible_suite_bundle": _ratio(
+                raw_chars, suite_reversible.characters
+            ),
+            "skeleton_over_reversible_suite_bundle": _ratio(
+                skeleton_chars, suite_reversible.characters
+            ),
+        },
+        "reversible_breakdown": {
+            "suite_dictionary_entries": len(suite_reversible.dictionary),
+            "syntax_only_chars_saved_vs_skeleton": (
+                skeleton_chars - suite_syntax_only.characters
+            ),
+            "dictionary_chars_saved_after_syntax": (
+                suite_syntax_only.characters - suite_reversible.characters
+            ),
+            "total_chars_saved_vs_skeleton": (
+                skeleton_chars - suite_reversible.characters
+            ),
         },
         "per_case_compression": {
             "median_raw_over_skeleton": statistics.median(raw_ratios),
+            "median_raw_over_reversible_standalone": statistics.median(
+                reversible_ratios
+            ),
             "median_compact_over_skeleton": statistics.median(compact_ratios),
             "min_raw_over_skeleton": min(raw_ratios),
             "max_raw_over_skeleton": max(raw_ratios),
             "cases_at_least_10x_raw": sum(ratio >= 10.0 for ratio in raw_ratios),
+            "standalone_reversible_cases_at_least_10x_raw": sum(
+                ratio >= 10.0 for ratio in reversible_ratios
+            ),
         },
         "source_addressing": {
             "addresses": sum(record["source_addresses"] for record in records),
