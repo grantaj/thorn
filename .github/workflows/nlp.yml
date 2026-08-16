@@ -17,6 +17,7 @@ on:
       - "src/thorn/higher_proof_structure.py"
       - "src/thorn/latex.py"
       - "src/thorn/linguistic*.py"
+      - "src/thorn/llm_proof_language.py"
       - "src/thorn/local_nlp.py"
       - "src/thorn/proof_obligations.py"
       - "src/thorn/proof_skeleton.py"
@@ -29,6 +30,7 @@ on:
       - "src/thorn/symbol_resolution_ir.py"
       - "src/thorn/symbols.py"
       - "eval/HIGHER_PROOF_STRUCTURE.md"
+      - "eval/LLM_PROOF_LANGUAGE.md"
       - "eval/README.md"
       - "eval/IR_VALUE_EXPERIMENT.md"
       - "eval/PROOF_OBLIGATIONS.md"
@@ -37,6 +39,7 @@ on:
       - "eval/SYMBOL_SCOPE_RESOLUTION.md"
       - "eval/TYPED_FORMULA_IR.md"
       - "eval/ir-value-challenge.json"
+      - "scripts/measure_llm_proof_language.py"
       - "scripts/measure_skeleton_compression.py"
       - "scripts/measure_typed_formula_ir.py"
       - "scripts/prepare_ir_value_experiment.py"
@@ -47,6 +50,7 @@ on:
       - "tests/test_formula_ir.py"
       - "tests/test_higher_proof_structure.py"
       - "tests/test_linguistic_*.py"
+      - "tests/test_llm_proof_language.py"
       - "tests/test_proof_obligations.py"
       - "tests/test_proof_skeleton.py"
       - "tests/test_semantic_experiment.py"
@@ -72,7 +76,7 @@ jobs:
           python -m spacy download en_core_web_sm
       - name: Run parser-neutral unit contracts
         run: |
-          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py tests/test_proof_skeleton.py tests/test_proof_obligations.py tests/test_symbol_resolution*.py tests/test_higher_proof_structure.py tests/test_semantic_transformations.py
+          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py tests/test_proof_skeleton.py tests/test_proof_obligations.py tests/test_symbol_resolution*.py tests/test_higher_proof_structure.py tests/test_semantic_transformations.py tests/test_llm_proof_language.py
       - name: Check Thorn-owned spaCy behavior over the 70-case corpus
         run: python research/semantic-parser-bakeoff/check_spacy_contract.py
       - name: Exercise the normal CLI linguistic path
@@ -90,3 +94,6 @@ jobs:
       - name: Measure source-addressable skeleton compression
         run: |
           python scripts/measure_skeleton_compression.py --output /tmp/skeleton-compression.json
+      - name: Measure stable LLM proof language
+        run: |
+          python scripts/measure_llm_proof_language.py --output /tmp/llm-proof-language.json
