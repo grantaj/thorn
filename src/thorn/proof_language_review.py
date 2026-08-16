@@ -15,7 +15,7 @@ from thorn.llm_proof_language import (
 )
 from thorn.models import AttackReport, CandidateFinding
 
-PROTOCOL_VERSION = "thorn-proof-review/1"
+PROTOCOL_VERSION: Literal["thorn-proof-review/1"] = "thorn-proof-review/1"
 Representation = Literal["raw", "thorn-proof/1"]
 ReviewStage = Literal["initial", "rescue"]
 ReviewAction = Literal["review", "need_source"]
