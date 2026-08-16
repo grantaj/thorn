@@ -270,7 +270,14 @@ def _tokens(text: str) -> list[_Token]:
         kind = match.lastgroup
         assert kind is not None
         if kind != "SPACE":
-            result.append(_Token(kind=kind, text=match.group(0), start=match.start(), end=match.end()))
+            result.append(
+                _Token(
+                    kind=kind,
+                    text=match.group(0),
+                    start=match.start(),
+                    end=match.end(),
+                )
+            )
         position = match.end()
     return result
 
@@ -310,7 +317,6 @@ _RIGHT_ASSOCIATIVE = {"⇒", "^"}
 
 class _Parser:
     def __init__(self, text: str) -> None:
-        self.text = text
         self.tokens = _tokens(text)
         self.index = 0
 
@@ -428,7 +434,10 @@ def _combine(operator: str, left: MathExpr, right: MathExpr) -> MathExpr:
     return OperatorExpr(operator=operator, arguments=(left, right))
 
 
-def _top_level_word_split(text: str, phrases: tuple[str, ...]) -> tuple[str, str, str] | None:
+def _top_level_word_split(
+    text: str,
+    phrases: tuple[str, ...],
+) -> tuple[str, str, str] | None:
     lower = text.lower()
     depth = 0
     index = 0
@@ -436,7 +445,7 @@ def _top_level_word_split(text: str, phrases: tuple[str, ...]) -> tuple[str, str
         char = text[index]
         if char in "({[":
             depth += 1
-        elif char in ")}]"):
+        elif char in ")} ]".replace(" ", ""):
             depth = max(0, depth - 1)
         if depth == 0:
             for phrase in phrases:
@@ -515,6 +524,14 @@ def _lower_or_opaque(text: str) -> MathExpr:
         return OpaqueExpr(text=text.strip())
 
 
+def _domain_text(domain_word: str | None, explicit_domain: str | None) -> str | None:
+    if explicit_domain is not None:
+        return explicit_domain
+    if domain_word is None:
+        return None
+    return _DOMAIN_WORDS.get(domain_word.lower())
+
+
 def _lower_quantifier(text: str) -> QuantifiedExpr | None:
     english = re.fullmatch(
         r"(?is)(?:for all|for every|for each)\s+"
@@ -525,7 +542,7 @@ def _lower_quantifier(text: str) -> QuantifiedExpr | None:
     )
     if english is not None:
         domain_word, name, explicit_domain, body = english.groups()
-        domain_text = explicit_domain or (_DOMAIN_WORDS.get((domain_word or "").lower()))
+        domain_text = _domain_text(domain_word, explicit_domain)
         domain = _lower_or_opaque(domain_text) if domain_text else None
         return QuantifiedExpr(
             quantifier=Quantifier.FOR_ALL,
@@ -544,7 +561,7 @@ def _lower_quantifier(text: str) -> QuantifiedExpr | None:
     )
     if exists_english is not None:
         domain_word, name, explicit_domain, body = exists_english.groups()
-        domain_text = explicit_domain or (_DOMAIN_WORDS.get((domain_word or "").lower()))
+        domain_text = _domain_text(domain_word, explicit_domain)
         domain = _lower_or_opaque(domain_text) if domain_text else None
         return QuantifiedExpr(
             quantifier=Quantifier.EXISTS,
@@ -562,7 +579,7 @@ def _lower_quantifier(text: str) -> QuantifiedExpr | None:
     quantifier_text, name, domain_text, body = symbolic.groups()
     domain = _lower_or_opaque(domain_text) if domain_text else None
     return QuantifiedExpr(
-        quantifier=(Quantifier.FOR_ALL if quantifier_text == "∀" else Quantifier.EXISTS),
+        quantifier=Quantifier.FOR_ALL if quantifier_text == "∀" else Quantifier.EXISTS,
         binder=Binder(name=IdentifierExpr(name=name), domain=domain),
         body=_lower_or_opaque(body),
     )
@@ -614,11 +631,22 @@ def lower_math_expression(text: str) -> ExpressionLowering:
     try:
         expression = _lower_recursive(normalized)
     except _ParseError:
-        expression = OpaqueExpr(text=normalized or text.strip(), reason="unsupported_syntax")
+        expression = OpaqueExpr(
+            text=normalized or text.strip(),
+            reason="unsupported_syntax",
+        )
         status = ExprLoweringStatus.OPAQUE
     else:
-        status = ExprLoweringStatus.PARTIAL if contains_opaque(expression) else ExprLoweringStatus.FULL
-    return ExpressionLowering(expression=expression, status=status, source_text=text)
+        status = (
+            ExprLoweringStatus.PARTIAL
+            if contains_opaque(expression)
+            else ExprLoweringStatus.FULL
+        )
+    return ExpressionLowering(
+        expression=expression,
+        status=status,
+        source_text=text,
+    )
 
 
 def _precedence(expression: MathExpr) -> int:
