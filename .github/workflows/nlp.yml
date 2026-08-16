@@ -46,7 +46,7 @@ on:
       - "tests/test_proof_skeleton.py"
       - "tests/test_semantic_experiment.py"
       - "tests/test_semantic_projection.py"
-      - "tests/test_symbol_resolution_ir.py"
+      - "tests/test_symbol_resolution*.py"
 
 jobs:
   spacy-contract:
@@ -66,7 +66,7 @@ jobs:
           python -m spacy download en_core_web_sm
       - name: Run parser-neutral unit contracts
         run: |
-          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py tests/test_proof_skeleton.py tests/test_proof_obligations.py tests/test_symbol_resolution_ir.py
+          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py tests/test_proof_skeleton.py tests/test_proof_obligations.py tests/test_symbol_resolution*.py
       - name: Check Thorn-owned spaCy behavior over the 70-case corpus
         run: python research/semantic-parser-bakeoff/check_spacy_contract.py
       - name: Exercise the normal CLI linguistic path
