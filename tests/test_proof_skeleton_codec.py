@@ -67,6 +67,12 @@ def test_shared_dictionary_is_self_contained_and_profitable() -> None:
     assert "@" in dictionary.wire_text
 
 
+def test_dictionary_entries_can_reuse_earlier_entries_exactly() -> None:
+    wire = "SC1\nD2\nabcdef\n@0XYZ\n\nT@1\n"
+
+    assert decode_skeleton_bundle(wire) == ["T0:abcdefXYZ\n"]
+
+
 def test_literal_dictionary_marker_round_trips_without_dictionary() -> None:
     skeleton = _synthetic([r"T0:f@internal(x)", r"C1:f@internal(x)=0"])
 
