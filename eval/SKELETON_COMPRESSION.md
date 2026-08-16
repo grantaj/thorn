@@ -96,6 +96,27 @@ requests.
 `--structural-only` exists only as a degraded/debug path. The CI measurement installs
 `en_core_web_sm` and runs the normal spaCy-enriched Thorn IR path with `OPENAI_API_KEY=""`.
 
+### Public result
+
+The normal spaCy-enriched run over all 56 public fixtures produced:
+
+| Representation | Characters | Relative to skeleton |
+|---|---:|---:|
+| raw theorem packets | 40,382 | 7.14x |
+| compact semantic IR | 25,656 | 4.53x |
+| source-addressable skeleton | 5,658 | baseline |
+
+Per-case raw-to-skeleton compression had a **median of 8.66x**, with **18 of 56** fixtures
+already reaching at least 10x. The range was 2.8x to 62.7x.
+
+The 56 skeletons contained 315 source addresses / initial lines. Of those, 47 lines used `~`
+to withhold prose or other content from the initial packet while keeping it exactly recoverable
+from the Thorn-side source map.
+
+No provider was instantiated: provider requests and live requests were both zero. These are
+representation-size results only. They do **not** establish semantic equivalence, nor do they
+measure the later cost of source-on-demand recovery.
+
 ## Interpreting the public corpus
 
 The 56 public fixtures are deliberately small unit-test-like manuscripts. They are useful for
@@ -109,7 +130,11 @@ Therefore:
 - failure of tiny fixtures to reach 10x is not by itself a negative result;
 - substantial real-paper proofs are the intended scale test.
 
-The design target is **median >=10x initial-context reduction on substantial real-paper
+The public result is close enough to the target to make the real-paper experiment worthwhile:
+8.66x median compression on tiny fixtures makes >=10x on longer proofs plausible, but does not
+prove it.
+
+The design target remains **median >=10x initial-context reduction on substantial real-paper
 results**, not 10x on every synthetic three-line proof.
 
 ## Private real-paper extension
