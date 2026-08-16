@@ -59,6 +59,11 @@ typed expression is exactly equal to the theorem goal expression, Thorn records 
 confident `exact` terminal step. Otherwise the terminal connection is retained with
 `rule=unknown`, `status=unresolved`.
 
+The terminal obligation itself is discharged only when that exact connection is
+confident **and the final proposition's own obligation is discharged**. An unsupported
+or ambiguously supported final restatement can therefore have an exact terminal edge
+while still leaving `G0` unresolved.
+
 This is intentionally stricter than guessing that the final sentence proves the theorem.
 
 ## Proof-step rules
