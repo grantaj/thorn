@@ -9,7 +9,14 @@ from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
 from thorn.models import SourceRange, TheoremUnit
 from thorn.semantic_review_render import SemanticReviewRequest
-from thorn.support import Claim, ClaimForm, ClaimQualifier, QualifierKind, SupportEdge, SupportKind
+from thorn.support import (
+    Claim,
+    ClaimForm,
+    ClaimQualifier,
+    QualifierKind,
+    SupportEdge,
+    SupportKind,
+)
 from thorn.symbols import Constraint, Definition, Symbol
 
 
@@ -75,8 +82,7 @@ class CanonicalProofIR(BaseModel):
         for edge in self.edges:
             marker = _status_marker(edge.status)
             if edge.kind == CanonicalEdgeKind.QUANTIFIER:
-                atom = edge.atom or "~"
-                lines.append(f"{edge.address}:{atom}{marker}>{edge.target}")
+                lines.append(f"{edge.address}:{edge.atom or '~'}{marker}>{edge.target}")
                 continue
             source = edge.source or "_"
             code = _EDGE_CODES[edge.kind]
@@ -100,6 +106,7 @@ class CanonicalProofIR(BaseModel):
 _MATH_RE = re.compile(
     r"(?s)(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|(?<!\$)\$(?!\$).*?(?<!\\)\$)"
 )
+_LABEL_RE = re.compile(r"\\label\s*\{[^{}]*\}")
 
 _LATEX_SYMBOLS: tuple[tuple[str, str], ...] = (
     (r"\\Leftrightarrow(?![A-Za-z])", "⇔"),
@@ -156,7 +163,14 @@ def _compact(text: str) -> str:
     return " ".join(text.strip().split())
 
 
+def _semantic_text(text: str) -> str:
+    """Remove source-only markup that carries no mathematical semantics."""
+
+    return _compact(_LABEL_RE.sub("", text))
+
+
 def _strip_math_delimiters(text: str) -> str:
+    text = text.strip()
     if text.startswith("$$") and text.endswith("$$"):
         return text[2:-2]
     if text.startswith("\\[") and text.endswith("\\]"):
@@ -187,7 +201,7 @@ def _placeholderize(text: str) -> tuple[str, list[str]]:
         fragments.append(fragment)
         return token
 
-    template = _compact(_MATH_RE.sub(replace, text)).rstrip(". ;")
+    template = _compact(_MATH_RE.sub(replace, _semantic_text(text))).rstrip(". ;")
     return template, fragments
 
 
@@ -199,11 +213,7 @@ def _restore(expression: str, fragments: list[str]) -> str:
 
 
 def canonicalize_mathematical_text(text: str) -> str | None:
-    """Canonicalize a deliberately small set of fully matched mathematical phrases.
-
-    Partial or uncertain prose returns ``None``. Callers must then retain the original
-    load-bearing prose instead of guessing a formal meaning.
-    """
+    """Canonicalize only fully matched mathematical phrases; never guess prose."""
 
     template, fragments = _placeholderize(text)
     if not fragments:
@@ -234,8 +244,7 @@ def canonicalize_mathematical_text(text: str) -> str | None:
         (token, "\\1"),
     )
     for pattern, replacement in patterns:
-        match = re.fullmatch(pattern, template, flags=re.IGNORECASE)
-        if match is not None:
+        if re.fullmatch(pattern, template, flags=re.IGNORECASE) is not None:
             normalized = re.sub(pattern, replacement, template, flags=re.IGNORECASE)
             return _restore(normalized, fragments)
     return None
@@ -353,11 +362,7 @@ def _claim_atom(claim: Claim, incoming: list[SupportEdge]) -> str | None:
     if len(fragments) != 1:
         return None
 
-    confident = [edge for edge in incoming if edge.status == InferenceStatus.CONFIDENT]
-    if not confident:
-        return None
-
-    if any(edge.kind == SupportKind.PRIOR_CLAIM for edge in confident):
+    if any(edge.kind == SupportKind.PRIOR_CLAIM for edge in incoming):
         if re.fullmatch(
             r"(?:therefore|hence|thus|consequently)\s*,?\s*@0@",
             template,
@@ -373,7 +378,7 @@ def _claim_atom(claim: Claim, incoming: list[SupportEdge]) -> str | None:
             SupportKind.DEFINITION,
             SupportKind.NAMED_PROPERTY,
         }
-        for edge in confident
+        for edge in incoming
     )
     if structural_prefix and re.fullmatch(
         r"(?:by|from|using|applying|apply|invoking|invoke)\b.+?,\s*@0@",
@@ -391,14 +396,14 @@ def _qualifier_atom(qualifier: ClaimQualifier) -> tuple[CanonicalEdgeKind, str]:
     canonical = canonicalize_mathematical_text(qualifier.raw)
     if canonical is not None:
         return CanonicalEdgeKind.QUALIFIER, canonical
-    return CanonicalEdgeKind.QUALIFIER, _compact(qualifier.raw)
+    return CanonicalEdgeKind.QUALIFIER, _semantic_text(qualifier.raw)
 
 
 def _support_payload(edge: SupportEdge) -> str | None:
     if edge.named_property:
         return _compact(edge.named_property)
     if edge.kind == SupportKind.EXPLICIT_REASON:
-        return canonicalize_mathematical_text(edge.raw_justification) or _compact(
+        return canonicalize_mathematical_text(edge.raw_justification) or _semantic_text(
             edge.raw_justification
         )
     return None
@@ -408,7 +413,7 @@ def build_canonical_proof_ir(
     unit: TheoremUnit,
     request: SemanticReviewRequest,
 ) -> CanonicalProofIR:
-    """Build a conservative graph slice, then canonicalize only proven structure."""
+    """Build a conservative backward proof slice and canonical mathematical language."""
 
     item = request.item
     if item.result.identifier != unit.identifier:
@@ -422,10 +427,11 @@ def build_canonical_proof_ir(
     sources: list[CanonicalProofSource] = []
     symbols = {symbol.identifier: symbol for symbol in item.symbols}
 
-    statement_atom = canonicalize_mathematical_text(unit.statement)
+    statement_text = _semantic_text(unit.statement)
+    statement_atom = canonicalize_mathematical_text(statement_text)
     statement_opaque = statement_atom is None
     if statement_atom is None:
-        statement_atom = _compact(unit.statement)
+        statement_atom = statement_text
     nodes.append(
         CanonicalProofNode(
             address="T0",
@@ -443,7 +449,9 @@ def build_canonical_proof_ir(
         )
     )
 
-    for index, hypothesis in enumerate(sorted(item.hypotheses, key=_constraint_key), start=1):
+    for index, hypothesis in enumerate(
+        sorted(item.hypotheses, key=_constraint_key), start=1
+    ):
         address = f"H{index}"
         nodes.append(
             CanonicalProofNode(
@@ -481,7 +489,9 @@ def build_canonical_proof_ir(
             )
         )
 
-    for index, definition in enumerate(sorted(item.definitions, key=_definition_key), start=1):
+    for index, definition in enumerate(
+        sorted(item.definitions, key=_definition_key), start=1
+    ):
         address = f"D{index}"
         nodes.append(
             CanonicalProofNode(
@@ -528,10 +538,11 @@ def build_canonical_proof_ir(
         address = f"R{index}"
         if dependency.label is not None:
             dependency_labels[dependency.label] = address
-        atom = canonicalize_mathematical_text(dependency.statement)
+        dependency_text = _semantic_text(dependency.statement)
+        atom = canonicalize_mathematical_text(dependency_text)
         opaque = atom is None
         if atom is None:
-            atom = _compact(dependency.statement)
+            atom = dependency_text
         label = dependency.label or dependency.identifier
         nodes.append(
             CanonicalProofNode(
@@ -554,6 +565,7 @@ def build_canonical_proof_ir(
     claim_addresses: dict[str, str] = {}
     math_index = 0
     prose_index = 0
+    qualifier_index = 0
     for claim in kept_claims:
         incoming = _incoming_edges(claim.identifier, included_support)
         atom = _claim_atom(claim, incoming)
@@ -561,7 +573,7 @@ def build_canonical_proof_ir(
         if opaque:
             prose_index += 1
             address = f"P{prose_index}"
-            atom = _compact(claim.raw)
+            atom = _semantic_text(claim.raw)
             kind = CanonicalNodeKind.OPAQUE_PROSE
         else:
             math_index += 1
@@ -581,8 +593,9 @@ def build_canonical_proof_ir(
         )
 
         for qualifier in claim.qualifiers:
+            qualifier_index += 1
             edge_kind, qualifier_atom = _qualifier_atom(qualifier)
-            qualifier_address = f"Q{sum(edge.address.startswith('Q') for edge in canonical_edges) + 1}"
+            qualifier_address = f"Q{qualifier_index}"
             canonical_edges.append(
                 CanonicalProofEdge(
                     address=qualifier_address,
