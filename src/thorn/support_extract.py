@@ -40,6 +40,10 @@ _REFERENCE_SUPPORT_CUE_RE = re.compile(
     r"\b(?:by|from|using|apply|applying|invoke|invoking)\b",
     re.IGNORECASE,
 )
+_ASSERTED_SUPPORT_RE = re.compile(
+    r"^\s*(?:by|using|from|applying|apply|invoking|invoke)\s+(.+?),\s*(.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
 _BOUND_NAME_RE = re.compile(
     r"(?P<name>\\[A-Za-z]+|[A-Za-z](?:_(?:\{[^{}]+\}|[A-Za-z0-9]+))?)"
 )
@@ -244,6 +248,55 @@ def _attach_explicit_support(
             source=_span(file, start, end),
             raw=property_match.group(0),
             named_property=property_match.group(1).lower(),
+        )
+
+    # Real mathematical prose frequently names a support principle without a
+    # theorem reference (for example, "using stability under ..."). Preserve
+    # the asserted support phrase generically rather than growing a vocabulary
+    # of property names. The phrase is deliberately UNRESOLVED: extracting a
+    # support assertion is not evidence that its premises hold or that the
+    # asserted mathematical transformation is valid.
+    asserted = _ASSERTED_SUPPORT_RE.match(raw)
+    has_structural_support = any(
+        edge.target_claim_identifier == claim.identifier
+        and edge.kind
+        in {
+            SupportKind.RESULT_REFERENCE,
+            SupportKind.EQUATION_REFERENCE,
+            SupportKind.DEFINITION,
+            SupportKind.NAMED_PROPERTY,
+        }
+        for edge in edges
+    )
+    if asserted is not None and not has_structural_support:
+        reason = asserted.group(1).strip()
+        reason_start = raw.find(asserted.group(1))
+        absolute_start = claim.source.start_offset + reason_start
+        reason_source = _span(
+            file,
+            absolute_start,
+            absolute_start + len(asserted.group(1)),
+        )
+        _add_edge(
+            edges,
+            target=claim,
+            kind=SupportKind.NAMED_PROPERTY,
+            source=reason_source,
+            raw=reason,
+            named_property=reason,
+            confidence=None,
+            status=InferenceStatus.UNRESOLVED,
+            evidence=[
+                StructuralEvidence(
+                    reason=(
+                        "source explicitly presents this phrase as mathematical "
+                        "support; its identity, premises, and validity remain unresolved"
+                    ),
+                    source=reason_source,
+                    target=claim.source,
+                    context=claim.raw,
+                )
+            ],
         )
 
     since = _SINCE_RE.match(raw)

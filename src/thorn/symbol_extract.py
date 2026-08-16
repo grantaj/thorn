@@ -16,9 +16,13 @@ from thorn.symbols import (
     SymbolRole,
     SymbolTable,
     SymbolUse,
+    canonical_symbol_name,
 )
 
-_SIMPLE_SYMBOL = r"(?:\\[A-Za-z]+|[A-Za-z])(?:_(?:\{[^{}]+\}|[A-Za-z0-9]+))?"
+_SIMPLE_SYMBOL = (
+    r"(?:\\[A-Za-z]+|[A-Za-z])"
+    r"(?:_(?:\{[^{}]+\}|\\[A-Za-z]+|[A-Za-z0-9]+))?"
+)
 _SIMPLE_SYMBOL_RE = re.compile(rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*$")
 _MULTI_SYMBOL_RE = re.compile(rf"^\s*{_SIMPLE_SYMBOL}(?:\s*,\s*{_SIMPLE_SYMBOL})+\s*$")
 _MAP_RE = re.compile(
@@ -32,6 +36,23 @@ _FUNCTION_DEF_RE = re.compile(
 _SIMPLE_DEF_RE = re.compile(
     rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*(?P<operator>:=|=|\\coloneqq)\s*"
     r"(?P<rhs>.+?)\s*$"
+)
+_PROJECT_COLON_DEF_RE = re.compile(
+    rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*(?::=|\\coloneqq)\s*"
+    r"(?P<rhs>.+?)\s*$",
+    re.DOTALL,
+)
+_PROJECT_STACKED_DEF_PREFIX_RE = re.compile(
+    rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*\\(?:stackrel|overset)",
+    re.IGNORECASE,
+)
+_PROJECT_MACRO_DEF_PREFIX_RE = re.compile(
+    rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*(?P<operator>\\[A-Za-z@]+)",
+)
+_STACKED_OPERATOR_PREFIX_RE = re.compile(r"^\\(?:stackrel|overset)", re.IGNORECASE)
+_DEF_ANNOTATION_RE = re.compile(
+    r"(?<![A-Za-z])def(?:inition)?(?![A-Za-z])",
+    re.IGNORECASE,
 )
 _RELATION_RE = re.compile(
     rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*"
@@ -244,7 +265,7 @@ def _append_candidate(
     candidate: _Candidate,
     kind: IntroductionKind,
     scope_identifier: str,
-    result_identifier: str,
+    result_identifier: str | None,
     introduction_start: int,
     introduction_end: int,
 ) -> Symbol:
@@ -255,10 +276,11 @@ def _append_candidate(
         content_start + candidate.name_end,
     )
     introduction_source = _span(file.path, file.raw, introduction_start, introduction_end)
-    identifier = _symbol_id(scope_identifier, candidate.name, symbol_source)
+    canonical_name = canonical_symbol_name(candidate.name)
+    identifier = _symbol_id(scope_identifier, canonical_name, symbol_source)
     symbol = Symbol(
         identifier=identifier,
-        name=candidate.name,
+        name=canonical_name,
         role=candidate.role,
         arity=candidate.arity,
         domain_latex=candidate.domain_latex,
@@ -380,6 +402,230 @@ def _add_explicit_introductions(
             )
 
 
+def _take_braced_group(text: str, start: int) -> tuple[str, int] | None:
+    """Return one balanced braced group and the offset immediately after it."""
+
+    index = start
+    while index < len(text) and text[index].isspace():
+        index += 1
+    if index >= len(text) or text[index] != "{":
+        return None
+
+    depth = 0
+    content_start = index + 1
+    for cursor in range(index, len(text)):
+        char = text[cursor]
+        if char == "{" and (cursor == 0 or text[cursor - 1] != "\\"):
+            depth += 1
+        elif char == "}" and (cursor == 0 or text[cursor - 1] != "\\"):
+            depth -= 1
+            if depth == 0:
+                return text[content_start:cursor], cursor + 1
+    return None
+
+
+def _is_explicit_definition_operator(operator: str) -> bool:
+    stripped = operator.strip()
+    if stripped in {":=", r"\coloneqq"}:
+        return True
+
+    stacked = _STACKED_OPERATOR_PREFIX_RE.match(stripped)
+    if stacked is None:
+        return False
+    annotation_group = _take_braced_group(stripped, stacked.end())
+    if annotation_group is None:
+        return False
+    annotation, offset = annotation_group
+    equals_group = _take_braced_group(stripped, offset)
+    if equals_group is None:
+        return False
+    equals, offset = equals_group
+    if stripped[offset:].strip():
+        return False
+    return (
+        _DEF_ANNOTATION_RE.search(annotation) is not None
+        and re.sub(r"[{}\s]", "", equals) == "="
+    )
+
+
+def _definition_operator_macros(file: FrontendFile) -> set[str]:
+    """Return zero-argument local macros that mechanically mean definition-equals."""
+
+    operators: set[str] = set()
+    for macro in file.macros:
+        if macro.name not in {"newcommand", "renewcommand", "providecommand"}:
+            continue
+        required = [argument for argument in macro.arguments if not argument.optional]
+        optional = [argument.value.strip() for argument in macro.arguments if argument.optional]
+        if len(required) < 2 or any(value not in {"", "0"} for value in optional):
+            continue
+        name = required[0].value.strip()
+        if re.fullmatch(r"\\[A-Za-z@]+", name) is None:
+            continue
+        replacement = required[-1].value.strip()
+        if _is_explicit_definition_operator(replacement):
+            operators.add(name)
+    return operators
+
+
+def _project_definition_candidate(
+    content: str,
+    definition_operator_macros: set[str],
+) -> _Candidate | None:
+    colon_match = _PROJECT_COLON_DEF_RE.match(content)
+    if colon_match is not None:
+        return _Candidate(
+            name=colon_match.group("name"),
+            name_start=colon_match.start("name"),
+            name_end=colon_match.end("name"),
+            definition_operator=":=",
+            definition_rhs=colon_match.group("rhs").strip(),
+        )
+
+    macro_match = _PROJECT_MACRO_DEF_PREFIX_RE.match(content)
+    if (
+        macro_match is not None
+        and macro_match.group("operator") in definition_operator_macros
+    ):
+        rhs = content[macro_match.end() :].strip()
+        if rhs:
+            return _Candidate(
+                name=macro_match.group("name"),
+                name_start=macro_match.start("name"),
+                name_end=macro_match.end("name"),
+                # The source spelling is preserved by provenance; the semantic
+                # symbol table records the mechanically recovered operator meaning.
+                definition_operator=":=",
+                definition_rhs=rhs,
+            )
+
+    stacked_match = _PROJECT_STACKED_DEF_PREFIX_RE.match(content)
+    if stacked_match is None:
+        return None
+    annotation_group = _take_braced_group(content, stacked_match.end())
+    if annotation_group is None:
+        return None
+    annotation, offset = annotation_group
+    equals_group = _take_braced_group(content, offset)
+    if equals_group is None:
+        return None
+    equals, offset = equals_group
+
+    # Presentation wrappers such as ``\scriptstyle\text{\tiny def}`` are
+    # irrelevant, but the semantic marker itself must be literal and the second
+    # argument must still be exactly an equals sign modulo braces/whitespace.
+    if _DEF_ANNOTATION_RE.search(annotation) is None:
+        return None
+    if re.sub(r"[{}\s]", "", equals) != "=":
+        return None
+    rhs = content[offset:].strip()
+    if not rhs:
+        return None
+    return _Candidate(
+        name=stacked_match.group("name"),
+        name_start=stacked_match.start("name"),
+        name_end=stacked_match.end("name"),
+        definition_operator=":=",
+        definition_rhs=rhs,
+    )
+
+
+def _inside_result_region(source: SourceSpan, regions: list[ResultRegion]) -> bool:
+    for region in regions:
+        for span in (region.statement_span, region.proof_span):
+            if span is None or span.file != source.file:
+                continue
+            if span.start_offset <= source.start_offset and source.end_offset <= span.end_offset:
+                return True
+    return False
+
+
+def _project_definition_blocks(
+    file: FrontendFile,
+) -> list[tuple[str, int, int, int, SourceSpan]]:
+    """Return display-math blocks eligible for project-level definitions."""
+
+    blocks: list[tuple[str, int, int, int, SourceSpan]] = []
+    covered: list[tuple[int, int]] = []
+    for math in file.math:
+        content, content_start = _math_inner(math)
+        blocks.append(
+            (
+                content,
+                content_start,
+                math.span.start_offset,
+                math.span.end_offset,
+                math.span,
+            )
+        )
+        covered.append((math.span.start_offset, math.span.end_offset))
+
+    # The regex frontend deliberately exposes equation environments as
+    # environments rather than FrontendMath.  Treat the common display-math
+    # environments as equivalent blocks here so semantic extraction does not
+    # depend on a parser-specific representation choice.
+    for environment in file.environments:
+        if environment.name not in {"equation", "equation*", "displaymath"}:
+            continue
+        if any(
+            start <= environment.span.start_offset and environment.span.end_offset <= end
+            for start, end in covered
+        ):
+            continue
+        body = environment.body(file.raw)
+        leading = len(body) - len(body.lstrip())
+        content = body.strip()
+        if not content:
+            continue
+        blocks.append(
+            (
+                content,
+                environment.body_span.start_offset + leading,
+                environment.span.start_offset,
+                environment.span.end_offset,
+                environment.span,
+            )
+        )
+    blocks.sort(key=lambda item: item[2])
+    return blocks
+
+
+def _add_project_definitions(
+    *,
+    table: SymbolTable,
+    file: FrontendFile,
+    regions: list[ResultRegion],
+) -> None:
+    """Recover only mechanically explicit definitions outside result regions.
+
+    Project scope is deliberately conservative: ordinary equalities are not
+    definitions here.  We accept only explicit definitional operators so a
+    later target can resolve a used symbol without importing unrelated section
+    prose or promoting an arbitrary displayed equality into semantic context.
+    """
+
+    definition_operator_macros = _definition_operator_macros(file)
+    for content, content_start, introduction_start, introduction_end, source in (
+        _project_definition_blocks(file)
+    ):
+        if _inside_result_region(source, regions):
+            continue
+        candidate = _project_definition_candidate(content, definition_operator_macros)
+        if candidate is None:
+            continue
+        _append_candidate(
+            table=table,
+            file=file,
+            content_start=content_start,
+            candidate=candidate,
+            kind=IntroductionKind.DEFINE,
+            scope_identifier="project",
+            result_identifier=None,
+            introduction_start=introduction_start,
+            introduction_end=introduction_end,
+        )
+
+
 def _masked_content(content: str) -> str:
     chars = list(content)
     for match in _STANDARD_WRAPPER_RE.finditer(content):
@@ -389,11 +635,21 @@ def _masked_content(content: str) -> str:
 
 
 def _symbol_occurrences(content: str, name: str) -> list[tuple[int, int]]:
-    escaped = re.escape(name)
-    if name.startswith("\\"):
-        pattern = re.compile(rf"{escaped}(?![A-Za-z])")
+    canonical = canonical_symbol_name(name)
+    subscript = re.match(
+        r"^(?P<base>(?:\\[A-Za-z]+|[A-Za-z]))_(?P<sub>\\[A-Za-z]+|[A-Za-z0-9]+)$",
+        canonical,
+    )
+    if subscript is not None:
+        base = re.escape(subscript.group("base"))
+        sub = re.escape(subscript.group("sub"))
+        spelling = rf"{base}_(?:{sub}|\{{{sub}\}})"
     else:
-        pattern = re.compile(rf"(?<![A-Za-z]){escaped}(?![A-Za-z])")
+        spelling = re.escape(canonical)
+    if canonical.startswith("\\"):
+        pattern = re.compile(rf"{spelling}(?![A-Za-z])")
+    else:
+        pattern = re.compile(rf"(?<![A-Za-z]){spelling}(?![A-Za-z])")
     return [(match.start(), match.end()) for match in pattern.finditer(content)]
 
 
@@ -499,6 +755,20 @@ def extract_symbol_table(project: ParsedProject, regions: list[ResultRegion]) ->
                 )
             )
         scope_rows.append((region, file, result_scope, statement_scope, proof_scope))
+
+    # Ordinary manuscript prose can define notation before the theorem-like
+    # environment that later uses it. Populate the existing project scope only
+    # from explicit definitional operators; target selection downstream remains
+    # use-driven, so this does not dump all project definitions into review.
+    regions_by_file: dict[str, list[ResultRegion]] = {}
+    for region in regions:
+        regions_by_file.setdefault(region.file, []).append(region)
+    for file in project.files:
+        _add_project_definitions(
+            table=table,
+            file=file,
+            regions=regions_by_file.get(file.path, []),
+        )
 
     # Statement introductions are result-scoped so theorem hypotheses are visible
     # in the associated proof. Proof introductions remain proof-local.

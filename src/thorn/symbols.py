@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -7,6 +8,19 @@ from pydantic import BaseModel, Field
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import ParsedProject, SourceSpan
 from thorn.linguistic import LinguisticFrontend
+
+_ATOMIC_BRACED_SUBSCRIPT_RE = re.compile(
+    r"^(?P<base>(?:\\[A-Za-z]+|[A-Za-z]))_\{(?P<sub>\\[A-Za-z]+|[A-Za-z0-9]+)\}$"
+)
+
+
+def canonical_symbol_name(name: str) -> str:
+    """Canonicalize only mechanically equivalent simple LaTeX symbol spellings."""
+
+    match = _ATOMIC_BRACED_SUBSCRIPT_RE.match(name)
+    if match is None:
+        return name
+    return f"{match.group('base')}_{match.group('sub')}"
 
 
 class ScopeKind(StrEnum):
@@ -175,8 +189,9 @@ class SymbolTable(BaseModel):
         scope_identifier: str,
         source: SourceSpan,
     ) -> Symbol | None:
+        canonical_name = canonical_symbol_name(name)
         for symbol in self.visible_symbols(scope_identifier, source):
-            if symbol.name == name:
+            if canonical_symbol_name(symbol.name) == canonical_name:
                 return symbol
         return None
 

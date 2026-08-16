@@ -545,16 +545,20 @@ def build_canonical_proof_ir(
         )
     ]
 
-    used_dependency_labels = {
-        edge.target_label
-        for edge in included_support
-        if edge.kind == SupportKind.RESULT_REFERENCE and edge.target_label is not None
-    }
-    dependencies = [
-        dependency
-        for dependency in item.dependencies
-        if dependency.label in used_dependency_labels
-    ]
+    # SemanticReviewItem has already bounded direct dependencies for this
+    # review target. Preserve that dependency-driven closure here, including
+    # assumptions/results referenced by the theorem statement itself. Filtering
+    # again by proof-body support edges made load-bearing statement assumptions
+    # disappear and, worse, removed their source-rescue addresses.
+    dependencies = sorted(
+        item.dependencies,
+        key=lambda dependency: (
+            dependency.source.file,
+            dependency.source.start_line,
+            dependency.source.end_line,
+            dependency.identifier,
+        ),
+    )
     dependency_labels: dict[str, str] = {}
     for index, dependency in enumerate(dependencies, start=1):
         address = f"R{index}"
