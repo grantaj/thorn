@@ -67,7 +67,7 @@ def _expanded_source_addresses(
     """Expand requested source to unresolved Proof-IR prerequisite context.
 
     ``HOLE`` and ``GOAL`` lines already expose the deterministic local context of
-    unresolved propositions.  When the model asks for a proposition's exact
+    unresolved propositions. When the model asks for a proposition's exact
     source, include the exact source for unresolved context propositions first.
     This is a bounded source-selection operation over the existing proof-language
     packet; it does not infer any new mathematical edge.
@@ -229,7 +229,7 @@ def _initial_user_content(
 ) -> str:
     rescue = "allowed-once" if source_rescue_allowed else "disabled"
     policy = (
-        f"\n{_PROOF_IR_REVIEW_POLICY}\n"
+        f"{_PROOF_IR_REVIEW_POLICY}\n"
         if representation == "thorn-proof/1"
         else ""
     )
