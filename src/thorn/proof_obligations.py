@@ -186,10 +186,10 @@ _REWRITE_RE = re.compile(
     r"\b(?:rewrit(?:e|ing)|substitut(?:e|ing|ion))\b", re.IGNORECASE
 )
 _INSTANTIATE_RE = re.compile(
-    r"\b(?:instantiat(?:e|ing|ion)|speciali[sz](?:e|ing|ation)|setting|taking)\b",
+    r"\b(?:instantiat(?:e|ing|ion)|speciali[sz](?:e|ing|ation))\b",
     re.IGNORECASE,
 )
-_WITNESS_RE = re.compile(r"\b(?:witness|choose|choosing)\b", re.IGNORECASE)
+_WITNESS_RE = re.compile(r"\bwitness\b", re.IGNORECASE)
 _CONTRADICTION_RE = re.compile(r"\bcontradiction\b", re.IGNORECASE)
 
 
@@ -265,7 +265,7 @@ def _typed_step(
     local_context: tuple[str, ...],
 ) -> ProofStepEdge:
     source_text = ir.source(edge.address).text
-    premises = (edge.source,) if edge.source is not None else ()
+    premises: tuple[str, ...] = (edge.source,) if edge.source is not None else ()
     rule = _rule_from_edge_kind(edge)
 
     if rule == ProofRuleKind.UNKNOWN:
@@ -422,21 +422,20 @@ def elaborate_proof_obligations(ir: CanonicalTypedProofIR) -> ProofObligationIR:
     terminal_step = _terminal_step(goal=goal, proof_nodes=proof_nodes)
     if terminal_step is not None:
         steps.append(terminal_step)
+    final_obligation_status = obligations[-1].status if obligations else None
     terminal_status = (
         ObligationStatus.DISCHARGED
         if (
             terminal_step is not None
             and terminal_step.status == InferenceStatus.CONFIDENT
+            and final_obligation_status == ObligationStatus.DISCHARGED
         )
         else ObligationStatus.UNRESOLVED
     )
     terminal_support = terminal_step.premises if terminal_step is not None else ()
     terminal_discharging = (
         (terminal_step.address,)
-        if (
-            terminal_step is not None
-            and terminal_step.status == InferenceStatus.CONFIDENT
-        )
+        if terminal_status == ObligationStatus.DISCHARGED
         else ()
     )
     obligations.append(
