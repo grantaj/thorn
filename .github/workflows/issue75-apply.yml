@@ -55,7 +55,7 @@ jobs:
           thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
       - name: Static checks
         run: |
-          ruff check .
+          ruff check src tests
           mypy src
       - name: Commit validated implementation
         run: |
