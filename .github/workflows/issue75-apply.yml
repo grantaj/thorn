@@ -28,8 +28,14 @@ jobs:
         run: python scripts/issue75_patch.py
       - name: Install
         run: python -m pip install -e '.[dev]'
-      - name: Targeted regressions
-        run: pytest -q tests/test_proof_ir_context_fidelity.py tests/test_support.py tests/test_canonical_proof_ir.py tests/test_semantic_transformations.py tests/test_llm_proof_language.py
+      - name: Definition-context regression
+        run: pytest -q tests/test_proof_ir_context_fidelity.py::test_statement_dependency_survives_and_is_source_rescuable
+      - name: Result-precondition regression
+        run: pytest -q tests/test_proof_ir_context_fidelity.py::test_result_application_keeps_unmet_precondition_distinct_from_control
+      - name: Asserted-property regression
+        run: pytest -q tests/test_proof_ir_context_fidelity.py::test_generic_asserted_support_is_preserved_without_confidence_promotion
+      - name: Existing affected tests
+        run: pytest -q tests/test_support.py tests/test_canonical_proof_ir.py tests/test_semantic_transformations.py tests/test_llm_proof_language.py
       - name: Full keyless suite
         run: pytest -q
       - name: Corpus checks
