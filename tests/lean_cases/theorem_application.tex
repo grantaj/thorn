@@ -1,0 +1,34 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+
+\begin{document}
+
+\begin{lemma}\label{lem:available}
+$P(0)$.
+\end{lemma}
+\begin{proof}
+\[
+P(0)
+\]
+\end{proof}
+
+\begin{lemma}\label{lem:transfer}
+For every natural $x$, if $P(x)$, then $Q(x)$.
+\end{lemma}
+\begin{proof}
+\[
+P(x) \Rightarrow Q(x)
+\]
+\end{proof}
+
+\begin{theorem}\label{thm:main}
+$Q(0)$.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:available}, $P(0)$.
+By Lemma~\ref{lem:transfer}, $Q(0)$.
+\end{proof}
+
+\end{document}

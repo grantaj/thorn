@@ -162,7 +162,7 @@ _COMMAND_WITH_TEXT_RE = re.compile(r"\\(?:mathrm|operatorname)\s*\{([^{}]+)\}")
 
 _LATEX_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (r"\\mathbb\s*\{R\}", "R"),
-    (r"\\mathbb\s*\{N\}", "N"),
+    (r"\\mathbb\s*\{N\}", "ℕ"),
     (r"\\mathbb\s*\{Z\}", "Z"),
     (r"\\mathbb\s*\{Q\}", "Q"),
     (r"\\mathbb\s*\{C\}", "C"),
@@ -200,8 +200,8 @@ _DOMAIN_WORDS: dict[str, str] = {
     "reals": "R",
     "integer": "Z",
     "integers": "Z",
-    "natural": "N",
-    "naturals": "N",
+    "natural": "ℕ",
+    "naturals": "ℕ",
 }
 
 
@@ -249,6 +249,7 @@ class _Token:
 _TOKEN_RE = re.compile(
     r"(?P<SPACE>\s+)"
     r"|(?P<NUMBER>\d+(?:\.\d+)?)"
+    r"|(?P<DOMAIN>ℕ)"
     r"|(?P<OP>⇔|⇒|≤|≥|≠|∉|⊆|⊂|∈|=|<|>|¬|∧|∨|\+|-|\*|/|\^)"
     r"|(?P<PUNCT>[(){}\[\],:])"
     r"|(?P<IDENT>[^\W\d]\w*)",
@@ -391,6 +392,8 @@ class _Parser:
         token = self._take()
         if token.kind == "NUMBER":
             return LiteralExpr(value=token.text)
+        if token.kind == "DOMAIN":
+            return LiteralExpr(value="ℕ")
         if token.kind == "IDENT":
             return IdentifierExpr(name=token.text)
         if token.text == "(":
