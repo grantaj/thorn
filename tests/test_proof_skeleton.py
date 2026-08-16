@@ -5,7 +5,6 @@ from thorn.latex import extract_project
 from thorn.proof_skeleton import SkeletonSourceKind, build_proof_skeleton
 from thorn.semantic_review_render import build_semantic_review_request
 
-
 CASES = Path("eval/cases/ladder")
 
 
