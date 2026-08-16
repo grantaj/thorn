@@ -127,12 +127,8 @@ def measure_llm_proof_language(case_dir: Path) -> dict[str, object]:
             "proof_language_explicit": totals["proof_explicit_chars"],
         },
         "aggregate_ratios": {
-            "raw_to_proof_compact": _ratio(
-                totals["raw_chars"], totals["proof_compact_chars"]
-            ),
-            "raw_to_proof_explicit": _ratio(
-                totals["raw_chars"], totals["proof_explicit_chars"]
-            ),
+            "raw_to_proof_compact": _ratio(totals["raw_chars"], totals["proof_compact_chars"]),
+            "raw_to_proof_explicit": _ratio(totals["raw_chars"], totals["proof_explicit_chars"]),
             "legacy_compact_to_proof_compact": _ratio(
                 totals["legacy_compact_chars"], totals["proof_compact_chars"]
             ),

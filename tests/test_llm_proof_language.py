@@ -121,9 +121,7 @@ def _application_ir(*, unresolved: bool = False) -> SemanticTransformationIR:
             premises=("R1",),
             conclusion="C1",
             rule=ProofRuleKind.APPLY_RESULT,
-            status=(
-                InferenceStatus.UNRESOLVED if unresolved else InferenceStatus.CONFIDENT
-            ),
+            status=(InferenceStatus.UNRESOLVED if unresolved else InferenceStatus.CONFIDENT),
             source_addresses=("E1",),
         )
     ]
@@ -134,11 +132,7 @@ def _application_ir(*, unresolved: bool = False) -> SemanticTransformationIR:
             expected=q_a,
             expected_status=ExprLoweringStatus.FULL,
             local_context=("R1", "H1"),
-            status=(
-                ObligationStatus.UNRESOLVED
-                if unresolved
-                else ObligationStatus.DISCHARGED
-            ),
+            status=(ObligationStatus.UNRESOLVED if unresolved else ObligationStatus.DISCHARGED),
             discharging_steps=(() if unresolved else ("E1",)),
             source_address="C1",
         ),
@@ -189,11 +183,7 @@ def _application_ir(*, unresolved: bool = False) -> SemanticTransformationIR:
         expected=p_a,
         local_context=("R1", "H1"),
         satisfied_by=(() if unresolved else ("H1",)),
-        status=(
-            ObligationStatus.UNRESOLVED
-            if unresolved
-            else ObligationStatus.DISCHARGED
-        ),
+        status=(ObligationStatus.UNRESOLVED if unresolved else ObligationStatus.DISCHARGED),
         source_addresses=("E1",),
     )
     transformation = SemanticTransformation(
@@ -217,9 +207,7 @@ def _application_ir(*, unresolved: bool = False) -> SemanticTransformationIR:
             ),
         ),
         obligation_addresses=("O1",),
-        status=(
-            InferenceStatus.UNRESOLVED if unresolved else InferenceStatus.CONFIDENT
-        ),
+        status=(InferenceStatus.UNRESOLVED if unresolved else InferenceStatus.CONFIDENT),
         source_addresses=("E1", "R1", "C1"),
         opaque_source_addresses=(("E1",) if unresolved else ()),
     )
@@ -342,9 +330,7 @@ def test_control_structure_is_delaborated_without_source_prose() -> None:
         conclusion_address="C1",
         source_addresses=("E1",),
     )
-    higher = ir.higher.model_copy(
-        update={"structures": [structure], "branches": [branch]}
-    )
+    higher = ir.higher.model_copy(update={"structures": [structure], "branches": [branch]})
     structured = ir.model_copy(update={"higher": higher})
 
     rendered = render_llm_proof_language(structured)

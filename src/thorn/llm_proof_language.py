@@ -6,7 +6,7 @@ import re
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from thorn.dependencies import DependencyGraph
 from thorn.evidence import InferenceStatus
@@ -19,6 +19,7 @@ from thorn.proof_obligations import (
     ProofObligation,
     ProofProposition,
     ProofRuleKind,
+    ProofStepEdge,
     PropositionRole,
 )
 from thorn.semantic_review_render import SemanticReviewRequest
@@ -33,7 +34,6 @@ from thorn.semantic_transformations import (
 )
 from thorn.symbol_resolution_ir import ExpressionRef
 from thorn.symbols import SymbolTable
-
 
 FORMAT_VERSION = "thorn-proof/1"
 DEFAULT_MAX_SOURCE_REQUESTS = 8
@@ -166,7 +166,8 @@ def _proposition_needs_source(proposition: ProofProposition) -> bool:
     return (
         proposition.role == PropositionRole.UNRESOLVED
         or proposition.expression is None
-        or proposition.expression_status in {
+        or proposition.expression_status
+        in {
             ExprLoweringStatus.PARTIAL,
             ExprLoweringStatus.OPAQUE,
         }
@@ -284,7 +285,10 @@ def _render_rewrite_transformation(
 ) -> str:
     atom = next(iter(_support_atoms(ir, transformation, SemanticSupportKind.EQUALITY)), None)
     equality = _atom_token(atom)
-    direction = f"{_render_ref(ir, transformation.rewrite_from_ref)}→{_render_ref(ir, transformation.rewrite_to_ref)}"
+    direction = (
+        f"{_render_ref(ir, transformation.rewrite_from_ref)}"
+        f"→{_render_ref(ir, transformation.rewrite_to_ref)}"
+    )
     inputs = _input_tokens(transformation)
     marker = _status_marker(transformation.status)
     source = _source_suffix(_transformation_sources(transformation))
@@ -395,8 +399,10 @@ def _transformations_by_target(
     return result
 
 
-def _steps_by_target(ir: SemanticTransformationIR) -> dict[str, list[object]]:
-    result: dict[str, list[object]] = {}
+def _steps_by_target(
+    ir: SemanticTransformationIR,
+) -> dict[str, list[ProofStepEdge]]:
+    result: dict[str, list[ProofStepEdge]] = {}
     for step in ir.higher.resolved.proof.steps:
         result.setdefault(step.conclusion, []).append(step)
     return result
@@ -435,8 +441,7 @@ def _render_proposition_lines(
 
         if style == ProofLanguageStyle.EXPLICIT:
             line = (
-                f"PROPOSITION {proposition.address} role={proposition.role.value} "
-                f"expr={expression}"
+                f"PROPOSITION {proposition.address} role={proposition.role.value} expr={expression}"
             )
             if derivations:
                 line += f" FROM {' OR '.join(derivations)}"
@@ -504,8 +509,7 @@ def _render_control_lines(
 ) -> list[str]:
     higher = ir.higher
     structure_ids = {
-        structure.address: f"F{index}"
-        for index, structure in enumerate(higher.structures, start=1)
+        structure.address: f"F{index}" for index, structure in enumerate(higher.structures, start=1)
     }
     branches_by_parent: dict[str, list[ProofBranch]] = {}
     for branch in higher.branches:
@@ -539,7 +543,9 @@ def _render_control_lines(
             if structure.subject_ref is not None:
                 details.append(f"subject={_render_ref(ir, structure.subject_ref)}")
             if structure.transformed_goal_ref is not None:
-                details.append(f"transformed_goal={_render_ref(ir, structure.transformed_goal_ref)}")
+                details.append(
+                    f"transformed_goal={_render_ref(ir, structure.transformed_goal_ref)}"
+                )
             if structure.witness_ref is not None:
                 details.append(f"witness={_render_ref(ir, structure.witness_ref)}")
             if branches:
@@ -591,11 +597,7 @@ def _proof_obligation_lines(
         noun = "GOAL" if obligation.terminal else "HOLE"
         expected = _obligation_expected(ir, obligation)
         context = ",".join(obligation.local_context) or "-"
-        state = (
-            "open"
-            if obligation.status == ObligationStatus.UNRESOLVED
-            else "structural"
-        )
+        state = "open" if obligation.status == ObligationStatus.UNRESOLVED else "structural"
         source = (
             _source_suffix((obligation.source_address,))
             if obligation.status == ObligationStatus.UNRESOLVED
@@ -627,9 +629,7 @@ def _application_obligation_lines(
         context = ",".join(obligation.local_context) or "-"
         source = _source_suffix(obligation.source_addresses)
         if style == ProofLanguageStyle.COMPACT:
-            lines.append(
-                f"NEED {obligation.address}: {expected} | ctx {context}{source}"
-            )
+            lines.append(f"NEED {obligation.address}: {expected} | ctx {context}{source}")
         else:
             lines.append(
                 f"PRECONDITION {obligation.address} expected={expected} "
@@ -746,9 +746,7 @@ def parse_source_rescue_request(
     match = _NEED_SOURCE_RE.fullmatch(command)
     if match is None:
         raise ValueError("expected NEED_SOURCE address[,address...]")
-    addresses = tuple(
-        dict.fromkeys(part.strip() for part in match.group(1).split(","))
-    )
+    addresses = tuple(dict.fromkeys(part.strip() for part in match.group(1).split(",")))
     if len(addresses) > max_addresses:
         raise ValueError(
             f"source rescue requests at most {max_addresses} addresses, got {len(addresses)}"
