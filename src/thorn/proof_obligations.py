@@ -268,16 +268,17 @@ def _typed_step(
     premises = (edge.source,) if edge.source is not None else ()
     rule = _rule_from_edge_kind(edge)
 
-    implication_premises = _implication_elimination_premises(
-        edge=edge,
-        expressions=expressions,
-        local_context=local_context,
-    )
-    if implication_premises is not None:
-        rule = ProofRuleKind.IMPLICATION_ELIMINATION
-        premises = implication_premises
-    elif rule == ProofRuleKind.UNKNOWN:
-        rule = _rule_from_source_text(source_text)
+    if rule == ProofRuleKind.UNKNOWN:
+        implication_premises = _implication_elimination_premises(
+            edge=edge,
+            expressions=expressions,
+            local_context=local_context,
+        )
+        if implication_premises is not None:
+            rule = ProofRuleKind.IMPLICATION_ELIMINATION
+            premises = implication_premises
+        else:
+            rule = _rule_from_source_text(source_text)
 
     status = edge.status
     if any(
