@@ -6,6 +6,7 @@ import statistics
 from pathlib import Path
 from typing import Any
 
+from thorn.canonical_proof_ir import build_canonical_proof_ir
 from thorn.eval import CaseExpectation
 from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
@@ -22,8 +23,9 @@ from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisti
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Measure raw vs compact-IR vs source-addressable proof-skeleton size "
-            "and exact reversible skeleton coding without constructing a semantic provider."
+            "Measure raw, compact IR, source-addressable skeleton, exact reversible "
+            "skeleton coding, and graph-derived canonical proof IR without constructing "
+            "a semantic provider."
         )
     )
     parser.add_argument("case_dir", type=Path, nargs="?", default=Path("eval/cases"))
@@ -106,11 +108,14 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
         raw = render_theorem_unit(unit)
         compact = render_compact_semantic_review_request(request)
         skeleton = build_proof_skeleton(unit, request)
+        canonical = build_canonical_proof_ir(unit, request)
         skeletons.append(skeleton)
         initial = skeleton.render_initial()
+        canonical_initial = canonical.render_initial()
         raw_size = _size(raw)
         compact_size = _size(compact)
         skeleton_size = _size(initial)
+        canonical_size = _size(canonical_initial)
         syntax_only = encode_skeleton_bundle([skeleton], use_dictionary=False)
         reversible = encode_skeleton_bundle([skeleton])
         withheld_lines = sum("~" in line for line in skeleton.lines)
@@ -123,11 +128,15 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
                 "raw": raw_size,
                 "compact_ir": compact_size,
                 "skeleton": skeleton_size,
+                "canonical_proof_ir": canonical_size,
                 "reversible_standalone": _size(reversible.wire_text),
                 "reversible_syntax_only_standalone": _size(syntax_only.wire_text),
                 "reversible_dictionary_entries": len(reversible.dictionary),
                 "raw_over_skeleton": _ratio(
                     raw_size["characters"], skeleton_size["characters"]
+                ),
+                "raw_over_canonical_proof_ir": _ratio(
+                    raw_size["characters"], canonical_size["characters"]
                 ),
                 "raw_over_reversible_standalone": _ratio(
                     raw_size["characters"], reversible.characters
@@ -138,6 +147,9 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
                 "source_addresses": len(skeleton.sources),
                 "initial_lines": len(skeleton.lines),
                 "withheld_lines": withheld_lines,
+                "canonical_source_addresses": len(canonical.sources),
+                "canonical_opaque_nodes": canonical.opaque_nodes,
+                "canonical_pruned_claims": canonical.pruned_claims,
             }
         )
 
@@ -147,10 +159,14 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
     raw_chars = sum(record["raw"]["characters"] for record in records)
     compact_chars = sum(record["compact_ir"]["characters"] for record in records)
     skeleton_chars = sum(record["skeleton"]["characters"] for record in records)
+    canonical_chars = sum(
+        record["canonical_proof_ir"]["characters"] for record in records
+    )
     standalone_reversible_chars = sum(
         record["reversible_standalone"]["characters"] for record in records
     )
     raw_ratios = [record["raw_over_skeleton"] for record in records]
+    canonical_ratios = [record["raw_over_canonical_proof_ir"] for record in records]
     reversible_ratios = [record["raw_over_reversible_standalone"] for record in records]
     compact_ratios = [record["compact_over_skeleton"] for record in records]
 
@@ -165,6 +181,7 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
             "raw": raw_chars,
             "compact_ir": compact_chars,
             "skeleton": skeleton_chars,
+            "canonical_proof_ir": canonical_chars,
             "reversible_standalone_total": standalone_reversible_chars,
             "reversible_suite_syntax_only_bundle": suite_syntax_only.characters,
             "reversible_suite_dictionary_bundle": suite_reversible.characters,
@@ -175,6 +192,10 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
         },
         "aggregate_compression": {
             "raw_over_skeleton": _ratio(raw_chars, skeleton_chars),
+            "raw_over_canonical_proof_ir": _ratio(raw_chars, canonical_chars),
+            "skeleton_over_canonical_proof_ir": _ratio(
+                skeleton_chars, canonical_chars
+            ),
             "compact_over_skeleton": _ratio(compact_chars, skeleton_chars),
             "raw_over_reversible_standalone_total": _ratio(
                 raw_chars, standalone_reversible_chars
@@ -200,6 +221,9 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
         },
         "per_case_compression": {
             "median_raw_over_skeleton": statistics.median(raw_ratios),
+            "median_raw_over_canonical_proof_ir": statistics.median(
+                canonical_ratios
+            ),
             "median_raw_over_reversible_standalone": statistics.median(
                 reversible_ratios
             ),
@@ -207,6 +231,9 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
             "min_raw_over_skeleton": min(raw_ratios),
             "max_raw_over_skeleton": max(raw_ratios),
             "cases_at_least_10x_raw": sum(ratio >= 10.0 for ratio in raw_ratios),
+            "canonical_cases_at_least_10x_raw": sum(
+                ratio >= 10.0 for ratio in canonical_ratios
+            ),
             "standalone_reversible_cases_at_least_10x_raw": sum(
                 ratio >= 10.0 for ratio in reversible_ratios
             ),
@@ -215,6 +242,15 @@ def build_inventory(case_dir: Path, *, structural_only: bool) -> dict[str, Any]:
             "addresses": sum(record["source_addresses"] for record in records),
             "initial_lines": sum(record["initial_lines"] for record in records),
             "withheld_lines": sum(record["withheld_lines"] for record in records),
+            "canonical_addresses": sum(
+                record["canonical_source_addresses"] for record in records
+            ),
+            "canonical_opaque_nodes": sum(
+                record["canonical_opaque_nodes"] for record in records
+            ),
+            "canonical_pruned_claims": sum(
+                record["canonical_pruned_claims"] for record in records
+            ),
         },
     }
     return {"summary": summary, "records": records}
