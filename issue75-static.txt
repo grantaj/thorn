@@ -1,0 +1,37 @@
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_proof_ir_context_fidelity.py:1:1
+   |
+ 1 | / from __future__ import annotations
+ 2 | |
+ 3 | | from pathlib import Path
+ 4 | |
+ 5 | | from thorn.evidence import InferenceStatus
+ 6 | | from thorn.eval_review import build_result_review_context
+ 7 | | from thorn.latex import extract_project
+ 8 | | from thorn.llm_proof_language import (
+ 9 | |     parse_source_rescue_request,
+10 | |     project_llm_proof_language,
+11 | |     render_source_rescue,
+12 | | )
+13 | | from thorn.proof_obligations import ObligationStatus
+14 | | from thorn.semantic_review_render import build_semantic_review_request
+15 | | from thorn.semantic_transformations import (
+16 | |     SemanticTransformation,
+17 | |     SemanticTransformationIR,
+18 | |     SemanticTransformationKind,
+19 | |     build_semantic_transformation_ir,
+20 | | )
+21 | | from thorn.support import SupportKind
+   | |_____________________________________^
+help: Organize imports
+  |
+4 |
+5 + from thorn.eval_review import build_result_review_context
+6 | from thorn.evidence import InferenceStatus
+  - from thorn.eval_review import build_result_review_context
+7 | from thorn.latex import extract_project
+  |
+
+Found 1 error.
+[*] 1 fixable with the `--fix` option.
+Success: no issues found in 47 source files
