@@ -362,13 +362,16 @@ def _claim_atom(claim: Claim, incoming: list[SupportEdge]) -> str | None:
     if len(fragments) != 1:
         return None
 
-    if any(edge.kind == SupportKind.PRIOR_CLAIM for edge in incoming):
-        if re.fullmatch(
+    if (
+        any(edge.kind == SupportKind.PRIOR_CLAIM for edge in incoming)
+        and re.fullmatch(
             r"(?:therefore|hence|thus|consequently)\s*,?\s*@0@",
             template,
             flags=re.IGNORECASE,
-        ):
-            return fragments[0]
+        )
+        is not None
+    ):
+        return fragments[0]
 
     structural_prefix = any(
         edge.kind
