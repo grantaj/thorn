@@ -1,8 +1,18 @@
 from thorn.canonical_proof_ir import CanonicalNodeKind, CanonicalProofSource
-from thorn.formula_ir import Binder, ExprLoweringStatus, IdentifierExpr, QuantifiedExpr, Quantifier
+from thorn.formula_ir import (
+    Binder,
+    ExprLoweringStatus,
+    IdentifierExpr,
+    QuantifiedExpr,
+    Quantifier,
+)
 from thorn.frontend import SourceSpan
 from thorn.proof_obligations import ProofObligationIR, ProofProposition, PropositionRole
-from thorn.symbol_resolution_ir import ExpressionRef, ResolutionStatus, elaborate_symbol_resolution
+from thorn.symbol_resolution_ir import (
+    ExpressionRef,
+    ResolutionStatus,
+    elaborate_symbol_resolution,
+)
 
 
 def _source(address: str, start: int) -> CanonicalProofSource:
