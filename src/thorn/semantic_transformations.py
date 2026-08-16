@@ -375,10 +375,10 @@ def _free_names(expression: MathExpr) -> set[str]:
             names.update(_free_names(expression.binder.domain))
         return names
 
-    names: set[str] = set()
+    free_names: set[str] = set()
     for _suffix, child in _child_items(expression):
-        names.update(_free_names(child))
-    return names
+        free_names.update(_free_names(child))
+    return free_names
 
 
 def _instantiate(
@@ -960,7 +960,7 @@ def _definitions(
                 )
                 continue
 
-            status = (
+            fallback_status = (
                 InferenceStatus.AMBIGUOUS
                 if len(matches) > 1
                 else InferenceStatus.UNRESOLVED
@@ -975,7 +975,7 @@ def _definitions(
                     step_addresses=(step.address,),
                     support_atom_addresses=(atom.address,),
                     target_ref=ExpressionRef(owner_address=target.address),
-                    status=status,
+                    status=fallback_status,
                     source_addresses=source_addresses,
                     opaque_source_addresses=source_addresses,
                 )

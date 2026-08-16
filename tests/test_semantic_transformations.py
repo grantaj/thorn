@@ -614,3 +614,145 @@ def test_elaboration_does_not_mutate_the_higher_or_resolution_layers() -> None:
     assert higher.model_dump(mode="json") == before
     assert semantic.higher.model_dump(mode="json") == before
     assert semantic.transformations[0].status == InferenceStatus.CONFIDENT
+
+
+def test_non_quantified_implication_application_exposes_modus_ponens_precondition() -> None:
+    p = IdentifierExpr(name="P")
+    q = IdentifierExpr(name="Q")
+    proof = _proof(
+        [
+            _proposition(
+                "R1",
+                _implies(p, q),
+                role=PropositionRole.IMPORTED_RESULT,
+            ),
+            _proposition(
+                "H1",
+                p,
+                role=PropositionRole.ASSUMPTION,
+            ),
+            _proposition(
+                "C1",
+                q,
+                role=PropositionRole.DERIVED,
+            ),
+        ],
+        steps=[
+            ProofStepEdge(
+                address="E1",
+                premises=("R1",),
+                conclusion="C1",
+                rule=ProofRuleKind.APPLY_RESULT,
+                status=InferenceStatus.CONFIDENT,
+                source_addresses=("E1",),
+            )
+        ],
+        contexts={"C1": ("R1", "H1")},
+    )
+
+    _resolved, _higher, semantic = _semantic(proof)
+    transformation = semantic.transformations[0]
+    obligation = semantic.obligation(transformation.obligation_addresses[0])
+
+    assert transformation.kind == SemanticTransformationKind.RESULT_APPLICATION
+    assert transformation.parameter_bindings == ()
+    assert transformation.input_refs == (ExpressionRef(owner_address="H1"),)
+    assert transformation.status == InferenceStatus.CONFIDENT
+    assert obligation.expected == p
+    assert obligation.satisfied_by == ("H1",)
+    assert obligation.status == ObligationStatus.DISCHARGED
+
+
+def test_dependency_graph_path_is_preserved_on_result_support_atom() -> None:
+    from thorn.dependencies import (
+        DependencyEdge,
+        DependencyGraph,
+        DependencyNode,
+        DependencyResolution,
+        ReferenceContext,
+    )
+    from thorn.models import SourceRange
+
+    q = IdentifierExpr(name="Q")
+    proof = _proof(
+        [
+            _proposition(
+                "R1",
+                q,
+                role=PropositionRole.IMPORTED_RESULT,
+            ),
+            _proposition(
+                "C1",
+                q,
+                role=PropositionRole.DERIVED,
+            ),
+        ],
+        steps=[
+            ProofStepEdge(
+                address="E1",
+                premises=("R1",),
+                conclusion="C1",
+                rule=ProofRuleKind.APPLY_RESULT,
+                status=InferenceStatus.CONFIDENT,
+                source_addresses=("E1",),
+            )
+        ],
+        contexts={"C1": ("R1",)},
+        referenced_results={"R1": "thm:lemma"},
+    )
+    source = SourceRange(file="paper.tex", start_line=1, end_line=1)
+    graph = DependencyGraph(
+        nodes=[
+            DependencyNode(
+                identifier="thm:current",
+                environment="theorem",
+                statement="Current",
+                source=source,
+            ),
+            DependencyNode(
+                identifier="thm:middle",
+                environment="lemma",
+                statement="Middle",
+                source=source,
+            ),
+            DependencyNode(
+                identifier="thm:lemma",
+                environment="lemma",
+                statement="Lemma",
+                source=source,
+            ),
+        ],
+        edges=[
+            DependencyEdge(
+                source_identifier="thm:current",
+                target_label="middle",
+                target_identifier="thm:middle",
+                source=source,
+                context=ReferenceContext.PROOF,
+                resolution=DependencyResolution.RESOLVED,
+            ),
+            DependencyEdge(
+                source_identifier="thm:middle",
+                target_label="lemma",
+                target_identifier="thm:lemma",
+                source=source,
+                context=ReferenceContext.PROOF,
+                resolution=DependencyResolution.RESOLVED,
+            ),
+        ],
+    )
+    resolved = elaborate_symbol_resolution(proof)
+    higher = elaborate_higher_proof_structure(resolved)
+    semantic = elaborate_semantic_transformations(
+        higher,
+        dependency_graph=graph,
+    )
+    transformation = semantic.transformations[0]
+    support = semantic.support_atom(transformation.support_atom_addresses[0])
+
+    assert support.referenced_result_identifier == "thm:lemma"
+    assert support.dependency_path == (
+        "thm:current",
+        "thm:middle",
+        "thm:lemma",
+    )
