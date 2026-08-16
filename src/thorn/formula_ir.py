@@ -65,54 +65,54 @@ class OpaqueExpr(_ExprModel):
 
 class ApplyExpr(_ExprModel):
     kind: Literal["apply"] = "apply"
-    function: "MathExpr"
-    arguments: tuple["MathExpr", ...]
+    function: MathExpr
+    arguments: tuple[MathExpr, ...]
 
 
 class OperatorExpr(_ExprModel):
     kind: Literal["operator"] = "operator"
     operator: str
-    arguments: tuple["MathExpr", ...]
+    arguments: tuple[MathExpr, ...]
 
 
 class RelationExpr(_ExprModel):
     kind: Literal["relation"] = "relation"
     operator: RelationOperator
-    left: "MathExpr"
-    right: "MathExpr"
+    left: MathExpr
+    right: MathExpr
 
 
 class LogicalExpr(_ExprModel):
     kind: Literal["logical"] = "logical"
     operator: LogicalOperator
-    arguments: tuple["MathExpr", ...]
+    arguments: tuple[MathExpr, ...]
 
 
 class NotExpr(_ExprModel):
     kind: Literal["not"] = "not"
-    operand: "MathExpr"
+    operand: MathExpr
 
 
 class TupleExpr(_ExprModel):
     kind: Literal["tuple"] = "tuple"
-    items: tuple["MathExpr", ...]
+    items: tuple[MathExpr, ...]
 
 
 class SetExpr(_ExprModel):
     kind: Literal["set"] = "set"
-    items: tuple["MathExpr", ...]
+    items: tuple[MathExpr, ...]
 
 
 class Binder(_ExprModel):
     name: IdentifierExpr
-    domain: "MathExpr | None" = None
+    domain: MathExpr | None = None
 
 
 class QuantifiedExpr(_ExprModel):
     kind: Literal["quantified"] = "quantified"
     quantifier: Quantifier
     binder: Binder
-    body: "MathExpr"
+    body: MathExpr
 
 
 MathExpr: TypeAlias = Annotated[
@@ -361,7 +361,11 @@ class _Parser:
             if precedence < minimum_precedence:
                 break
             operator = self._take().text
-            next_minimum = precedence if operator in _RIGHT_ASSOCIATIVE else precedence + 1
+            if operator in _RELATIONS and isinstance(left, RelationExpr):
+                raise _ParseError("chained relations are not lowered")
+            next_minimum = (
+                precedence if operator in _RIGHT_ASSOCIATIVE else precedence + 1
+            )
             right = self._expression(next_minimum)
             left = _combine(operator, left, right)
         return left
@@ -445,7 +449,7 @@ def _top_level_word_split(
         char = text[index]
         if char in "({[":
             depth += 1
-        elif char in ")} ]".replace(" ", ""):
+        elif char in ")}]":
             depth = max(0, depth - 1)
         if depth == 0:
             for phrase in phrases:
@@ -495,10 +499,16 @@ def _lower_recursive(text: str) -> MathExpr:
         return _combine(operator.value, _lower_or_opaque(left), _lower_or_opaque(right))
 
     relation_phrases: tuple[tuple[tuple[str, ...], RelationOperator], ...] = (
+        (("is less than or equal to", "is at most"), RelationOperator.LESS_EQUAL),
+        (("is greater than or equal to", "is at least"), RelationOperator.GREATER_EQUAL),
+        (("is a proper subset of",), RelationOperator.SUBSET),
+        (("is a subset of",), RelationOperator.SUBSET_EQUAL),
         (("is not equal to", "does not equal"), RelationOperator.NOT_EQUAL),
         (("is equal to", "equals"), RelationOperator.EQUAL),
         (("does not belong to", "is not in"), RelationOperator.NOT_MEMBER),
         (("belongs to", "is in"), RelationOperator.MEMBER),
+        (("is less than",), RelationOperator.LESS_THAN),
+        (("is greater than",), RelationOperator.GREATER_THAN),
     )
     for phrases, operator in relation_phrases:
         split = _top_level_word_split(value, phrases)
@@ -682,7 +692,9 @@ def render_math_expr(expression: MathExpr) -> str:
     if isinstance(expression, OpaqueExpr):
         return f"?{{{expression.text}}}"
     if isinstance(expression, ApplyExpr):
-        arguments = ",".join(render_math_expr(argument) for argument in expression.arguments)
+        arguments = ",".join(
+            render_math_expr(argument) for argument in expression.arguments
+        )
         return f"{_render_child(expression.function, 10)}({arguments})"
     if isinstance(expression, OperatorExpr):
         if len(expression.arguments) == 1:
