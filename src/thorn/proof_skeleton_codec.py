@@ -9,17 +9,18 @@ from thorn.proof_skeleton import ProofSkeleton
 
 _FORMAT = "SC1"
 _REF_MARKER = "@"
-_MAX_DICTIONARY_ENTRIES = 64
-_MAX_NGRAM_TOKENS = 8
-_MIN_CANDIDATE_CHARS = 6
-_MAX_CANDIDATE_CHARS = 96
+_REF_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-"
+_MAX_DICTIONARY_ENTRIES = len(_REF_ALPHABET)
+_MAX_NGRAM_TOKENS = 20
+_MIN_CANDIDATE_CHARS = 5
+_MAX_CANDIDATE_CHARS = 192
+_MAX_RANKED_CANDIDATES = 384
 
 _GENERIC_LINE_RE = re.compile(r"^([HLDRC])(\d+):(.*)$")
 _THEOREM_LINE_RE = re.compile(r"^T0:(.*)$")
 _QUALIFIER_LINE_RE = re.compile(r"^Q(\d+)>C(\d+):(.*)$")
 _EDGE_LINE_RE = re.compile(r"^E(\d+):([A-Z])(\d*)>([A-Z])(\d*):(.*)$")
 _TOKEN_RE = re.compile(r"\\[A-Za-z@]+|[A-Za-z_][A-Za-z0-9_]*|\d+|\s+|.", re.DOTALL)
-_REF_RE = re.compile(r"@(\d+);")
 
 
 @dataclass(frozen=True)
@@ -193,6 +194,12 @@ def _candidate_counts(skeleton_lines: list[list[str]]) -> Counter[str]:
     return counts
 
 
+def _ref(index: int) -> str:
+    if not 0 <= index < len(_REF_ALPHABET):
+        raise ValueError(f"dictionary reference index {index} is out of range")
+    return f"{_REF_MARKER}{_REF_ALPHABET[index]}"
+
+
 def _escape_literal(text: str) -> str:
     return text.replace(_REF_MARKER, _REF_MARKER * 2)
 
@@ -222,7 +229,7 @@ def _encode_tail(text: str, dictionary: tuple[str, ...]) -> str:
         )
         if match is not None:
             index, value = match
-            output.append(f"@{index};")
+            output.append(_ref(index))
             position += len(value)
             continue
 
@@ -240,18 +247,21 @@ def _decode_tail(text: str, dictionary: tuple[str, ...]) -> str:
             output.append(text[position])
             position += 1
             continue
-        if position + 1 < len(text) and text[position + 1] == "@":
+        if position + 1 >= len(text):
+            raise ValueError("truncated dictionary reference at end of line")
+        code = text[position + 1]
+        if code == "@":
             output.append("@")
             position += 2
             continue
-        match = _REF_RE.match(text, position)
-        if match is None:
-            raise ValueError(f"invalid dictionary reference near {text[position:position + 12]!r}")
-        index = int(match.group(1))
+        try:
+            index = _REF_ALPHABET.index(code)
+        except ValueError as exc:
+            raise ValueError(f"invalid dictionary reference code {code!r}") from exc
         if index >= len(dictionary):
-            raise ValueError(f"dictionary reference @{index}; is out of range")
+            raise ValueError(f"dictionary reference {_ref(index)!r} is out of range")
         output.append(dictionary[index])
-        position = match.end()
+        position += 2
     return "".join(output)
 
 
@@ -269,10 +279,12 @@ def _render_wire(
 ) -> str:
     encoded_lines = _apply_dictionary(syntax_lines, dictionary)
     wire: list[str] = [_FORMAT, f"D{len(dictionary)}"]
-    wire.extend(f"{index}={value}" for index, value in enumerate(dictionary))
-    wire.append(f"S{len(encoded_lines)}")
-    for lines in encoded_lines:
-        wire.append(f"N{len(lines)}")
+    for index, value in enumerate(dictionary):
+        wire.append(_encode_tail(value, dictionary[:index]))
+    wire.append("")
+    for skeleton_index, lines in enumerate(encoded_lines):
+        if skeleton_index:
+            wire.append("")
         wire.extend(lines)
     return "\n".join(wire) + "\n"
 
@@ -287,17 +299,15 @@ def _select_dictionary(syntax_lines: list[list[str]]) -> tuple[str, ...]:
     for candidate, count in counts.items():
         if count < 2:
             continue
-        reference_bytes = len(b"@00;")
         candidate_bytes = len(candidate.encode("utf-8"))
-        entry_bytes = candidate_bytes + len(b"00=\n")
-        estimated = count * (candidate_bytes - reference_bytes) - entry_bytes
+        estimated = count * (candidate_bytes - 2) - (candidate_bytes + 1)
         if estimated > 0:
             ranked.append((estimated, candidate_bytes, candidate))
     ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
 
     selected: tuple[str, ...] = ()
     current_bytes = _wire_bytes(syntax_lines, selected)
-    for _, _, candidate in ranked[:256]:
+    for _, _, candidate in ranked[:_MAX_RANKED_CANDIDATES]:
         if len(selected) >= _MAX_DICTIONARY_ENTRIES:
             break
         trial = (*selected, candidate)
@@ -353,29 +363,39 @@ def decode_skeleton_bundle(wire_text: str) -> list[str]:
     if not dictionary_header.startswith("D") or not dictionary_header[1:].isdigit():
         raise ValueError("invalid compressed skeleton dictionary header")
     dictionary_count = int(dictionary_header[1:])
+    if dictionary_count > _MAX_DICTIONARY_ENTRIES:
+        raise ValueError("compressed skeleton dictionary exceeds format capacity")
+
     dictionary_values: list[str] = []
-    for index in range(dictionary_count):
-        entry = take()
-        prefix = f"{index}="
-        if not entry.startswith(prefix):
-            raise ValueError(f"invalid compressed skeleton dictionary entry {entry!r}")
-        dictionary_values.append(entry[len(prefix) :])
+    for _ in range(dictionary_count):
+        encoded_entry = take()
+        entry = _decode_tail(encoded_entry, tuple(dictionary_values))
+        if not entry:
+            raise ValueError("compressed skeleton dictionary entries may not be empty")
+        dictionary_values.append(entry)
     dictionary = tuple(dictionary_values)
 
-    skeleton_header = take()
-    if not skeleton_header.startswith("S") or not skeleton_header[1:].isdigit():
-        raise ValueError("invalid compressed skeleton count header")
-    skeleton_count = int(skeleton_header[1:])
-    if skeleton_count < 1:
+    if take() != "":
+        raise ValueError("compressed skeleton dictionary must be followed by a blank line")
+    if cursor >= len(lines):
         raise ValueError("compressed skeleton bundle must contain at least one skeleton")
 
+    blocks: list[list[str]] = []
+    block: list[str] = []
+    for line in lines[cursor:]:
+        if line == "":
+            if not block:
+                raise ValueError("compressed skeleton bundle contains an empty skeleton")
+            blocks.append(block)
+            block = []
+            continue
+        block.append(line)
+    if not block:
+        raise ValueError("compressed skeleton bundle may not end with an empty skeleton")
+    blocks.append(block)
+
     decoded: list[str] = []
-    for _ in range(skeleton_count):
-        line_header = take()
-        if not line_header.startswith("N") or not line_header[1:].isdigit():
-            raise ValueError("invalid compressed skeleton line-count header")
-        line_count = int(line_header[1:])
-        encoded_lines = [take() for _ in range(line_count)]
+    for encoded_lines in blocks:
         syntax_lines = [
             f"{line[0]}{_decode_tail(line[1:], dictionary)}"
             if line
@@ -384,7 +404,4 @@ def decode_skeleton_bundle(wire_text: str) -> list[str]:
         ]
         initial_lines = _syntax_decode_lines(syntax_lines)
         decoded.append("\n".join(initial_lines) + "\n")
-
-    if cursor != len(lines):
-        raise ValueError("compressed skeleton bundle contains trailing data")
     return decoded
