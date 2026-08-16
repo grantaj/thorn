@@ -1,84 +1,78 @@
 # Thorn
 
-**Thorn builds machine-usable proof structure from ordinary mathematical writing so humans and AI can reason about manuscripts together.**
+**Thorn is a compiler front-end / partial elaborator for mathematical arguments written in ordinary LaTeX.**
 
-Thorn is an early-stage **partial mathematical elaborator** for LaTeX. It recovers a source-preserving mathematical representation from an ordinary manuscript and increasingly lowers that representation into a canonical typed **Proof IR**: expressions, binders, hypotheses, goals, proof obligations, dependencies, inference edges, symbol identity, and explicit unresolved holes.
+It turns a manuscript into an explicit, source-linked mathematical representation and then into a canonical typed, deliberately partial **Proof IR**. That representation is the centre of the architecture. Two primary downstream paths are systematic LLM review and progressive handoff to Lean or another formal proof system.
 
-The aim is strong support for humans doing mathematics with AI assistance. Thorn is not trying to replace the mathematician, certify an informal paper, or turn LaTeX into a formal proof by pretending ambiguity does not exist. It gives AI and other tools a faithful mathematical substrate so they do not have to reconstruct the proof from English prose on every pass.
+Thorn is built for humans doing mathematics with machine assistance. It does not certify an informal paper, replace mathematical judgment, or make ambiguity disappear by guessing. When the source is incomplete or informal, the IR stays incomplete or informal in an explicit way.
 
-## What Thorn does
+## Why Thorn
 
-Interactive agents and chat tools are excellent for exploring ideas, finding proof strategies, explaining mathematics, and rewriting text. Thorn assumes they may already be part of the author's workflow.
+Mathematicians should be able to **write normal LaTeX first**. Interactive agents and chat tools are useful for exploration, explanation and rewriting, but ad-hoc review repeatedly asks a model to reconstruct the manuscript's proof structure from prose.
 
-Its distinctive job is to treat the manuscript as a mathematical artifact and **compile as much of its proof structure as can be recovered safely**. The representation remains partial when the source is partial: uncertainty, unresolved operations, proof holes, and load-bearing prose are preserved rather than guessed away.
+Thorn's job is different: treat the manuscript as a mathematical artifact and compile as much of its argument structure as can be recovered faithfully. Hypotheses, goals, dependencies, proof obligations, theorem applications, substitutions, witnesses, rewrites, symbol identity, higher proof structure and unresolved steps should become explicit machine structure whenever the evidence justifies it.
 
-The architectural direction is:
+The architecture is:
 
 ```text
-ordinary LaTeX manuscript
+ordinary mathematical LaTeX
         |
         v
-source-preserving mathematical frontend
-        |
-        v
-rich / uncertainty-bearing Thorn Math IR
+source-preserving Math IR
         |------------------> thorn analyze
         |                     deterministic structural diagnostics
-        |
-        `-> partial mathematical elaboration
-                |
-                v
-        canonical typed Proof IR
-          - expressions and binders
-          - hypotheses and goals
-          - proof obligations
-          - typed inference edges
-          - symbol identity and scope
-          - substitutions / instantiations / witnesses
-          - explicit holes and unresolved structure
-          - permanent source correspondence
-                |
-                +--> AI-facing proof language / semantic review
-                +--> deterministic proof tooling
-                +--> dependency and navigation tooling
-                `--> future bounded formalisation / proof-assistant export
+        v
+canonical typed / partial Proof IR
+      /                     \
+     v                       v
+systematic                 Lean / formal
+LLM review                 proof handoff
 ```
 
-`thorn ir` currently exposes the rich frontend Math IR. The canonical Proof IR is being built as a stronger downstream semantic layer under the programme in issue #59.
+The two handoffs share the same canonical semantics, uncertainty and source correspondence. They are not separate semantic systems.
 
-`thorn analyze` can establish mechanically visible structural facts such as a duplicate label, missing internal reference, circular result dependency, or conflicting explicit symbol roles. It **does not decide whether a proof is mathematically valid**. A clean deterministic analysis is therefore not the product goal and must not constrain the Proof IR to facts that can be checked offline.
+`thorn ir` currently exposes the rich frontend Math IR. The stronger canonical Proof IR is an internal downstream representation built from that evidence. Its current stable LLM-facing projection is `thorn-proof/1`.
 
-## Human + AI mathematics
+`thorn analyze` reports mechanically visible structural facts such as duplicate labels, missing internal references, circular result dependencies and conflicting explicit symbol roles. It **does not decide whether a proof is mathematically valid**. Local checkability is useful, but it does not define what mathematics Thorn is allowed to represent.
 
-Thorn is intended to sit between ordinary mathematical practice and increasingly capable AI systems.
+See [the positioning statement](docs/positioning.md) for the project-level contract and [`docs/mathematical-ir.md`](docs/mathematical-ir.md) for the technical IR architecture.
 
-A mathematician should be able to keep writing normal mathematics while Thorn provides a stable shared representation that an AI reviewer, proof assistant, editor, navigator, or specialised mathematical model can consume. The human-facing source remains the manuscript; the machine-facing working representation is increasingly the canonical Proof IR plus exact correspondence back to the manuscript.
+## Two user paths
 
-This gives AI a better interface than raw LaTeX alone. Instead of repeatedly inferring that a sentence introduced a witness, instantiated a theorem, discharged an obligation, or reused a definition, Thorn should encode those operations structurally whenever it has enough evidence.
+### 1. Systematic LLM review
 
-The long-term success criterion is:
+Thorn aims to make model-backed mathematical review reproducible and source-aware rather than equivalent to pasting a paper into a chat window.
 
-> Can a computer or LLM consume Thorn Proof IR and reason about the proof without first reconstructing the mathematics from English prose?
+The machinery around the model is the point:
 
-Over time, the answer should increasingly be yes.
+- deterministic extraction and partial elaboration of mathematical structure;
+- explicit hypotheses, dependencies, proof steps, obligations and uncertainty;
+- source-addressed unresolved and opaque material;
+- bounded exact source-on-demand instead of indiscriminate whole-paper context;
+- stable, fingerprintable review packets;
+- a basis for replay, caching, incremental review, regression testing and browsable reports.
 
-## Thorn and Lean
+The stable `thorn-proof/1` format and its bounded `NEED_SOURCE` contract are implemented. Issue #78 tracks the remaining production handoff and evaluation: **the current `thorn review` command still uses the existing semantic-review request path rather than `thorn-proof/1` as its normal provider input**.
 
-Lean is an important **architectural precedent**, not Thorn's target language and not a claim about Thorn's assurance level.
+The LLM remains a mathematical reviewer, not a trusted formal kernel. A clean model-backed review is not formal verification.
 
-Lean separates human-facing syntax, elaboration, a small typed core expression language, local proof state and metavariables, source/semantic information, and later presentation/delaboration. Thorn is borrowing that separation of concerns while solving a different problem.
+### 2. Bridge toward Lean and formal proof
 
-Lean starts from deliberately formal input and elaborates to proof terms that a small trusted kernel can check. Thorn starts from ordinary mathematical prose and notation, where information may be omitted, implicit, ambiguous, or genuinely informal. Thorn's elaboration is therefore partial. Its Proof IR must be able to contain, in one proof:
+The same Proof IR should progressively support formalisation. The goal is not arbitrary paper-to-Lean translation. It is to translate only the subset Thorn has genuinely recovered, emit useful proof skeletons and explicit holes elsewhere, and preserve exact source correspondence for every remaining formalisation obligation.
 
-- fully lowered typed expressions;
-- explicit hypotheses, goals, and derived propositions;
-- known dependencies whose inference rule is unresolved;
-- substitutions, instantiations, and witnesses when recoverable;
-- explicit proof obligations / holes;
-- mathematical fragments that are only partially understood;
-- source-addressed prose when it remains genuinely load-bearing.
+Lean can then act as an independent checker of the mechanically translated subset.
 
-So Thorn is **not Lean-lite** and a clean Thorn run is never a proof certificate. A future Lean or other proof-assistant backend would be a consumer and a test of Proof IR quality, not the definition of Thorn's semantics.
+Issue #77 tracks the first bounded end-to-end proof of life:
+
+```text
+ordinary LaTeX
+  -> Thorn Math IR
+  -> canonical Proof IR
+  -> generated Lean
+  -> Lean accepts the mechanically recovered subset
+```
+
+Thorn is therefore **not Lean-lite**. It is intended to lower the activation energy between ordinary mathematical writing and formal proof without requiring authors to formalise everything before receiving value.
 
 ## What Thorn is not
 
@@ -86,24 +80,34 @@ Thorn is deliberately not:
 
 - a formal proof assistant or proof certificate;
 - an offline theorem prover;
+- an automatic arbitrary-LaTeX-to-Lean translator;
+- a claim that LLM review is formal verification;
 - an autonomous replacement for mathematical judgment;
 - a general-purpose mathematical writing agent;
 - line-by-line autocomplete or an LSP that reacts to every edit;
 - a tool that rewrites substantive mathematics merely to make a diagnostic disappear.
 
-## Status
+## Current status
 
-Very early prototype. The architecture is moving from document extraction plus review toward the computer-proof-IR programme tracked in issue #59.
+Thorn is still an early-stage prototype, but the canonical Proof-IR construction sequence is now substantial rather than merely planned.
 
-Completed programme tranches include:
+Implemented programme tranches include:
 
-- graph-derived canonical proof slicing and source recovery;
-- a Thorn-owned typed formula AST with binders and partial lowering (#60);
-- explicit proof obligations and typed proof-step edges (#61).
+- graph-derived canonical proof slicing, source recovery and unresolved/load-bearing context (#57 / PR #58);
+- typed formula ASTs, binders and partial lowering (#60);
+- explicit proof obligations and typed proof-step edges (#61);
+- symbol/type/scope resolution, substitutions, theorem instantiations and witnesses (#62);
+- higher proof structure including cases, contradiction, induction and WLOG/symmetry (#63);
+- definition use, rewriting and result-application semantics (#64);
+- the stable `thorn-proof/1` LLM-facing projection and bounded source-on-demand contract (#65);
+- real-paper fidelity repairs preserving load-bearing context and result applications (#75 / PR #76).
 
-The current tranche (#62) is strengthening symbol identity, type/domain and scope resolution together with structural substitution, theorem instantiation, and witness representation. Later tranches cover higher proof structure, rewriting/result-application semantics, a stable LLM-facing proof language, and bounded proof-assistant export experiments.
+The next stage is **consumer handoff and evaluation**, not another speculative semantic layer:
 
-The earlier IR-assisted semantic-review programme (#20) is complete enough to provide review/evaluation infrastructure, but semantic review is now one consumer of a stronger Proof IR rather than the architectural endpoint.
+- #78 integrates `thorn-proof/1` into the actual semantic-review provider path and compares it with the existing raw-source baseline;
+- #77 builds the first bounded Lean export from canonical Proof IR.
+
+The earlier IR-assisted semantic-review programme (#20) provides useful request/evaluation infrastructure, but semantic review is one consumer of Proof IR rather than the architectural endpoint.
 
 No formal verification is claimed. A clean deterministic analysis means only that no implemented structural diagnostic fired. A clean model-backed review means only that no configured review diagnostic survived its review procedure.
 
@@ -141,19 +145,19 @@ For a deliberately reduced structural-only run, useful in constrained environmen
 thorn analyze paper.tex --structural-only
 ```
 
-Inspect the recovered frontend IR:
+Inspect the recovered frontend Math IR:
 
 ```bash
 thorn ir paper.tex
 ```
 
-Export the complete frontend Math IR as JSON:
+Export that frontend IR as JSON:
 
 ```bash
 thorn ir paper.tex --format json > thorn-ir.json
 ```
 
-Run model-backed semantic review:
+Run the current model-backed semantic-review path:
 
 ```bash
 export OPENAI_API_KEY=...
@@ -193,9 +197,9 @@ review-specific:
 
 By default Thorn returns a non-zero exit status only when an `error` diagnostic is emitted.
 
-See [`docs/mathematical-ir.md`](docs/mathematical-ir.md) for the Math-IR / Proof-IR architecture, [`docs/analysis.md`](docs/analysis.md) for the deterministic rule boundary, [`docs/proof-support-ir.md`](docs/proof-support-ir.md) and [`docs/symbol-ir.md`](docs/symbol-ir.md) for frontend evidence layers, and [`docs/local-nlp.md`](docs/local-nlp.md) for the linguistic frontend and uncertainty contract.
+See [`docs/analysis.md`](docs/analysis.md) for the deterministic rule boundary, [`docs/proof-support-ir.md`](docs/proof-support-ir.md) and [`docs/symbol-ir.md`](docs/symbol-ir.md) for frontend evidence layers, and [`docs/local-nlp.md`](docs/local-nlp.md) for the linguistic frontend and uncertainty contract.
 
-The programme-level canonical Proof IR experiments are documented in [`eval/CANONICAL_PROOF_IR.md`](eval/CANONICAL_PROOF_IR.md), [`eval/TYPED_FORMULA_IR.md`](eval/TYPED_FORMULA_IR.md), and [`eval/PROOF_OBLIGATIONS.md`](eval/PROOF_OBLIGATIONS.md).
+The canonical Proof-IR layers are documented in [`eval/CANONICAL_PROOF_IR.md`](eval/CANONICAL_PROOF_IR.md), [`eval/TYPED_FORMULA_IR.md`](eval/TYPED_FORMULA_IR.md), [`eval/PROOF_OBLIGATIONS.md`](eval/PROOF_OBLIGATIONS.md), [`eval/HIGHER_PROOF_STRUCTURE.md`](eval/HIGHER_PROOF_STRUCTURE.md), [`eval/SEMANTIC_TRANSFORMATIONS.md`](eval/SEMANTIC_TRANSFORMATIONS.md), and [`eval/LLM_PROOF_LANGUAGE.md`](eval/LLM_PROOF_LANGUAGE.md).
 
 ## What the frontend handles
 
@@ -208,29 +212,37 @@ The programme-level canonical Proof IR experiments are documented in [`eval/CANO
 - conservative symbol, definition, role, constraint, and lexical-scope evidence for explicit introductions
 - local linguistic support/symbol candidates with exact source provenance and first-class ambiguity
 
-The LaTeX and linguistic layers are evidence-producing frontends, not the canonical semantics of a proof. Parser or NLP vocabulary should disappear from the Proof IR whenever Thorn has safely recovered the corresponding mathematical meaning.
+The LaTeX and linguistic layers are evidence-producing frontends, not the canonical semantics of a proof. Parser or NLP vocabulary should disappear from Proof IR whenever Thorn has safely recovered the corresponding mathematical meaning.
 
 ## Design principles
 
 ### Structured mathematics first
 
-If Thorn understands that a phrase means a quantifier, implication, membership relation, theorem application, substitution, witness introduction, or other mathematical operation, the canonical Proof IR should encode that structure rather than preserve the vocabulary used to narrate it.
+If Thorn understands that a phrase means a quantifier, implication, membership relation, theorem application, substitution, witness introduction, rewrite or another mathematical operation, canonical Proof IR should encode that structure rather than preserve only the vocabulary used to narrate it.
 
-### Partiality is first-class
+### Mixed certainty is first-class
 
-Unknown is preferable to guessed. Thorn should expose unresolved proof obligations, ambiguous bindings, partially lowered expressions, and opaque load-bearing prose rather than manufacture certainty to make the representation look formal.
+Unknown is preferable to guessed. Fully recovered structure, ambiguous bindings, partial expressions, unresolved proof obligations and opaque load-bearing prose may coexist in one proof.
+
+### No confidence laundering
+
+Lowering, rendering or exporting mathematics may never make it more certain than the recovered evidence. Formal-looking output is not permission to promote an unresolved inference into a known one.
 
 ### Provenance is permanent
 
-Every lowered, unresolved, or opaque item must retain an exact route back to manuscript source. More formal structure must never mean losing the author's original wording.
+Every lowered, unresolved or opaque item must retain an exact route back to manuscript source. More formal structure must never mean losing the author's original wording.
+
+### Load-bearing mathematics must not disappear
+
+If a recovered proof edge depends on mathematical content, that content must either be represented in Proof IR or remain reachable through a stable source handle.
 
 ### The IR is not designed around one consumer
 
-AI semantic review is a primary intended consumer, but the canonical representation must not be weakened or made prompt-shaped for one model provider. Deterministic tools, navigation, specialised models, reports, and formal-system experiments should share the same semantics.
+LLM review and Lean/formal export are primary intended consumers, but the canonical representation must not become prompt-shaped or Lean-shaped. Deterministic tools, navigation, reports, specialised models and formal systems should share the same semantics.
 
 ### Offline diagnostics do not define the architecture
 
-A useful deterministic rule is welcome, but inability to check a mathematical fact locally is not a reason to omit it from the IR. The representation should capture the strongest faithful mathematical structure Thorn can recover; different consumers can apply different assurance regimes to it.
+A useful deterministic rule is welcome, but inability to check a mathematical fact locally is not a reason to omit it from Proof IR. Different consumers can apply different assurance regimes to the same faithful representation.
 
 ## Diagnostic and readability boundary
 
@@ -238,13 +250,13 @@ A Thorn finding should be specific enough that an author can either fix it or re
 
 Deterministic `thorn analyze` findings state only mechanically established facts. Ambiguous or unresolved relations can remain useful IR without becoming findings, and Thorn must not claim that a theorem is false merely because a relation is missing or linguistically uncertain.
 
-Thorn also distinguishes objective mathematical readability from subjective style. A simultaneous notation collision or materially ambiguous convention can be reviewable; merely preferring a different symbol, prose rhythm, or house style is not. Style rules should come from an explicitly adopted external style guide rather than model taste.
+Thorn also distinguishes objective mathematical readability from subjective style. A simultaneous notation collision or materially ambiguous convention can be reviewable; merely preferring a different symbol, prose rhythm or house style is not. Style rules should come from an explicitly adopted external style guide rather than model taste.
 
 ## Test-driven specification
 
-The public synthetic corpus specifies desired behavior, including clean controls that constrain false positives. The rough L1--L10 difficulty ladder is complemented by an orthogonal fault matrix covering theorem truth, proof validity, locality, fault class, repairability, detection method, reader consequence, and downstream impact.
+The public synthetic corpus specifies desired behavior, including clean controls that constrain false positives. The rough L1--L10 difficulty ladder is complemented by an orthogonal fault matrix covering theorem truth, proof validity, locality, fault class, repairability, detection method, reader consequence and downstream impact.
 
-The same fixtures can exercise several layers independently: frontend extraction, canonical Proof IR, deterministic structural analysis, AI review, and eventually formal export. This is intentional. A fault may be faithfully represented in Proof IR even when deterministic analysis cannot diagnose it.
+The same fixtures can exercise several layers independently: frontend extraction, canonical Proof IR, deterministic structural analysis, LLM review and eventually formal export. This is intentional. A fault may be faithfully represented in Proof IR even when deterministic analysis cannot diagnose it.
 
 See [the test matrix](docs/test-matrix.md) and the [evaluation corpus](eval/README.md).
 
