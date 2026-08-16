@@ -35,10 +35,10 @@ E
 E         - discharged
 E         + unresolved
 
-tests/test_proof_ir_context_fidelity.py:143: AssertionError
+tests/test_proof_ir_context_fidelity.py:145: AssertionError
 =========================== short test summary info ============================
 FAILED tests/test_proof_ir_context_fidelity.py::test_result_application_keeps_unmet_precondition_distinct_from_control - AssertionError: assert <ObligationSt... 'unresolved'> == <ObligationSt... 'discharged'>
   
   - discharged
   + unresolved
-1 failed in 0.24s
+1 failed in 0.26s
