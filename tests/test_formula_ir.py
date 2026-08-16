@@ -11,6 +11,7 @@ from thorn.formula_ir import (
     LogicalOperator,
     OpaqueExpr,
     QuantifiedExpr,
+    Quantifier,
     RelationExpr,
     RelationOperator,
     SetExpr,
@@ -43,6 +44,19 @@ def test_safe_quantifier_surface_forms_have_identical_structure() -> None:
     assert render_math_expr(expression) == "∀x∈R.P(x)"
 
 
+def test_existential_binder_is_structural() -> None:
+    lowered = _lower("there exists a real x such that P(x)")
+
+    assert lowered.status == ExprLoweringStatus.FULL
+    expression = lowered.expression
+    assert isinstance(expression, QuantifiedExpr)
+    assert expression.quantifier == Quantifier.EXISTS
+    assert expression.binder.name == IdentifierExpr(name="x")
+    assert expression.binder.domain == IdentifierExpr(name="R")
+    assert isinstance(expression.body, ApplyExpr)
+    assert render_math_expr(expression) == "∃x∈R.P(x)"
+
+
 def test_typed_real_binder_and_nested_implication_are_structural() -> None:
     lowered = _lower("For every real x, if f(x) > 0 then g(x) = 0.")
 
@@ -71,8 +85,14 @@ def test_typed_real_binder_and_nested_implication_are_structural() -> None:
         ("not P", "¬P"),
         ("x equals y", "x = y"),
         ("x is not equal to y", "x ≠ y"),
+        ("x is less than y", "x < y"),
+        ("x is at most y", "x ≤ y"),
+        ("x is greater than y", "x > y"),
+        ("x is at least y", "x ≥ y"),
         ("x belongs to X", "x ∈ X"),
         ("x does not belong to X", "x ∉ X"),
+        ("A is a proper subset of B", "A ⊂ B"),
+        ("A is a subset of B", "A ⊆ B"),
     ],
 )
 def test_safe_surface_equivalents_lower_identically(surface: str, symbolic: str) -> None:
@@ -136,6 +156,14 @@ def test_unsupported_syntax_is_explicitly_opaque() -> None:
     assert lowered.status == ExprLoweringStatus.OPAQUE
     assert isinstance(lowered.expression, OpaqueExpr)
     assert lowered.expression.text
+
+
+def test_ambiguous_chained_relation_is_not_guessed() -> None:
+    lowered = _lower("x < y < z")
+
+    assert lowered.status == ExprLoweringStatus.OPAQUE
+    assert isinstance(lowered.expression, OpaqueExpr)
+    assert lowered.expression.text == "x < y < z"
 
 
 def test_tuple_and_simple_set_forms_are_structural() -> None:
