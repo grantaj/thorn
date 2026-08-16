@@ -46,9 +46,9 @@ jobs:
           )
           path.write_text(text)
           PY
-          python -m pip install ruff mypy pydantic
-          ruff check src/thorn/llm_proof_language.py --fix
+          python -m pip install ruff
           ruff format src/thorn/llm_proof_language.py tests/test_llm_proof_language.py scripts/measure_llm_proof_language.py
+          ruff check src/thorn/llm_proof_language.py tests/test_llm_proof_language.py scripts/measure_llm_proof_language.py --fix
           ruff check src/thorn/llm_proof_language.py tests/test_llm_proof_language.py scripts/measure_llm_proof_language.py
       - name: Commit bounded fixes
         run: |
