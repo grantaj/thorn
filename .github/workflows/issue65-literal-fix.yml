@@ -1,0 +1,40 @@
+name: Issue 65 literal fix
+
+on:
+  push:
+    branches:
+      - agent/issue-65-llm-proof-language
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-65-llm-proof-language
+      - name: Fix literal default
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/thorn/llm_proof_language.py")
+          text = path.read_text()
+          old = '    format_version: Literal["thorn-proof/1"] = FORMAT_VERSION'
+          new = '    format_version: Literal["thorn-proof/1"] = "thorn-proof/1"'
+          if old not in text:
+              raise SystemExit("literal default target not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit bounded fix
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/thorn/llm_proof_language.py
+          git commit -m "Fix proof language literal typing"
+          git push origin HEAD:agent/issue-65-llm-proof-language
