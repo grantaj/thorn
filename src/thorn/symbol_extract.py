@@ -16,6 +16,7 @@ from thorn.symbols import (
     SymbolRole,
     SymbolTable,
     SymbolUse,
+    canonical_symbol_name,
 )
 
 _SIMPLE_SYMBOL = (
@@ -271,10 +272,11 @@ def _append_candidate(
         content_start + candidate.name_end,
     )
     introduction_source = _span(file.path, file.raw, introduction_start, introduction_end)
-    identifier = _symbol_id(scope_identifier, candidate.name, symbol_source)
+    canonical_name = canonical_symbol_name(candidate.name)
+    identifier = _symbol_id(scope_identifier, canonical_name, symbol_source)
     symbol = Symbol(
         identifier=identifier,
-        name=candidate.name,
+        name=canonical_name,
         role=candidate.role,
         arity=candidate.arity,
         domain_latex=candidate.domain_latex,
@@ -516,11 +518,21 @@ def _masked_content(content: str) -> str:
 
 
 def _symbol_occurrences(content: str, name: str) -> list[tuple[int, int]]:
-    escaped = re.escape(name)
-    if name.startswith("\\"):
-        pattern = re.compile(rf"{escaped}(?![A-Za-z])")
+    canonical = canonical_symbol_name(name)
+    subscript = re.match(
+        r"^(?P<base>(?:\\[A-Za-z]+|[A-Za-z]))_(?P<sub>\\[A-Za-z]+|[A-Za-z0-9]+)$",
+        canonical,
+    )
+    if subscript is not None:
+        base = re.escape(subscript.group("base"))
+        sub = re.escape(subscript.group("sub"))
+        spelling = rf"{base}_(?:{sub}|\{{{sub}\}})"
     else:
-        pattern = re.compile(rf"(?<![A-Za-z]){escaped}(?![A-Za-z])")
+        spelling = re.escape(canonical)
+    if canonical.startswith("\\"):
+        pattern = re.compile(rf"{spelling}(?![A-Za-z])")
+    else:
+        pattern = re.compile(rf"(?<![A-Za-z]){spelling}(?![A-Za-z])")
     return [(match.start(), match.end()) for match in pattern.finditer(content)]
 
 

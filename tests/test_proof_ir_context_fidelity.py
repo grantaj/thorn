@@ -97,7 +97,7 @@ def _write_project_definition_case(path: Path, definition: str) -> None:
 \begin{{document}}
 The thresholded object is defined by
 \[
-A_\tau \stackrel{{{{\scriptstyle\text{{\tiny def}}}}}}{{{{=}}}} {definition}.
+A_{{\tau}} \stackrel{{{{\scriptstyle\text{{\tiny def}}}}}}{{{{=}}}} {definition}.
 \]
 \begin{{proposition}}\label{{prop:main}}
 $A_\tau$ has property $Q$.
@@ -146,7 +146,7 @@ def test_explicit_project_definition_is_selected_only_when_target_uses_it(
         good_doc,
         parse_source_rescue_request(good_doc, "NEED_SOURCE D1"),
     )
-    assert r"A_\tau" in rescue.text
+    assert r"A_{\tau}" in rescue.text
     assert r"\tau^2" in rescue.text
 
 
