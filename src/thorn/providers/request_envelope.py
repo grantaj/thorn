@@ -14,6 +14,7 @@ from thorn.semantic_review_compact import render_compact_semantic_review_request
 from thorn.semantic_review_render import SemanticReviewRequest, render_semantic_review_request
 
 RequestKind = Literal["attack", "defend", "semantic", "proof_review"]
+PROOF_REVIEW_MAX_OUTPUT_TOKENS = 4096
 
 
 class ProviderRequestEnvelope(BaseModel):
@@ -37,6 +38,7 @@ class ProviderRequestEnvelope(BaseModel):
     initial_packet_fingerprint: str | None = None
     requested_source_addresses: tuple[str, ...] | None = None
     messages: tuple[dict[str, str], ...] | None = None
+    max_output_tokens: int | None = None
 
     def canonical_json(self) -> str:
         return json.dumps(
@@ -162,6 +164,7 @@ def proof_review_request_envelope(
             request.requested_source_addresses if request.requested_source_addresses else None
         ),
         messages=messages,
+        max_output_tokens=PROOF_REVIEW_MAX_OUTPUT_TOKENS,
     )
 
 
