@@ -69,6 +69,7 @@ class OpenAIProvider:
             model=self.model,
             input=cast(Any, envelope.input_messages()),
             text_format=ProofReviewModelResponse,
+            max_output_tokens=envelope.max_output_tokens,
         )
         self._record_usage(response)
         if response.output_parsed is None:
