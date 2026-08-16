@@ -26,7 +26,9 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Apply symbol-alias patch
-        run: python scripts/issue75_symbol_alias_patch.py
+        run: |
+          python scripts/issue75_symbol_alias_patch.py
+          ruff check --fix src/thorn/symbols.py
       - name: Install
         run: python -m pip install -e '.[dev]'
       - name: Project-definition alias regression
@@ -43,21 +45,8 @@ jobs:
           thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
       - name: Static checks
         run: |
-          set +e
-          ruff check src tests > issue75-static.txt 2>&1
-          ruff_status=$?
-          mypy src >> issue75-static.txt 2>&1
-          mypy_status=$?
-          cat issue75-static.txt
-          test "$ruff_status" -eq 0 -a "$mypy_status" -eq 0
-      - name: Capture static failure
-        if: failure()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add issue75-static.txt
-          git commit -m "Capture symbol alias static diagnostics"
-          git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
+          ruff check src tests
+          mypy src
       - name: Commit validated patch
         run: |
           git config user.name "github-actions[bot]"
