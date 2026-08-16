@@ -29,16 +29,26 @@ tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_result_application_kee
         good_obligation = good_ir.obligation(good_app.obligation_addresses[0])
     
         assert bad_obligation.status == ObligationStatus.UNRESOLVED
->       assert good_obligation.status == ObligationStatus.DISCHARGED
-E       AssertionError: assert <ObligationSt... 'unresolved'> == <ObligationSt... 'discharged'>
+        proof = good_ir.higher.resolved.proof
+        context_dump = {
+            address: proof.proposition(address).model_dump(mode="json")
+            for address in good_obligation.local_context
+        }
+>       assert good_obligation.status == ObligationStatus.DISCHARGED, {
+            "obligation": good_obligation.model_dump(mode="json"),
+            "context": context_dump,
+        }
+E       AssertionError: {'obligation': {'address': 'A1', 'transformation_address': 'M1', 'template_ref': {'owner_address': 'R1', 'path': ['arg...ation', 'operator': '<', 'left': {'kind': 'literal', 'value': '1'}, 'right': {'kind': 'literal', 'value': '2'}}, ...}}}
+E       assert <ObligationSt... 'unresolved'> == <ObligationSt... 'discharged'>
 E         
 E         - discharged
 E         + unresolved
 
-tests/test_proof_ir_context_fidelity.py:145: AssertionError
+tests/test_proof_ir_context_fidelity.py:150: AssertionError
 =========================== short test summary info ============================
-FAILED tests/test_proof_ir_context_fidelity.py::test_result_application_keeps_unmet_precondition_distinct_from_control - AssertionError: assert <ObligationSt... 'unresolved'> == <ObligationSt... 'discharged'>
+FAILED tests/test_proof_ir_context_fidelity.py::test_result_application_keeps_unmet_precondition_distinct_from_control - AssertionError: {'obligation': {'address': 'A1', 'transformation_address': 'M1', 'template_ref': {'owner_address': 'R1', 'path': ['arg...ation', 'operator': '<', 'left': {'kind': 'literal', 'value': '1'}, 'right': {'kind': 'literal', 'value': '2'}}, ...}}}
+assert <ObligationSt... 'unresolved'> == <ObligationSt... 'discharged'>
   
   - discharged
   + unresolved
-1 failed in 0.27s
+1 failed in 0.24s
