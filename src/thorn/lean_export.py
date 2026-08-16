@@ -361,8 +361,8 @@ def _result_application_term(
                 "result parameter has no mechanically recovered argument",
                 source_addresses=transformation.source_addresses,
             )
-        argument = ir.higher.resolved.expression(binding.argument_ref)
-        pieces.append(_render_nat_term(argument))
+        binding_argument = ir.higher.resolved.expression(binding.argument_ref)
+        pieces.append(_render_nat_term(binding_argument))
 
     hole_lines: list[str] = []
     unresolved_application_obligations = 0
@@ -370,12 +370,12 @@ def _result_application_term(
         semantic_obligation = ir.obligation(address)
         if semantic_obligation.status == ObligationStatus.UNRESOLVED:
             unresolved_application_obligations += 1
-        argument, lines = _obligation_argument(
+        obligation_argument, lines = _obligation_argument(
             semantic_obligation,
             local_names=local_names,
             obligations=obligations,
         )
-        pieces.append(argument)
+        pieces.append(obligation_argument)
         hole_lines.extend(lines)
 
     if (
@@ -445,6 +445,7 @@ def project_lean(ir: SemanticTransformationIR) -> LeanExport:
             source_addresses=tuple(item.source_address for item in goals),
         )
     goal = goals[0]
+    assert goal.expression is not None
 
     used_results = {
         atom.proposition_address
