@@ -249,7 +249,7 @@ def _render_proposition(
             or expression.binder.domain.value != "ℕ"
         ):
             raise _LeanUnsupported(
-                "the initial Lean subset requires a mechanically recovered built-in natural-number domain",
+                "Lean export requires a mechanically recovered built-in natural domain",
                 expected=expression,
             )
         binder = _lean_identifier(expression.binder.name.name)
