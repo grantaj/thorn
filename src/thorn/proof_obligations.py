@@ -433,7 +433,8 @@ def elaborate_proof_obligations(ir: CanonicalTypedProofIR) -> ProofObligationIR:
     terminal_support = terminal_step.premises if terminal_step is not None else ()
     terminal_discharging = (
         (terminal_step.address,)
-        if terminal_status == ObligationStatus.DISCHARGED
+        if terminal_step is not None
+        and terminal_status == ObligationStatus.DISCHARGED
         else ()
     )
     obligations.append(
