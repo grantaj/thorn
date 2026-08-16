@@ -89,6 +89,67 @@ def test_statement_dependency_survives_and_is_source_rescuable(tmp_path: Path) -
     assert r"\tau^2" in rescue.text
 
 
+def _write_project_definition_case(path: Path, definition: str) -> None:
+    path.write_text(
+        rf"""\documentclass{{article}}
+\usepackage{{amsthm}}
+\newtheorem{{proposition}}{{Proposition}}
+\begin{{document}}
+The thresholded object is defined by
+\[
+A_\tau \stackrel{{\mathrm{{def}}}}{{=}} {definition}.
+\]
+\begin{{proposition}}\label{{prop:main}}
+$A_\tau$ has property $Q$.
+\end{{proposition}}
+\begin{{proof}}
+\[
+Q(A_\tau)
+\]
+\end{{proof}}
+\end{{document}}
+""",
+        encoding="utf-8",
+    )
+
+
+def test_explicit_project_definition_is_selected_only_when_target_uses_it(
+    tmp_path: Path,
+) -> None:
+    good = tmp_path / "project-definition-good.tex"
+    bad = tmp_path / "project-definition-bad.tex"
+    _write_project_definition_case(good, r"F(\tau^2)")
+    _write_project_definition_case(bad, r"F(\tau)")
+
+    good_project, _good_ir, good_doc = _build(good, "prop:main")
+    _bad_project, _bad_ir, bad_doc = _build(bad, "prop:main")
+
+    project_symbol = next(
+        symbol
+        for symbol in good_project.symbol_table.symbols
+        if symbol.name == r"A_\tau" and symbol.result_identifier is None
+    )
+    project_definition = next(
+        definition
+        for definition in good_project.symbol_table.definitions
+        if definition.symbol_identifier == project_symbol.identifier
+    )
+    assert project_definition.expression_latex == r"F(\tau^2)."
+
+    good_definition = next(source for source in good_doc.sources if source.address == "D1")
+    bad_definition = next(source for source in bad_doc.sources if source.address == "D1")
+    assert r"\tau^2" in good_definition.text
+    assert r"\tau^2" not in bad_definition.text
+    assert good_doc.render_initial() != bad_doc.render_initial()
+
+    rescue = render_source_rescue(
+        good_doc,
+        parse_source_rescue_request(good_doc, "NEED_SOURCE D1"),
+    )
+    assert r"A_\tau" in rescue.text
+    assert r"\tau^2" in rescue.text
+
+
 def _write_precondition_case(path: Path, available: str) -> None:
     path.write_text(
         rf"""\documentclass{{article}}

@@ -18,7 +18,10 @@ from thorn.symbols import (
     SymbolUse,
 )
 
-_SIMPLE_SYMBOL = r"(?:\\[A-Za-z]+|[A-Za-z])(?:_(?:\{[^{}]+\}|[A-Za-z0-9]+))?"
+_SIMPLE_SYMBOL = (
+    r"(?:\\[A-Za-z]+|[A-Za-z])"
+    r"(?:_(?:\{[^{}]+\}|\\[A-Za-z]+|[A-Za-z0-9]+))?"
+)
 _SIMPLE_SYMBOL_RE = re.compile(rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*$")
 _MULTI_SYMBOL_RE = re.compile(rf"^\s*{_SIMPLE_SYMBOL}(?:\s*,\s*{_SIMPLE_SYMBOL})+\s*$")
 _MAP_RE = re.compile(
@@ -32,6 +35,16 @@ _FUNCTION_DEF_RE = re.compile(
 _SIMPLE_DEF_RE = re.compile(
     rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*(?P<operator>:=|=|\\coloneqq)\s*"
     r"(?P<rhs>.+?)\s*$"
+)
+_PROJECT_EXPLICIT_DEF_RE = re.compile(
+    rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*"
+    r"(?:"
+    r":=|\\coloneqq|"
+    r"\\(?:stackrel|overset)\s*\{\s*"
+    r"(?:(?:def|definition)|\\(?:text|mathrm)\s*\{\s*(?:def|definition)\s*\})"
+    r"\s*\}\s*\{=\}"
+    r")\s*(?P<rhs>.+?)\s*$",
+    re.IGNORECASE | re.DOTALL,
 )
 _RELATION_RE = re.compile(
     rf"^\s*(?P<name>{_SIMPLE_SYMBOL})\s*"
@@ -244,7 +257,7 @@ def _append_candidate(
     candidate: _Candidate,
     kind: IntroductionKind,
     scope_identifier: str,
-    result_identifier: str,
+    result_identifier: str | None,
     introduction_start: int,
     introduction_end: int,
 ) -> Symbol:
@@ -380,6 +393,60 @@ def _add_explicit_introductions(
             )
 
 
+def _inside_result_region(math: FrontendMath, regions: list[ResultRegion]) -> bool:
+    for region in regions:
+        for span in (region.statement_span, region.proof_span):
+            if span is None or span.file != math.span.file:
+                continue
+            if (
+                span.start_offset <= math.span.start_offset
+                and math.span.end_offset <= span.end_offset
+            ):
+                return True
+    return False
+
+
+def _add_project_definitions(
+    *,
+    table: SymbolTable,
+    file: FrontendFile,
+    regions: list[ResultRegion],
+) -> None:
+    """Recover only mechanically explicit definitions outside result regions.
+
+    Project scope is deliberately conservative: ordinary equalities are not
+    definitions here.  We accept only explicit definitional operators so a
+    later target can resolve a used symbol without importing unrelated section
+    prose or promoting an arbitrary displayed equality into semantic context.
+    """
+
+    for math in file.math:
+        if _inside_result_region(math, regions):
+            continue
+        content, content_start = _math_inner(math)
+        match = _PROJECT_EXPLICIT_DEF_RE.match(content)
+        if match is None:
+            continue
+        candidate = _Candidate(
+            name=match.group("name"),
+            name_start=match.start("name"),
+            name_end=match.end("name"),
+            definition_operator=":=",
+            definition_rhs=match.group("rhs").strip(),
+        )
+        _append_candidate(
+            table=table,
+            file=file,
+            content_start=content_start,
+            candidate=candidate,
+            kind=IntroductionKind.DEFINE,
+            scope_identifier="project",
+            result_identifier=None,
+            introduction_start=math.span.start_offset,
+            introduction_end=math.span.end_offset,
+        )
+
+
 def _masked_content(content: str) -> str:
     chars = list(content)
     for match in _STANDARD_WRAPPER_RE.finditer(content):
@@ -499,6 +566,20 @@ def extract_symbol_table(project: ParsedProject, regions: list[ResultRegion]) ->
                 )
             )
         scope_rows.append((region, file, result_scope, statement_scope, proof_scope))
+
+    # Ordinary manuscript prose can define notation before the theorem-like
+    # environment that later uses it. Populate the existing project scope only
+    # from explicit definitional operators; target selection downstream remains
+    # use-driven, so this does not dump all project definitions into review.
+    regions_by_file: dict[str, list[ResultRegion]] = {}
+    for region in regions:
+        regions_by_file.setdefault(region.file, []).append(region)
+    for file in project.files:
+        _add_project_definitions(
+            table=table,
+            file=file,
+            regions=regions_by_file.get(file.path, []),
+        )
 
     # Statement introductions are result-scoped so theorem hypotheses are visible
     # in the associated proof. Proof introductions remain proof-local.
