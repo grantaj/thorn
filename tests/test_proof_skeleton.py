@@ -2,7 +2,7 @@ from pathlib import Path
 
 from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
-from thorn.proof_skeleton import build_proof_skeleton, SkeletonSourceKind
+from thorn.proof_skeleton import SkeletonSourceKind, build_proof_skeleton
 from thorn.semantic_review_render import build_semantic_review_request
 
 
