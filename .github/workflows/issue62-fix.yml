@@ -34,7 +34,7 @@ jobs:
           PY
           ruff check --fix --exit-zero src/thorn/symbol_resolution_ir.py
           ruff format src/thorn/symbol_resolution_ir.py
-          ruff check src/thorn/symbol_resolution_ir.py
+          ruff check src/thorn/symbol_resolution_ir.py --output-format=github
       - name: Commit fixes if needed
         run: |
           if git diff --quiet; then
