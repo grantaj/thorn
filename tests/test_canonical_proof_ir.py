@@ -104,6 +104,28 @@ Q
     assert "orients the reader" not in exposition_ir.render_initial()
 
 
+def test_non_slice_math_retains_math_but_not_narration(tmp_path: Path) -> None:
+    path = tmp_path / "math-exposition.tex"
+    _write_document(
+        path,
+        proof=(
+            "For orientation only, record the auxiliary quantity $Z$.\n"
+            "\\[\nQ\n\\]\n"
+        ),
+    )
+
+    _, canonical = _build(path, "thm:test")
+    rendered = canonical.render_initial()
+
+    assert "For orientation" not in rendered
+    assert "U1:Z" in rendered
+    assert canonical.unresolved_math_claims == 1
+    unresolved = next(
+        node for node in canonical.nodes if node.kind == CanonicalNodeKind.UNRESOLVED_MATH
+    )
+    assert "For orientation" in canonical.source(unresolved.address).text
+
+
 def test_therefore_and_hence_have_identical_structural_ir(tmp_path: Path) -> None:
     therefore = tmp_path / "therefore.tex"
     hence = tmp_path / "hence.tex"
