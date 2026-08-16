@@ -84,6 +84,7 @@ def _result_relations(
 def _result_symbol_context(
     project: ExtractedProject,
     result_identifier: str,
+    claims: list[Claim],
 ) -> tuple[
     list[Constraint],
     list[Constraint],
@@ -92,11 +93,39 @@ def _result_symbol_context(
     list[SymbolIntroductionCandidate],
 ]:
     table = project.symbol_table
+    result = _result_node(project, result_identifier)
+
+    def is_target_use(source: SourceSpan) -> bool:
+        if (
+            source.file == result.source.file
+            and result.source.start_line <= source.start_line <= result.source.end_line
+        ):
+            return True
+        return any(
+            source.file == claim.source.file
+            and claim.source.start_offset <= source.start_offset
+            and source.end_offset <= claim.source.end_offset
+            for claim in claims
+        )
+
+    # Keep result-owned symbols, then close selectively over actually resolved
+    # symbol uses in the target statement/proof. This admits an outer/global
+    # definition only when the target really uses that symbol; it is not a
+    # whole-paper symbol-table dump.
+    symbol_ids = {
+        symbol.identifier
+        for symbol in table.symbols
+        if symbol.result_identifier == result_identifier
+    }
+    symbol_ids.update(
+        use.resolved_symbol_identifier
+        for use in table.uses
+        if use.resolved_symbol_identifier is not None and is_target_use(use.source)
+    )
     symbols = sorted(
-        (symbol for symbol in table.symbols if symbol.result_identifier == result_identifier),
+        (symbol for symbol in table.symbols if symbol.identifier in symbol_ids),
         key=_symbol_key,
     )
-    symbol_ids = {symbol.identifier for symbol in symbols}
     definitions = sorted(
         (
             definition
@@ -172,6 +201,7 @@ def build_result_review_context(
     hypotheses, local_constraints, symbols, definitions, candidates = _result_symbol_context(
         project,
         result_identifier,
+        claims,
     )
     trigger_ids = sorted(
         edge.identifier
