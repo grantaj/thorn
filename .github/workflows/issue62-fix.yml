@@ -1,0 +1,47 @@
+name: Issue 62 branch fix
+
+on:
+  push:
+    branches:
+      - agent/issue-62-symbol-scope-resolution
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-62-symbol-scope-resolution
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e '.[dev]'
+      - name: Apply semantic guard and safe formatter fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/thorn/symbol_resolution_ir.py")
+          text = path.read_text()
+          old = """    lexical_candidates = tuple(\n        sorted(item.address for item in declarations if item.name == name)\n    )\n"""
+          new = """    lexical_candidates = tuple(\n        sorted(\n            item.address\n            for item in declarations\n            if item.name == name and item.kind != DeclarationKind.BINDER\n        )\n    )\n"""
+          if old not in text:
+              raise SystemExit("expected lexical candidate block not found")
+          path.write_text(text.replace(old, new))
+          PY
+          ruff check --fix src/thorn/symbol_resolution_ir.py
+          ruff format src/thorn/symbol_resolution_ir.py
+          ruff check src/thorn/symbol_resolution_ir.py
+      - name: Commit fixes if needed
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/thorn/symbol_resolution_ir.py
+          git commit -m "Fix issue 62 resolution lint and scope guard"
+          git push origin HEAD:agent/issue-62-symbol-scope-resolution
