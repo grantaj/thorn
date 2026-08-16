@@ -1,6 +1,6 @@
 # Thorn evaluation corpus
 
-This directory contains small, self-contained regression cases for Thorn's Math IR, deterministic structural analysis, and semantic review.
+This directory contains small, self-contained regression cases and keyless evaluation notes for Thorn's Math IR, canonical Proof IR, deterministic structural analysis and semantic review.
 
 The public corpus uses **synthetic mathematical examples** that isolate representative failure modes. It intentionally does not identify papers or authors from which a failure mode may have been motivated. Each `.tex` file has a matching `.json` expectation.
 
@@ -11,10 +11,16 @@ The corpus is organised as a **test-driven development ladder** plus an orthogon
 The same corpus specifies deliberately different capabilities:
 
 ```text
-Math IR        deterministic extraction of argument structure
-thorn analyze  deterministic structural diagnostics
-thorn review   model-backed semantic mathematical review
+Math IR              deterministic extraction of manuscript evidence
+canonical Proof IR   deterministic partial elaboration of proof semantics
+thorn analyze        deterministic structural diagnostics
+LLM review           model-backed mathematical review
+formal handoff       bounded export of mechanically recovered subsets
 ```
+
+These layers share source evidence but have different assurance boundaries. A fault can be represented faithfully in Proof IR while remaining outside deterministic `thorn analyze`; an LLM can review unresolved mathematics without turning that review into formal verification; a future Lean export can check only the subset that was actually translated.
+
+The stable `thorn-proof/1` projection of canonical Proof IR is implemented under #65. Issue #78 tracks making it the normal semantic-review provider input and evaluating that handoff against the existing raw-source baseline. Issue #77 tracks the first bounded Lean handoff. Neither consumer handoff should be inferred to be complete merely because the underlying canonical representation exists.
 
 Case metadata may contain:
 
@@ -32,9 +38,15 @@ so deterministic coverage can grow **without increasing the size or token cost o
 
 Deterministic expectations live in `eval/analysis-expectations.json`. That manifest covers every analysis-enabled case exactly. An empty rule list is a real expectation: deterministic analysis must stay silent on that case at its current capability level.
 
-Selected proof-support IR expectations live separately in `eval/support-expectations.json`. These test extracted claims, explicit support kinds, load-bearing structure, trailing binders, and cross-result dependency context without turning every suspicious IR fact into a diagnostic.
+Selected proof-support IR expectations live separately in `eval/support-expectations.json`. These test extracted claims, explicit support kinds, load-bearing structure, trailing binders and cross-result dependency context without turning every suspicious IR fact into a diagnostic.
 
-This distinction is intentional. A false theorem, invalid compactness step, hidden conjecture dependency, or quantifier error can be required semantic findings while simultaneously being required deterministic silence cases. The frontend represents structure; it does not pretend to prove the mathematics.
+This distinction is intentional. A false theorem, invalid compactness step, hidden conjecture dependency or quantifier error can be required semantic findings while simultaneously being required deterministic silence cases. The frontend represents structure; it does not pretend to prove the mathematics.
+
+## Historical tranche notes
+
+Documents such as `CANONICAL_PROOF_IR.md`, `TYPED_FORMULA_IR.md`, `PROOF_OBLIGATIONS.md`, `SYMBOL_SCOPE_RESOLUTION.md`, `HIGHER_PROOF_STRUCTURE.md` and `SEMANTIC_TRANSFORMATIONS.md` record the state and acceptance criteria of the bounded issue that created each layer. References inside those files to a “later” issue or “next work” are historical tranche context, not the current project roadmap.
+
+For the current architecture and status use [`../docs/mathematical-ir.md`](../docs/mathematical-ir.md) and [`../docs/positioning.md`](../docs/positioning.md). The completed semantic-compilation sequence now runs through #65, with #75 / PR #76 adding real-paper fidelity repairs; current consumer work is #78 for the LLM handoff and #77 for the Lean handoff.
 
 ## Ladder
 
@@ -43,9 +55,9 @@ The numbered ladder under `cases/ladder/` increases the amount of mathematical c
 - **L1 — surface consistency:** variable typos and mechanically visible source/label structure.
 - **L2 — local algebra and notation:** local mathematical errors plus objective notation ambiguity.
 - **L3 — hypotheses, boundaries, and local logic:** missing assumptions, converse errors, asymptotic specification, forgotten endpoints, empty or degenerate cases.
-- **L4 — proof sufficiency, scope, and proof mechanics:** genuine gaps in true theorems, theorem/proof scope mismatch, invalid WLOG, induction coverage, existence/attainment, quotient well-definedness, and subsequence errors.
-- **L5 — statement correctness and broader theorem misuse:** false/overstrong results, quantifier swaps, parameter-dependent null sets, finite/infinite-dimensional confusion, and local-to-global promotion.
-- **L6 — cross-result and support structure:** downstream dependence on earlier arguments, proof-support structure, load-bearing prose, and propagation.
+- **L4 — proof sufficiency, scope, and proof mechanics:** genuine gaps in true theorems, theorem/proof scope mismatch, invalid WLOG, induction coverage, existence/attainment, quotient well-definedness and subsequence errors.
+- **L5 — statement correctness and broader theorem misuse:** false/overstrong results, quantifier swaps, parameter-dependent null sets, finite/infinite-dimensional confusion and local-to-global promotion.
+- **L6 — cross-result and support structure:** downstream dependence on earlier arguments, proof-support structure, load-bearing prose and propagation.
 - **L7 — dependency structure:** circular proof dependencies across results, including indirect multi-hop cycles.
 - **L8 — adversarial/comedy papers:** polished grand claims with deliberately elementary fatal errors.
 - **L9 — hidden mathematical assumptions:** silently imported conjectures or foundational axioms.
@@ -63,7 +75,7 @@ The rule is:
 
 > **Do not weaken a deterministic expectation merely because a heuristic fires. Either the ground truth is wrong, or the heuristic is not ready to become a diagnostic.**
 
-The first analyze-only tranche contains duplicate labels, ambiguous theorem references, missing internal references, explicit role conflicts, and nearby clean controls. Proof-support fixtures exercise richer IR while often remaining deterministic silence controls.
+The first analyze-only tranche contains duplicate labels, ambiguous theorem references, missing internal references, explicit role conflicts and nearby clean controls. Proof-support fixtures exercise richer IR while often remaining deterministic silence controls.
 
 ## Semantic review policy
 
@@ -74,6 +86,8 @@ Scope surplus must be demonstrated by the supplied proof. Thorn should not propo
 Objective readability findings must identify a concrete mathematical ambiguity. Thorn should not invent a house style; unusual notation that is clearly defined and consistently used is a clean case.
 
 Semantic `thorn-eval` runs use the same normal local linguistic frontend as `thorn analyze` and `thorn ir`. This requires the local `en_core_web_sm` model but does not require a remote NLP service. `--structural-only` remains an explicit degraded/debug path for constrained environments and parser-neutral unit tests; it should not be used for the live/manual C2 IR or targeted comparison.
+
+The existing raw/IR/targeted review contexts are evaluation infrastructure and a useful baseline for #78. They should not be mistaken for the final semantic representation now that `thorn-proof/1` exists.
 
 ## Running the suite
 
@@ -121,23 +135,36 @@ thorn-eval eval/cases --model <model>
 
 Analyze-only cases are automatically excluded from live semantic review, so adding them does not increase paid model usage.
 
+## Proof IR evaluation
+
+The canonical Proof-IR tranches have dedicated keyless measurement and regression scripts. In particular, [`LLM_PROOF_LANGUAGE.md`](LLM_PROOF_LANGUAGE.md) documents `thorn-proof/1`, its deterministic fingerprint and the bounded source-rescue contract. The representation can be measured and replayed without constructing a provider.
+
+Consumer evaluation should preserve a clean distinction between:
+
+- whether Thorn recovered the right canonical mathematical structure;
+- whether a particular projection preserves that structure;
+- whether an LLM reviewer finds the planted mathematical defect;
+- whether a formal backend accepts the subset Thorn claimed to translate.
+
+A failure in one layer should not be hidden by changing the semantics of another.
+
 ## Test-driven workflow
 
 1. Add the smallest synthetic paper that exposes the missing capability and record its ground truth.
 2. Add a nearby clean control whenever false-positive behavior is plausible.
-3. Decide explicitly whether the case belongs to deterministic analysis, semantic review, or both.
+3. Decide explicitly whether the case belongs to extraction/Proof IR, deterministic analysis, semantic review, formal handoff, or more than one layer.
 4. Confirm fixture validation is deterministic and offline.
-5. Run the relevant IR, analysis, or semantic expectation and observe the failure.
-6. Improve extraction, IR, deterministic analysis, review context, prompts, or scoring until the case passes.
+5. Run the relevant IR, analysis or semantic expectation and observe the failure.
+6. Improve the appropriate layer rather than compensating in an unrelated consumer.
 7. Re-run the full relevant matrix to catch regressions and false positives.
 
 In short:
 
-**Red: add bad paper -> Green: Thorn catches it at the appropriate layer -> Refactor: nearby clean papers remain clean.**
+**Red: add bad paper -> Green: Thorn catches or represents it at the appropriate layer -> Refactor: nearby clean papers remain clean.**
 
 ## Budget safety
 
-Default CI is deliberately offline. It runs unit tests, fixture validation, the deterministic analysis matrix, proof-support IR expectations, linting, and type checking with `OPENAI_API_KEY` explicitly blank. Those checks must never make billable model calls.
+Default CI is deliberately offline. It runs unit tests, fixture validation, the deterministic analysis matrix, proof-support IR expectations, linting and type checking with `OPENAI_API_KEY` explicitly blank. Those checks must never make billable model calls.
 
 The separate local-NLP contract workflow installs `en_core_web_sm` and exercises the production linguistic path, including the selected keyless C2 targeted preflight. It also keeps `OPENAI_API_KEY` blank. The GitHub `Live evaluation` workflow remains separate and manually triggered; it is not part of the preflight.
 
