@@ -384,9 +384,7 @@ def elaborate_proof_obligations(ir: CanonicalTypedProofIR) -> ProofObligationIR:
         incoming.setdefault(step.conclusion, []).append(step)
 
     obligations: list[ProofObligation] = []
-    obligation_index = 0
-    for proposition in proof_nodes:
-        obligation_index += 1
+    for obligation_index, proposition in enumerate(proof_nodes, start=1):
         candidate_steps = incoming.get(proposition.address, [])
         context = context_by_target[proposition.address]
         support_context = tuple(
