@@ -14,11 +14,14 @@ from thorn.formula_ir import (
     QuantifiedExpr,
     RelationExpr,
 )
+from thorn.frontend import SourceSpan
 from thorn.latex import extract_project
 from thorn.linguistic import LinguisticDocument, LinguisticToken
-from thorn.semantic_review_render import build_semantic_review_request
-
-CASES = Path("eval/cases/ladder")
+from thorn.semantic_review_render import (
+    SemanticReviewRequest,
+    build_semantic_review_request,
+)
+from thorn.symbols import Constraint, IntroductionKind, Symbol
 
 
 class _RootedTestFrontend:
@@ -136,8 +139,9 @@ g(x)=0
         "T0",
         ("body", "arguments", "0", "left"),
     )
-    assert root_source.text == statement
-    assert left_application_source.text == statement
+    assert root_source.text.endswith(statement)
+    assert left_application_source.text == root_source.text
+    assert r"\label{thm:test}" in root_source.text
     assert root_source.source_range is not None
 
 
@@ -159,7 +163,7 @@ Q
     assert result.expression_status == ExprLoweringStatus.PARTIAL
     assert isinstance(result.expression, QuantifiedExpr)
     assert isinstance(result.expression.body, OpaqueExpr)
-    assert typed.expression_source("T0", ("body",)).text == statement
+    assert typed.expression_source("T0", ("body",)).text.endswith(statement)
 
 
 def test_non_load_bearing_prose_does_not_perturb_mathematical_ast(
@@ -208,16 +212,59 @@ Therefore $Q$.
     assert request.item.model_dump(mode="json") == before
 
 
-def test_public_hypothesis_payload_is_structural() -> None:
-    _, _, typed = _build(
-        CASES / "03_hypotheses/clean_nonzero_cancellation.tex",
-        "thm:clean-nonzero",
+def test_hypothesis_payload_is_structural_in_canonical_ir(tmp_path: Path) -> None:
+    path = tmp_path / "hypothesis.tex"
+    _write_document(
+        path,
+        statement="$Q$.",
+        proof="""\\[
+Q
+\\]
+""",
+    )
+    project = extract_project(path, linguistic_frontend=_RootedTestFrontend())
+    unit = project.unit("thm:test")
+    context = build_result_review_context(project, "thm:test")
+    request = build_semantic_review_request(context.items[0])
+    span = SourceSpan(
+        file=str(path.resolve()),
+        start_offset=0,
+        end_offset=4,
+        start_line=1,
+        start_column=1,
+        end_line=1,
+        end_column=5,
+    )
+    symbol = Symbol(
+        identifier="symbol:a",
+        name="a",
+        introduction_kind=IntroductionKind.QUANTIFIER,
+        scope_identifier="scope:test",
+        result_identifier="thm:test",
+        source=span,
+        introduction_source=span,
+        raw_introduction="a",
+    )
+    constraint = Constraint(
+        identifier="constraint:a-nonzero",
+        symbol_identifier=symbol.identifier,
+        relation="≠",
+        expression_latex="0",
+        source=span,
+        raw=r"$a\ne0$",
+    )
+    item = request.item.model_copy(
+        update={"hypotheses": [constraint], "symbols": [symbol]},
+        deep=True,
+    )
+    typed = build_canonical_typed_proof_ir(
+        unit,
+        SemanticReviewRequest(item=item),
     )
 
-    hypotheses = [node for node in typed.nodes if node.address.startswith("H")]
-    assert hypotheses
-    assert all(node.expression_status == ExprLoweringStatus.FULL for node in hypotheses)
-    assert all(isinstance(node.expression, RelationExpr) for node in hypotheses)
+    hypothesis = next(node for node in typed.nodes if node.address == "H1")
+    assert hypothesis.expression_status == ExprLoweringStatus.FULL
+    assert isinstance(hypothesis.expression, RelationExpr)
 
 
 def test_function_application_is_not_left_as_a_string_payload(tmp_path: Path) -> None:
