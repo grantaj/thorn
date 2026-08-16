@@ -27,6 +27,7 @@ class CanonicalNodeKind(StrEnum):
     DEFINITION = "definition"
     DEPENDENCY = "dependency"
     CLAIM = "claim"
+    UNRESOLVED_MATH = "unresolved_math"
     OPAQUE_PROSE = "opaque_prose"
 
 
@@ -69,13 +70,14 @@ class CanonicalProofEdge(BaseModel):
 
 
 class CanonicalProofIR(BaseModel):
-    """Graph-derived model-facing proof language with exact source recovery."""
+    """Graph-derived mathematical proof language plus exact source recovery."""
 
     result_identifier: str
     nodes: list[CanonicalProofNode] = Field(default_factory=list)
     edges: list[CanonicalProofEdge] = Field(default_factory=list)
     sources: list[CanonicalProofSource] = Field(default_factory=list)
     pruned_claims: int = 0
+    unresolved_math_claims: int = 0
 
     def render_initial(self) -> str:
         lines = [f"{node.address}:{node.atom}" for node in self.nodes]
@@ -85,10 +87,10 @@ class CanonicalProofIR(BaseModel):
                 lines.append(f"{edge.address}:{edge.atom or '~'}{marker}>{edge.target}")
                 continue
             source = edge.source or "_"
-            code = _EDGE_CODES[edge.kind]
             suffix = f":{edge.atom}" if edge.atom else ""
             lines.append(
-                f"{edge.address}:{source}>{edge.target}:{code}{marker}{suffix}"
+                f"{edge.address}:{source}>{edge.target}:"
+                f"{_EDGE_CODES[edge.kind]}{marker}{suffix}"
             )
         return "\n".join(lines) + "\n"
 
@@ -164,8 +166,6 @@ def _compact(text: str) -> str:
 
 
 def _semantic_text(text: str) -> str:
-    """Remove source-only markup that carries no mathematical semantics."""
-
     return _compact(_LABEL_RE.sub("", text))
 
 
@@ -183,13 +183,27 @@ def _strip_math_delimiters(text: str) -> str:
 
 
 def normalize_latex_math(text: str) -> str:
-    """Normalize only exact, semantically fixed TeX logical/operator spellings."""
+    """Normalize only TeX spellings whose mathematical meaning is fixed."""
 
     result = _compact(text)
     for pattern, replacement in _LATEX_SYMBOLS:
         result = re.sub(pattern, replacement, result)
     result = re.sub(r"\\(?:,|;|!|quad|qquad)(?![A-Za-z])", "", result)
     return _compact(result)
+
+
+def _math_fragments(text: str) -> list[str]:
+    fragments: list[str] = []
+    for match in _MATH_RE.finditer(text):
+        fragment = normalize_latex_math(_strip_math_delimiters(match.group(0)))
+        if fragment and fragment not in fragments:
+            fragments.append(fragment)
+    return fragments
+
+
+def _math_only_atom(text: str) -> str | None:
+    fragments = _math_fragments(text)
+    return "|".join(fragments) if fragments else None
 
 
 def _placeholderize(text: str) -> tuple[str, list[str]]:
@@ -213,7 +227,7 @@ def _restore(expression: str, fragments: list[str]) -> str:
 
 
 def canonicalize_mathematical_text(text: str) -> str | None:
-    """Canonicalize only fully matched mathematical phrases; never guess prose."""
+    """Canonicalize fully matched mathematical phrases; never guess prose."""
 
     template, fragments = _placeholderize(text)
     if not fragments:
@@ -248,10 +262,6 @@ def canonicalize_mathematical_text(text: str) -> str | None:
             normalized = re.sub(pattern, replacement, template, flags=re.IGNORECASE)
             return _restore(normalized, fragments)
     return None
-
-
-def _has_math(claim: Claim) -> bool:
-    return claim.form == ClaimForm.DISPLAY or _MATH_RE.search(claim.raw) is not None
 
 
 def _span_key(span: SourceSpan) -> tuple[str, int, int, str]:
@@ -298,50 +308,53 @@ def _definition_atom(definition: Definition, symbols: dict[str, Symbol]) -> str:
     )
 
 
-def _incoming_edges(
-    claim_identifier: str,
-    edges: list[SupportEdge],
-) -> list[SupportEdge]:
-    return [edge for edge in edges if edge.target_claim_identifier == claim_identifier]
+def _is_weak_adjacency(edge: SupportEdge) -> bool:
+    """True for an NLP-only adjacency hypothesis with no stronger support cue."""
+
+    return (
+        edge.kind == SupportKind.PRIOR_CLAIM
+        and not edge.explicit
+        and edge.status != InferenceStatus.CONFIDENT
+    )
 
 
-def _slice_claim_identifiers(
+def _is_slice_edge(edge: SupportEdge) -> bool:
+    return not _is_weak_adjacency(edge)
+
+
+def _core_slice_claim_identifiers(
     claims: list[Claim],
     edges: list[SupportEdge],
 ) -> set[str]:
+    """Recover claims supported by more than mere sentence adjacency.
+
+    Weak adjacency is useful evidence for later semantic review but is not sufficient to
+    declare otherwise disconnected prose load-bearing. Exact/typed references and all
+    confident or explicit support remain slice-carrying. Mathematical material outside
+    this core is handled separately as unresolved math rather than discarded prose.
+    """
+
     if not claims:
         return set()
 
     claim_ids = {claim.identifier for claim in claims}
-    all_sources = {
-        edge.source_claim_identifier
-        for edge in edges
-        if edge.source_claim_identifier in claim_ids
-    }
-    seeds = {claim.identifier for claim in claims if _has_math(claim)}
-    seeds.update(
-        edge.target_claim_identifier
-        for edge in edges
-        if edge.status == InferenceStatus.CONFIDENT
-        and edge.target_claim_identifier in claim_ids
-        and edge.target_claim_identifier not in all_sources
-    )
-
-    last = claims[-1]
-    if _incoming_edges(last.identifier, edges):
-        seeds.add(last.identifier)
-    if not seeds:
-        seeds.add(last.identifier)
-
     incoming: dict[str, list[SupportEdge]] = {}
     for edge in edges:
         incoming.setdefault(edge.target_claim_identifier, []).append(edge)
+
+    seeds: set[str] = {claims[-1].identifier}
+    for edge in edges:
+        if edge.target_claim_identifier not in claim_ids or not _is_slice_edge(edge):
+            continue
+        seeds.add(edge.target_claim_identifier)
 
     keep = set(seeds)
     pending = list(seeds)
     while pending:
         target = pending.pop()
         for edge in incoming.get(target, []):
+            if not _is_slice_edge(edge):
+                continue
             source = edge.source_claim_identifier
             if source is None or source not in claim_ids or source in keep:
                 continue
@@ -416,7 +429,7 @@ def build_canonical_proof_ir(
     unit: TheoremUnit,
     request: SemanticReviewRequest,
 ) -> CanonicalProofIR:
-    """Build a conservative backward proof slice and canonical mathematical language."""
+    """Build a proof slice, remove narration, and retain irreducible proof prose."""
 
     item = request.item
     if item.result.identifier != unit.identifier:
@@ -514,15 +527,21 @@ def build_canonical_proof_ir(
 
     claims = sorted(item.claims, key=_claim_key)
     support_edges = sorted(item.support_relations, key=_edge_key)
-    keep_ids = _slice_claim_identifiers(claims, support_edges)
-    kept_claims = [claim for claim in claims if claim.identifier in keep_ids]
+    core_ids = _core_slice_claim_identifiers(claims, support_edges)
+    math_context_ids = {
+        claim.identifier
+        for claim in claims
+        if claim.identifier not in core_ids and _math_only_atom(claim.raw) is not None
+    }
+    included_ids = core_ids | math_context_ids
+    included_claims = [claim for claim in claims if claim.identifier in included_ids]
     included_support = [
         edge
         for edge in support_edges
-        if edge.target_claim_identifier in keep_ids
+        if edge.target_claim_identifier in included_ids
         and (
             edge.source_claim_identifier is None
-            or edge.source_claim_identifier in keep_ids
+            or edge.source_claim_identifier in included_ids
         )
     ]
 
@@ -567,22 +586,36 @@ def build_canonical_proof_ir(
 
     claim_addresses: dict[str, str] = {}
     math_index = 0
+    unresolved_index = 0
     prose_index = 0
     qualifier_index = 0
-    for claim in kept_claims:
-        incoming = _incoming_edges(claim.identifier, included_support)
-        atom = _claim_atom(claim, incoming)
-        opaque = atom is None
-        if opaque:
-            prose_index += 1
-            address = f"P{prose_index}"
-            atom = _semantic_text(claim.raw)
-            kind = CanonicalNodeKind.OPAQUE_PROSE
+    for claim in included_claims:
+        if claim.identifier in math_context_ids:
+            unresolved_index += 1
+            address = f"U{unresolved_index}"
+            atom = _math_only_atom(claim.raw)
+            assert atom is not None
+            kind = CanonicalNodeKind.UNRESOLVED_MATH
+            opaque = False
         else:
-            math_index += 1
-            address = f"C{math_index}"
-            kind = CanonicalNodeKind.CLAIM
-        assert atom is not None
+            incoming = [
+                edge
+                for edge in included_support
+                if edge.target_claim_identifier == claim.identifier
+            ]
+            atom = _claim_atom(claim, incoming)
+            opaque = atom is None
+            if opaque:
+                prose_index += 1
+                address = f"P{prose_index}"
+                atom = _semantic_text(claim.raw)
+                kind = CanonicalNodeKind.OPAQUE_PROSE
+            else:
+                math_index += 1
+                address = f"C{math_index}"
+                kind = CanonicalNodeKind.CLAIM
+            assert atom is not None
+
         claim_addresses[claim.identifier] = address
         nodes.append(
             CanonicalProofNode(address=address, kind=kind, atom=atom, opaque=opaque)
@@ -596,6 +629,8 @@ def build_canonical_proof_ir(
             )
         )
 
+        if claim.identifier not in core_ids:
+            continue
         for qualifier in claim.qualifiers:
             qualifier_index += 1
             edge_kind, qualifier_atom = _qualifier_atom(qualifier)
@@ -663,5 +698,6 @@ def build_canonical_proof_ir(
         nodes=nodes,
         edges=canonical_edges,
         sources=sources,
-        pruned_claims=len(claims) - len(kept_claims),
+        pruned_claims=len(claims) - len(included_claims),
+        unresolved_math_claims=len(math_context_ids),
     )
