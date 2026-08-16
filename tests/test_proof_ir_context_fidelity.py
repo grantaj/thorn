@@ -150,6 +150,62 @@ def test_explicit_project_definition_is_selected_only_when_target_uses_it(
     assert r"\tau^2" in rescue.text
 
 
+def test_local_definitional_operator_macro_is_resolved_conservatively(
+    tmp_path: Path,
+) -> None:
+    tex = tmp_path / "macro-definition.tex"
+    tex.write_text(
+        r"""\documentclass{article}
+\usepackage{amsthm}
+\newcommand{\meaningop}{\stackrel{\text{\tiny def}}{=}}
+\newcommand{\noteop}{\stackrel{\text{\tiny note}}{=}}
+\newtheorem{proposition}{Proposition}
+\begin{document}
+\begin{equation}
+A_{\tau} \meaningop F(\tau^2)
+\end{equation}
+\begin{equation}
+B_{\tau} \noteop G(\tau^2)
+\end{equation}
+\begin{proposition}\label{prop:main}
+$A_\tau$ has property $Q$.
+\end{proposition}
+\begin{proof}
+\[
+Q(A_\tau)
+\]
+\end{proof}
+\end{document}
+""",
+        encoding="utf-8",
+    )
+
+    project, _semantic, document = _build(tex, "prop:main")
+    project_symbols = [
+        symbol
+        for symbol in project.symbol_table.symbols
+        if symbol.result_identifier is None
+    ]
+    assert [symbol.name for symbol in project_symbols] == [r"A_\tau"]
+    definition = next(
+        item
+        for item in project.symbol_table.definitions
+        if item.symbol_identifier == project_symbols[0].identifier
+    )
+    assert definition.operator == r"\meaningop"
+    assert definition.expression_latex == r"F(\tau^2)"
+
+    definition_source = next(source for source in document.sources if source.address == "D1")
+    assert r"A_{\tau} \meaningop F(\tau^2)" in definition_source.text
+    assert r"B_{\tau}" not in definition_source.text
+    rescue = render_source_rescue(
+        document,
+        parse_source_rescue_request(document, "NEED_SOURCE D1"),
+    )
+    assert r"\meaningop" in rescue.text
+    assert r"\tau^2" in rescue.text
+
+
 def _write_precondition_case(path: Path, available: str) -> None:
     path.write_text(
         rf"""\documentclass{{article}}
