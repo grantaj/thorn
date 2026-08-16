@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from thorn.evidence import InferenceStatus
 from thorn.eval_review import build_result_review_context
+from thorn.evidence import InferenceStatus
 from thorn.latex import extract_project
 from thorn.llm_proof_language import (
     parse_source_rescue_request,
