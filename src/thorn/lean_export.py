@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict
 from thorn.evidence import InferenceStatus
 from thorn.formula_ir import (
     ApplyExpr,
+    BuiltinDomain,
+    BuiltinDomainExpr,
     IdentifierExpr,
     LiteralExpr,
     LogicalExpr,
@@ -138,6 +140,8 @@ def _theorem_name(result_identifier: str) -> str:
 
 
 def _render_nat_term(expression: MathExpr, *, bound: frozenset[str] = frozenset()) -> str:
+    """Render a term only after its surrounding proposition established a Nat type."""
+
     if isinstance(expression, LiteralExpr) and expression.value.isdigit():
         return expression.value
     if isinstance(expression, IdentifierExpr) and expression.name in bound:
@@ -148,18 +152,52 @@ def _render_nat_term(expression: MathExpr, *, bound: frozenset[str] = frozenset(
     )
 
 
+def _collect_nat_predicates(
+    expression: MathExpr,
+    *,
+    bound_nat: frozenset[str] = frozenset(),
+) -> set[str]:
+    """Find predicate signatures established by canonical quantification over built-in ℕ."""
+
+    result: set[str] = set()
+    if isinstance(expression, ApplyExpr):
+        if (
+            isinstance(expression.function, IdentifierExpr)
+            and len(expression.arguments) == 1
+            and isinstance(expression.arguments[0], IdentifierExpr)
+            and expression.arguments[0].name in bound_nat
+        ):
+            result.add(expression.function.name)
+        return result
+    if isinstance(expression, LogicalExpr):
+        for argument in expression.arguments:
+            result.update(_collect_nat_predicates(argument, bound_nat=bound_nat))
+        return result
+    if isinstance(expression, QuantifiedExpr):
+        next_bound = bound_nat
+        if (
+            expression.quantifier == Quantifier.FOR_ALL
+            and isinstance(expression.binder.domain, BuiltinDomainExpr)
+            and expression.binder.domain.domain == BuiltinDomain.NATURALS
+        ):
+            next_bound = bound_nat | {expression.binder.name.name}
+        result.update(_collect_nat_predicates(expression.body, bound_nat=next_bound))
+    return result
+
+
 def _render_proposition(
     expression: MathExpr,
     *,
     bound: frozenset[str] = frozenset(),
+    nat_predicates: frozenset[str] = frozenset(),
     predicates: set[str] | None = None,
     precedence: int = 0,
 ) -> str:
     """Render the first bounded proposition subset without consulting source prose.
 
-    A unary application in proposition position is treated as a proposition-valued
-    predicate. Its argument must already be a canonical Nat term. This is structural
-    backend typing over the canonical AST; conflicting or richer uses are unsupported.
+    A unary application becomes `Nat → Prop` only when a canonical quantified
+    proposition has already established that predicate on the built-in naturals.
+    Numeral spelling alone is never used to invent a Nat type.
     """
 
     if isinstance(expression, ApplyExpr):
@@ -169,6 +207,11 @@ def _render_proposition(
                 expected=expression,
             )
         name = _lean_identifier(expression.function.name)
+        if name not in nat_predicates:
+            raise _LeanUnsupported(
+                "predicate Nat domain is not mechanically established by canonical Proof IR",
+                expected=expression,
+            )
         argument = _render_nat_term(expression.arguments[0], bound=bound)
         if predicates is not None:
             predicates.add(name)
@@ -183,12 +226,14 @@ def _render_proposition(
         left = _render_proposition(
             expression.arguments[0],
             bound=bound,
+            nat_predicates=nat_predicates,
             predicates=predicates,
             precedence=2,
         )
         right = _render_proposition(
             expression.arguments[1],
             bound=bound,
+            nat_predicates=nat_predicates,
             predicates=predicates,
             precedence=1,
         )
@@ -202,17 +247,18 @@ def _render_proposition(
                 expected=expression,
             )
         if (
-            not isinstance(expression.binder.domain, IdentifierExpr)
-            or expression.binder.domain.name != "N"
+            not isinstance(expression.binder.domain, BuiltinDomainExpr)
+            or expression.binder.domain.domain != BuiltinDomain.NATURALS
         ):
             raise _LeanUnsupported(
-                "the initial Lean subset requires a mechanically recovered natural-number domain",
+                "the initial Lean subset requires a mechanically recovered built-in natural-number domain",
                 expected=expression,
             )
         binder = _lean_identifier(expression.binder.name.name)
         body = _render_proposition(
             expression.body,
             bound=bound | {expression.binder.name.name},
+            nat_predicates=nat_predicates,
             predicates=predicates,
         )
         rendered = f"∀ {binder} : Nat, {body}"
@@ -276,6 +322,7 @@ def _obligation_argument(
     obligation: SemanticApplicationObligation,
     *,
     local_names: dict[str, str],
+    nat_predicates: frozenset[str],
     obligations: list[LeanFormalizationObligation],
 ) -> tuple[str, list[str]]:
     if obligation.status == ObligationStatus.DISCHARGED:
@@ -293,7 +340,10 @@ def _obligation_argument(
             "the missing result precondition has no canonical expected proposition",
             source_addresses=obligation.source_addresses,
         )
-    lean_type = _render_proposition(obligation.expected)
+    lean_type = _render_proposition(
+        obligation.expected,
+        nat_predicates=nat_predicates,
+    )
     item = _new_obligation(
         obligations,
         reason="missing_result_precondition",
@@ -320,6 +370,7 @@ def _result_application_term(
     transformation: SemanticTransformation,
     *,
     local_names: dict[str, str],
+    nat_predicates: frozenset[str],
     obligations: list[LeanFormalizationObligation],
 ) -> tuple[str, list[str]]:
     if transformation.kind not in {
@@ -373,6 +424,7 @@ def _result_application_term(
         obligation_argument, lines = _obligation_argument(
             semantic_obligation,
             local_names=local_names,
+            nat_predicates=nat_predicates,
             obligations=obligations,
         )
         pieces.append(obligation_argument)
@@ -466,9 +518,19 @@ def project_lean(ir: SemanticTransformationIR) -> LeanExport:
         if item.role in {PropositionRole.DERIVED, PropositionRole.UNRESOLVED}
     ]
 
+    nat_predicate_names: set[str] = set()
+    for proposition in [goal, *context, *derived]:
+        if proposition.expression is not None:
+            nat_predicate_names.update(_collect_nat_predicates(proposition.expression))
+    nat_predicates = frozenset(nat_predicate_names)
+
     predicates: set[str] = set()
     try:
-        goal_type = _render_proposition(goal.expression, predicates=predicates)
+        goal_type = _render_proposition(
+            goal.expression,
+            nat_predicates=nat_predicates,
+            predicates=predicates,
+        )
         context_types: dict[str, str] = {}
         for proposition in context:
             if proposition.expression is None:
@@ -478,6 +540,7 @@ def project_lean(ir: SemanticTransformationIR) -> LeanExport:
                 )
             context_types[proposition.address] = _render_proposition(
                 proposition.expression,
+                nat_predicates=nat_predicates,
                 predicates=predicates,
             )
         derived_types: dict[str, str] = {}
@@ -489,6 +552,7 @@ def project_lean(ir: SemanticTransformationIR) -> LeanExport:
                 )
             derived_types[proposition.address] = _render_proposition(
                 proposition.expression,
+                nat_predicates=nat_predicates,
                 predicates=predicates,
             )
     except _LeanUnsupported as exc:
@@ -518,6 +582,7 @@ def project_lean(ir: SemanticTransformationIR) -> LeanExport:
                     ir,
                     candidates[0],
                     local_names=local_names,
+                    nat_predicates=nat_predicates,
                     obligations=obligations,
                 )
                 body.extend(hole_lines)

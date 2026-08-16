@@ -41,6 +41,12 @@ class Quantifier(StrEnum):
     EXISTS = "∃"
 
 
+class BuiltinDomain(StrEnum):
+    """Standard domains whose identity was mechanically explicit in source."""
+
+    NATURALS = "naturals"
+
+
 class _ExprModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -48,6 +54,13 @@ class _ExprModel(BaseModel):
 class IdentifierExpr(_ExprModel):
     kind: Literal["identifier"] = "identifier"
     name: str
+
+
+class BuiltinDomainExpr(_ExprModel):
+    """A standard mathematical domain, distinct from a same-named manuscript symbol."""
+
+    kind: Literal["builtin_domain"] = "builtin_domain"
+    domain: BuiltinDomain
 
 
 class LiteralExpr(_ExprModel):
@@ -117,6 +130,7 @@ class QuantifiedExpr(_ExprModel):
 
 MathExpr: TypeAlias = Annotated[
     IdentifierExpr
+    | BuiltinDomainExpr
     | LiteralExpr
     | OpaqueExpr
     | ApplyExpr
@@ -162,7 +176,7 @@ _COMMAND_WITH_TEXT_RE = re.compile(r"\\(?:mathrm|operatorname)\s*\{([^{}]+)\}")
 
 _LATEX_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (r"\\mathbb\s*\{R\}", "R"),
-    (r"\\mathbb\s*\{N\}", "N"),
+    (r"\\mathbb\s*\{N\}", "ℕ"),
     (r"\\mathbb\s*\{Z\}", "Z"),
     (r"\\mathbb\s*\{Q\}", "Q"),
     (r"\\mathbb\s*\{C\}", "C"),
@@ -200,8 +214,8 @@ _DOMAIN_WORDS: dict[str, str] = {
     "reals": "R",
     "integer": "Z",
     "integers": "Z",
-    "natural": "N",
-    "naturals": "N",
+    "natural": "ℕ",
+    "naturals": "ℕ",
 }
 
 
@@ -249,6 +263,7 @@ class _Token:
 _TOKEN_RE = re.compile(
     r"(?P<SPACE>\s+)"
     r"|(?P<NUMBER>\d+(?:\.\d+)?)"
+    r"|(?P<DOMAIN>ℕ)"
     r"|(?P<OP>⇔|⇒|≤|≥|≠|∉|⊆|⊂|∈|=|<|>|¬|∧|∨|\+|-|\*|/|\^)"
     r"|(?P<PUNCT>[(){}\[\],:])"
     r"|(?P<IDENT>[^\W\d]\w*)",
@@ -391,6 +406,8 @@ class _Parser:
         token = self._take()
         if token.kind == "NUMBER":
             return LiteralExpr(value=token.text)
+        if token.kind == "DOMAIN":
+            return BuiltinDomainExpr(domain=BuiltinDomain.NATURALS)
         if token.kind == "IDENT":
             return IdentifierExpr(name=token.text)
         if token.text == "(":
@@ -691,6 +708,10 @@ def render_math_expr(expression: MathExpr) -> str:
 
     if isinstance(expression, IdentifierExpr):
         return expression.name
+    if isinstance(expression, BuiltinDomainExpr):
+        if expression.domain == BuiltinDomain.NATURALS:
+            return "ℕ"
+        raise TypeError(f"unsupported built-in domain {expression.domain!r}")
     if isinstance(expression, LiteralExpr):
         return expression.value
     if isinstance(expression, OpaqueExpr):
