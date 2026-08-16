@@ -97,7 +97,7 @@ def _write_project_definition_case(path: Path, definition: str) -> None:
 \begin{{document}}
 The thresholded object is defined by
 \[
-A_\tau \stackrel{{\mathrm{{def}}}}{{=}} {definition}.
+A_\tau \stackrel{{{{\scriptstyle\text{{\tiny def}}}}}}{{{{=}}}} {definition}.
 \]
 \begin{{proposition}}\label{{prop:main}}
 $A_\tau$ has property $Q$.
