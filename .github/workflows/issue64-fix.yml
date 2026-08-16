@@ -24,63 +24,37 @@ jobs:
           from pathlib import Path
 
           production = Path("src/thorn/semantic_transformations.py")
-          text = production.read_text()
+          lines = production.read_text().splitlines()
 
-          old = '''    names: set[str] = set()
-          for _suffix, child in _child_items(expression):
-              names.update(_free_names(child))
-          return names
-          '''
-          new = '''    free_names: set[str] = set()
-          for _suffix, child in _child_items(expression):
-              free_names.update(_free_names(child))
-          return free_names
-          '''
-          if old not in text:
-              raise SystemExit("free-name typing target not found")
-          text = text.replace(old, new, 1)
+          free_index = lines.index("    names: set[str] = set()")
+          lines[free_index] = "    free_names: set[str] = set()"
+          if lines[free_index + 2] != "        names.update(_free_names(child))":
+              raise SystemExit("unexpected free-name update line")
+          if lines[free_index + 3] != "    return names":
+              raise SystemExit("unexpected free-name return line")
+          lines[free_index + 2] = "        free_names.update(_free_names(child))"
+          lines[free_index + 3] = "    return free_names"
 
-          old = '''            status = (
-              InferenceStatus.AMBIGUOUS
-              if len(matches) > 1
-              else InferenceStatus.UNRESOLVED
+          fallback_index = next(
+              index
+              for index, line in enumerate(lines)
+              if line == "            status = ("
+              and index + 1 < len(lines)
+              and lines[index + 1] == "                InferenceStatus.AMBIGUOUS"
           )
-          source_addresses = _dedupe(
-              [*atom.source_addresses, target.source_address]
+          lines[fallback_index] = "            fallback_status = ("
+          use_status_index = next(
+              index
+              for index in range(fallback_index, min(fallback_index + 30, len(lines)))
+              if lines[index] == "                    status=status,"
           )
-          transformations.append(
-              SemanticTransformation(
-                  address=transformation_address,
-                  kind=SemanticTransformationKind.DEFINITION_USE,
-                  step_addresses=(step.address,),
-                  support_atom_addresses=(atom.address,),
-                  target_ref=ExpressionRef(owner_address=target.address),
-                  status=status,
-          '''
-          new = '''            fallback_status = (
-              InferenceStatus.AMBIGUOUS
-              if len(matches) > 1
-              else InferenceStatus.UNRESOLVED
-          )
-          source_addresses = _dedupe(
-              [*atom.source_addresses, target.source_address]
-          )
-          transformations.append(
-              SemanticTransformation(
-                  address=transformation_address,
-                  kind=SemanticTransformationKind.DEFINITION_USE,
-                  step_addresses=(step.address,),
-                  support_atom_addresses=(atom.address,),
-                  target_ref=ExpressionRef(owner_address=target.address),
-                  status=fallback_status,
-          '''
-          if old not in text:
-              raise SystemExit("definition fallback typing target not found")
-          production.write_text(text.replace(old, new, 1))
+          lines[use_status_index] = "                    status=fallback_status,"
+          production.write_text("\n".join(lines) + "\n")
+          PY
 
-          tests = Path("tests/test_semantic_transformations.py")
-          test_text = tests.read_text()
-          addition = r'''
+          if ! grep -q "test_non_quantified_implication_application_exposes_modus_ponens_precondition" tests/test_semantic_transformations.py; then
+            cat >> tests/test_semantic_transformations.py <<'PYTEST'
+
 
           def test_non_quantified_implication_application_exposes_modus_ponens_precondition() -> None:
               p = IdentifierExpr(name="P")
@@ -222,11 +196,8 @@ jobs:
                   "thm:middle",
                   "thm:lemma",
               )
-          '''
-          addition = addition.replace("\n          ", "\n")
-          if "test_non_quantified_implication_application_exposes_modus_ponens_precondition" not in test_text:
-              tests.write_text(test_text.rstrip() + addition + "\n")
-          PY
+          PYTEST
+          fi
       - name: Commit bounded fixes
         run: |
           if git diff --quiet; then
