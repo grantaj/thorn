@@ -95,21 +95,21 @@ def _write_precondition_case(path: Path, available: str) -> None:
 \newtheorem{{theorem}}{{Theorem}}
 \begin{{document}}
 \begin{{lemma}}\label{{lem:transfer}}
-If $H_B$, then $C$.
+If $1<2$, then $0=0$.
 \end{{lemma}}
 \begin{{proof}}
 \[
-H_B \Rightarrow C
+1<2 \Rightarrow 0=0
 \]
 \end{{proof}}
 \begin{{theorem}}\label{{thm:main}}
-$C$.
+$0=0$.
 \end{{theorem}}
 \begin{{proof}}
 \[
 {available}
 \]
-By Lemma~\ref{{lem:transfer}}, $C$.
+By Lemma~\ref{{lem:transfer}}, $0=0$.
 \end{{proof}}
 \end{{document}}
 """,
@@ -122,8 +122,8 @@ def test_result_application_keeps_unmet_precondition_distinct_from_control(
 ) -> None:
     bad = tmp_path / "precondition-bad.tex"
     good = tmp_path / "precondition-good.tex"
-    _write_precondition_case(bad, "H_A")
-    _write_precondition_case(good, "H_B")
+    _write_precondition_case(bad, "1<3")
+    _write_precondition_case(good, "1<2")
 
     _bad_project, bad_ir, bad_doc = _build(bad, "thm:main")
     _good_project, good_ir, good_doc = _build(good, "thm:main")
