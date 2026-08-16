@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
+from thorn.proof_language_review import ProofReviewTransport
 from thorn.semantic_review_render import SemanticReviewRequest
 
 
@@ -22,7 +23,7 @@ class SemanticReviewProvider(Protocol):
     def review_semantic(self, request: SemanticReviewRequest) -> AttackReport: ...
 
 
-class EvaluationProvider(AuditProvider, SemanticReviewProvider, Protocol):
+class EvaluationProvider(AuditProvider, SemanticReviewProvider, ProofReviewTransport, Protocol):
     """Combined evaluator boundary with provider usage/replay accounting.
 
     ``requests`` counts logical provider invocations. Live providers also increment

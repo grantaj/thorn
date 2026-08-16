@@ -3,9 +3,11 @@ from __future__ import annotations
 from openai import OpenAI
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
+from thorn.proof_language_review import ProofReviewModelResponse, ProofReviewTurnRequest
 from thorn.providers.request_envelope import (
     attack_request_envelope,
     defense_request_envelope,
+    proof_review_request_envelope,
     semantic_request_envelope,
 )
 from thorn.semantic_review_render import SemanticReviewRequest
@@ -36,10 +38,7 @@ class OpenAIProvider:
         envelope = attack_request_envelope(unit, self.model)
         response = self.client.responses.parse(
             model=self.model,
-            input=[
-                {"role": "system", "content": envelope.system_prompt},
-                {"role": "user", "content": envelope.user_content},
-            ],
+            input=envelope.input_messages(),
             text_format=AttackReport,
         )
         self._record_usage(response)
@@ -51,10 +50,7 @@ class OpenAIProvider:
         envelope = semantic_request_envelope(request, self.model)
         response = self.client.responses.parse(
             model=self.model,
-            input=[
-                {"role": "system", "content": envelope.system_prompt},
-                {"role": "user", "content": envelope.user_content},
-            ],
+            input=envelope.input_messages(),
             text_format=AttackReport,
         )
         self._record_usage(response)
@@ -62,14 +58,26 @@ class OpenAIProvider:
             raise RuntimeError("semantic reviewer returned no structured result")
         return response.output_parsed
 
+    def review_proof_turn(
+        self,
+        request: ProofReviewTurnRequest,
+    ) -> ProofReviewModelResponse:
+        envelope = proof_review_request_envelope(request, self.model)
+        response = self.client.responses.parse(
+            model=self.model,
+            input=envelope.input_messages(),
+            text_format=ProofReviewModelResponse,
+        )
+        self._record_usage(response)
+        if response.output_parsed is None:
+            raise RuntimeError("proof-language reviewer returned no structured result")
+        return response.output_parsed
+
     def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
         envelope = defense_request_envelope(unit, findings, self.model)
         response = self.client.responses.parse(
             model=self.model,
-            input=[
-                {"role": "system", "content": envelope.system_prompt},
-                {"role": "user", "content": envelope.user_content},
-            ],
+            input=envelope.input_messages(),
             text_format=DefenseReport,
         )
         self._record_usage(response)

@@ -19,8 +19,12 @@ on:
       - "src/thorn/linguistic*.py"
       - "src/thorn/llm_proof_language.py"
       - "src/thorn/local_nlp.py"
+      - "src/thorn/proof_language*.py"
+      - "src/thorn/proof_review_eval.py"
       - "src/thorn/proof_obligations.py"
       - "src/thorn/proof_skeleton.py"
+      - "src/thorn/providers/**"
+      - "src/thorn/prompts/proof_language_reviewer_v1.md"
       - "src/thorn/semantic_experiment.py"
       - "src/thorn/semantic_projection.py"
       - "src/thorn/semantic_review.py"
@@ -31,6 +35,7 @@ on:
       - "src/thorn/symbols.py"
       - "eval/HIGHER_PROOF_STRUCTURE.md"
       - "eval/LLM_PROOF_LANGUAGE.md"
+      - "eval/PROOF_LANGUAGE_REVIEW.md"
       - "eval/README.md"
       - "eval/IR_VALUE_EXPERIMENT.md"
       - "eval/PROOF_OBLIGATIONS.md"
@@ -39,10 +44,13 @@ on:
       - "eval/SYMBOL_SCOPE_RESOLUTION.md"
       - "eval/TYPED_FORMULA_IR.md"
       - "eval/ir-value-challenge.json"
+      - "eval/proof-review-challenge.json"
       - "scripts/measure_llm_proof_language.py"
       - "scripts/measure_skeleton_compression.py"
       - "scripts/measure_typed_formula_ir.py"
       - "scripts/prepare_ir_value_experiment.py"
+      - "scripts/prepare_proof_review_experiment.py"
+      - "scripts/run_proof_review_experiment.py"
       - "research/semantic-parser-bakeoff/**"
       - "tests/test_canonical_typed_proof_ir.py"
       - "tests/test_cli_analysis.py"
@@ -51,6 +59,8 @@ on:
       - "tests/test_higher_proof_structure.py"
       - "tests/test_linguistic_*.py"
       - "tests/test_llm_proof_language.py"
+      - "tests/test_proof_language_review.py"
+      - "tests/test_proof_review_experiment.py"
       - "tests/test_proof_obligations.py"
       - "tests/test_proof_skeleton.py"
       - "tests/test_semantic_experiment.py"
@@ -76,7 +86,7 @@ jobs:
           python -m spacy download en_core_web_sm
       - name: Run parser-neutral unit contracts
         run: |
-          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py tests/test_proof_skeleton.py tests/test_proof_obligations.py tests/test_symbol_resolution*.py tests/test_higher_proof_structure.py tests/test_semantic_transformations.py tests/test_llm_proof_language.py
+          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py tests/test_proof_skeleton.py tests/test_proof_obligations.py tests/test_symbol_resolution*.py tests/test_higher_proof_structure.py tests/test_semantic_transformations.py tests/test_llm_proof_language.py tests/test_proof_language_review.py tests/test_proof_review_experiment.py
       - name: Check Thorn-owned spaCy behavior over the 70-case corpus
         run: python research/semantic-parser-bakeoff/check_spacy_contract.py
       - name: Exercise the normal CLI linguistic path
@@ -97,3 +107,6 @@ jobs:
       - name: Measure stable LLM proof language
         run: |
           python scripts/measure_llm_proof_language.py --output /tmp/llm-proof-language.json
+      - name: Build keyless proof-review A/B/C inventory
+        run: |
+          python scripts/prepare_proof_review_experiment.py --output /tmp/proof-review-inventory.json
