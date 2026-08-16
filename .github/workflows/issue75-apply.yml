@@ -6,6 +6,7 @@ on:
       - agent/issue-75-proof-ir-context-fidelity
     paths:
       - .github/workflows/issue75-apply.yml
+      - tests/test_proof_ir_context_fidelity.py
 
 permissions:
   contents: write
