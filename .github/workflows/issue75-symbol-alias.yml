@@ -6,6 +6,7 @@ on:
       - agent/issue-75-proof-ir-context-fidelity
     paths:
       - .github/workflows/issue75-symbol-alias.yml
+      - scripts/issue75_symbol_alias_patch.py
 
 permissions:
   contents: write
