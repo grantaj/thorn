@@ -30,15 +30,7 @@ jobs:
       - name: Install
         run: python -m pip install -e '.[dev]'
       - name: Project-definition alias regression
-        run: pytest -q tests/test_proof_ir_context_fidelity.py::test_explicit_project_definition_is_selected_only_when_target_uses_it > issue75-alias-failure.txt 2>&1
-      - name: Capture alias failure
-        if: failure()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add issue75-alias-failure.txt
-          git commit -m "Capture symbol alias regression failure"
-          git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
+        run: pytest -q tests/test_proof_ir_context_fidelity.py::test_explicit_project_definition_is_selected_only_when_target_uses_it
       - name: All issue 75 regressions
         run: pytest -q tests/test_proof_ir_context_fidelity.py
       - name: Full keyless suite
@@ -51,14 +43,27 @@ jobs:
           thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
       - name: Static checks
         run: |
-          ruff check src tests
-          mypy src
+          set +e
+          ruff check src tests > issue75-static.txt 2>&1
+          ruff_status=$?
+          mypy src >> issue75-static.txt 2>&1
+          mypy_status=$?
+          cat issue75-static.txt
+          test "$ruff_status" -eq 0 -a "$mypy_status" -eq 0
+      - name: Capture static failure
+        if: failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add issue75-static.txt
+          git commit -m "Capture symbol alias static diagnostics"
+          git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
       - name: Commit validated patch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/issue75-symbol-alias.yml scripts/issue75_symbol_alias_patch.py
-          git rm -f issue75-alias-failure.txt || true
+          git rm -f issue75-alias-failure.txt issue75-static.txt || true
           git add src/thorn/symbols.py src/thorn/symbol_extract.py tests/test_proof_ir_context_fidelity.py
           git commit -m "Canonicalize simple subscript symbol spellings"
           git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
