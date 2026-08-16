@@ -118,21 +118,21 @@ def test_quantifier_binder_has_identity_scope_domain_and_bound_reference() -> No
     )
     assert resolved.expression(binder.domain_ref) == IdentifierExpr(name="R")
 
-    bound = resolved.reference(
-        ExpressionRef(owner_address="C1", path=("body", "arguments", "0"))
-    )
+    bound = resolved.reference(ExpressionRef(owner_address="C1", path=("body", "arguments", "0")))
     assert bound.status == ResolutionStatus.BOUND
     assert bound.declaration_addresses == (binder.address,)
     binder_scope = next(item for item in resolved.scopes if item.address == binder.scope_address)
     assert binder_scope.origin == ScopeOrigin.BINDER
     assert binder_scope.parent_status == InferenceStatus.CONFIDENT
 
-    assert resolved.reference(
-        ExpressionRef(owner_address="C1", path=("binder", "domain"))
-    ).status == ResolutionStatus.UNRESOLVED
-    assert resolved.reference(
-        ExpressionRef(owner_address="C1", path=("body", "function"))
-    ).status == ResolutionStatus.UNRESOLVED
+    assert (
+        resolved.reference(ExpressionRef(owner_address="C1", path=("binder", "domain"))).status
+        == ResolutionStatus.UNRESOLVED
+    )
+    assert (
+        resolved.reference(ExpressionRef(owner_address="C1", path=("body", "function"))).status
+        == ResolutionStatus.UNRESOLVED
+    )
 
 
 def test_nested_shadowing_resolves_to_nearest_binder_not_same_spelling() -> None:
@@ -154,9 +154,7 @@ def test_nested_shadowing_resolves_to_nearest_binder_not_same_spelling() -> None
     binders = [item for item in resolved.declarations if item.kind == DeclarationKind.BINDER]
     assert len(binders) == 2
 
-    outer_ref = resolved.reference(
-        ExpressionRef(owner_address="C1", path=("body", "items", "0"))
-    )
+    outer_ref = resolved.reference(ExpressionRef(owner_address="C1", path=("body", "items", "0")))
     inner_ref = resolved.reference(
         ExpressionRef(
             owner_address="C1",
@@ -200,7 +198,10 @@ def test_same_spelling_source_declarations_remain_ambiguous_without_use_evidence
 
     assert reference.status == ResolutionStatus.AMBIGUOUS
     assert len(reference.declaration_addresses) == 2
-    assert {resolved.declaration(address).source_symbol_identifier for address in reference.declaration_addresses} == {
+    assert {
+        resolved.declaration(address).source_symbol_identifier
+        for address in reference.declaration_addresses
+    } == {
         "symbol:x:outer",
         "symbol:x:inner",
     }
@@ -289,7 +290,9 @@ def test_unresolved_source_use_does_not_fall_back_to_lexical_guess() -> None:
 
     resolved = elaborate_symbol_resolution(proof, symbols=[symbol], symbol_uses=[use])
 
-    assert resolved.reference(ExpressionRef(owner_address="C1")).status == ResolutionStatus.UNRESOLVED
+    assert (
+        resolved.reference(ExpressionRef(owner_address="C1")).status == ResolutionStatus.UNRESOLVED
+    )
 
 
 def test_alpha_normalization_is_invariant_to_bound_renaming_but_not_free_renaming() -> None:
@@ -390,12 +393,8 @@ def test_universal_instantiation_references_parameter_argument_and_conclusion_as
     operation = resolved.instantiations[0]
     assert operation.status == InferenceStatus.CONFIDENT
     assert operation.quantified_ref == ExpressionRef(owner_address="R1")
-    assert operation.parameter_ref == ExpressionRef(
-        owner_address="R1", path=("binder", "name")
-    )
-    assert operation.argument_ref == ExpressionRef(
-        owner_address="C1", path=("arguments", "0")
-    )
+    assert operation.parameter_ref == ExpressionRef(owner_address="R1", path=("binder", "name"))
+    assert operation.argument_ref == ExpressionRef(owner_address="C1", path=("arguments", "0"))
     assert resolved.expression(operation.argument_ref) == IdentifierExpr(name="a")
 
 
@@ -454,9 +453,7 @@ def test_existential_witness_is_recovered_from_exact_instance() -> None:
     assert len(resolved.witnesses) == 1
     witness = resolved.witnesses[0]
     assert witness.status == InferenceStatus.CONFIDENT
-    assert witness.witness_ref == ExpressionRef(
-        owner_address="C1", path=("arguments", "0")
-    )
+    assert witness.witness_ref == ExpressionRef(owner_address="C1", path=("arguments", "0"))
     assert resolved.expression(witness.witness_ref) == IdentifierExpr(name="a")
 
 
@@ -513,7 +510,10 @@ def test_rewrite_substitution_requires_exact_equality_and_two_premises() -> None
 
 def test_rewrite_wording_without_structural_premises_stays_unresolved() -> None:
     proof = _proof(
-        [_proposition("C1", IdentifierExpr(name="P")), _proposition("C2", IdentifierExpr(name="Q"))],
+        [
+            _proposition("C1", IdentifierExpr(name="P")),
+            _proposition("C2", IdentifierExpr(name="Q")),
+        ],
         steps=[
             ProofStepEdge(
                 address="E1",
@@ -572,9 +572,7 @@ def test_build_path_consumes_existing_typed_obligation_pipeline() -> None:
         for item in resolved.declarations
         if item.kind == DeclarationKind.BINDER and item.provenance.source_address == "T0"
     )
-    body_x = resolved.reference(
-        ExpressionRef(owner_address="T0", path=("body", "arguments", "0"))
-    )
+    body_x = resolved.reference(ExpressionRef(owner_address="T0", path=("body", "arguments", "0")))
     assert body_x.status == ResolutionStatus.BOUND
     assert body_x.declaration_addresses == (binder.address,)
 
