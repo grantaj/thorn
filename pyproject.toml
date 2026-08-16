@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "thorn-math"
 version = "0.1.0"
-description = "Mathematical document analysis and AI-assisted review for LaTeX manuscripts"
+description = "Partial mathematical elaboration and AI-assisted review for LaTeX manuscripts"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
