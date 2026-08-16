@@ -14,6 +14,7 @@ on:
       - "src/thorn/eval_review.py"
       - "src/thorn/evidence.py"
       - "src/thorn/formula_ir.py"
+      - "src/thorn/higher_proof_structure.py"
       - "src/thorn/latex.py"
       - "src/thorn/linguistic*.py"
       - "src/thorn/local_nlp.py"
@@ -26,6 +27,7 @@ on:
       - "src/thorn/support*.py"
       - "src/thorn/symbol_resolution_ir.py"
       - "src/thorn/symbols.py"
+      - "eval/HIGHER_PROOF_STRUCTURE.md"
       - "eval/README.md"
       - "eval/IR_VALUE_EXPERIMENT.md"
       - "eval/PROOF_OBLIGATIONS.md"
@@ -41,6 +43,7 @@ on:
       - "tests/test_cli_analysis.py"
       - "tests/test_eval*.py"
       - "tests/test_formula_ir.py"
+      - "tests/test_higher_proof_structure.py"
       - "tests/test_linguistic_*.py"
       - "tests/test_proof_obligations.py"
       - "tests/test_proof_skeleton.py"
@@ -66,7 +69,7 @@ jobs:
           python -m spacy download en_core_web_sm
       - name: Run parser-neutral unit contracts
         run: |
-          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py tests/test_proof_skeleton.py tests/test_proof_obligations.py tests/test_symbol_resolution*.py
+          pytest -q tests/test_semantic_projection.py tests/test_linguistic_*.py tests/test_cli_analysis.py tests/test_eval_preflight.py tests/test_semantic_experiment.py tests/test_proof_skeleton.py tests/test_proof_obligations.py tests/test_symbol_resolution*.py tests/test_higher_proof_structure.py
       - name: Check Thorn-owned spaCy behavior over the 70-case corpus
         run: python research/semantic-parser-bakeoff/check_spacy_contract.py
       - name: Exercise the normal CLI linguistic path
