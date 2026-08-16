@@ -32,7 +32,7 @@ jobs:
               raise SystemExit("expected lexical candidate block not found")
           path.write_text(text.replace(old, new))
           PY
-          ruff check --fix src/thorn/symbol_resolution_ir.py
+          ruff check --fix --exit-zero src/thorn/symbol_resolution_ir.py
           ruff format src/thorn/symbol_resolution_ir.py
           ruff check src/thorn/symbol_resolution_ir.py
       - name: Commit fixes if needed
