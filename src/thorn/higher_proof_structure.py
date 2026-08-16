@@ -483,9 +483,7 @@ def _contradiction_structures(
             local_assumptions = (negated_address,)
             discharged_assumptions = (negated_address,)
             body_addresses = tuple(
-                address
-                for address in (negated_address, false_address)
-                if address is not None
+                address for address in (negated_address, false_address) if address is not None
             )
             branches.append(
                 ProofBranch(
@@ -516,9 +514,7 @@ def _contradiction_structures(
                 support_status=support_status,
                 branch_addresses=branch_addresses,
                 premise_addresses=tuple(
-                    address
-                    for address in (negated_address, false_address)
-                    if address is not None
+                    address for address in (negated_address, false_address) if address is not None
                 ),
                 conclusion_address=conclusion.address,
                 local_assumptions=local_assumptions,
@@ -812,18 +808,12 @@ def _wlog_structures(
                 kind=ProofStructureKind.WLOG,
                 assertion_status=InferenceStatus.CONFIDENT,
                 support_status=(
-                    InferenceStatus.AMBIGUOUS
-                    if related_steps
-                    else InferenceStatus.UNRESOLVED
+                    InferenceStatus.AMBIGUOUS if related_steps else InferenceStatus.UNRESOLVED
                 ),
                 premise_addresses=tuple(
-                    premise
-                    for step in related_steps
-                    for premise in step.premises
+                    premise for step in related_steps for premise in step.premises
                 ),
-                conclusion_address=(
-                    related_steps[-1].conclusion if related_steps else None
-                ),
+                conclusion_address=(related_steps[-1].conclusion if related_steps else None),
                 source_addresses=(address,),
                 opaque_source_addresses=(address,),
             )
@@ -945,9 +935,7 @@ def _witness_structures(
                 operation_addresses=(operation.address,),
                 source_addresses=source_addresses,
                 opaque_source_addresses=(
-                    source_addresses
-                    if operation.status != InferenceStatus.CONFIDENT
-                    else ()
+                    source_addresses if operation.status != InferenceStatus.CONFIDENT else ()
                 ),
             )
         )

@@ -64,10 +64,7 @@ def _proof(
     source_text = source_text or {}
     addresses = [item.source_address for item in propositions]
     addresses.extend(
-        address
-        for step in steps
-        for address in step.source_addresses
-        if address not in addresses
+        address for step in steps for address in step.source_addresses if address not in addresses
     )
     return ProofObligationIR(
         result_identifier="thm:test",
@@ -113,7 +110,9 @@ def test_exact_case_split_has_explicit_branches_and_discharged_case_assumptions(
     )
 
     _resolved, higher = _higher(proof)
-    structure = next(item for item in higher.structures if item.kind == ProofStructureKind.CASE_SPLIT)
+    structure = next(
+        item for item in higher.structures if item.kind == ProofStructureKind.CASE_SPLIT
+    )
 
     assert structure.assertion_status == InferenceStatus.CONFIDENT
     assert structure.support_status == InferenceStatus.CONFIDENT
@@ -144,7 +143,9 @@ def test_case_wording_without_exhaustive_structural_shape_fails_closed() -> None
     )
 
     _resolved, higher = _higher(proof)
-    structure = next(item for item in higher.structures if item.kind == ProofStructureKind.CASE_SPLIT)
+    structure = next(
+        item for item in higher.structures if item.kind == ProofStructureKind.CASE_SPLIT
+    )
 
     assert structure.assertion_status == InferenceStatus.CONFIDENT
     assert structure.support_status == InferenceStatus.UNRESOLVED
@@ -170,7 +171,9 @@ def test_structural_case_shape_can_be_recovered_without_claiming_it_was_asserted
     )
 
     _resolved, higher = _higher(proof)
-    structure = next(item for item in higher.structures if item.kind == ProofStructureKind.CASE_SPLIT)
+    structure = next(
+        item for item in higher.structures if item.kind == ProofStructureKind.CASE_SPLIT
+    )
 
     assert structure.assertion_status == InferenceStatus.UNRESOLVED
     assert structure.support_status == InferenceStatus.CONFIDENT
@@ -254,9 +257,7 @@ def test_contraposition_shape_is_explicit_but_not_certified_without_logic_assump
     assert structure.support_status == InferenceStatus.AMBIGUOUS
     assert structure.transformed_goal_ref == ExpressionRef(owner_address="C1")
     branch = higher.branch(structure.branch_addresses[0])
-    assert branch.assumption_refs == (
-        ExpressionRef(owner_address="C1", path=("arguments", "0")),
-    )
+    assert branch.assumption_refs == (ExpressionRef(owner_address="C1", path=("arguments", "0")),)
     assert branch.discharged_assumption_refs == branch.assumption_refs
 
 
@@ -301,7 +302,9 @@ def test_induction_recovers_base_step_parameter_and_induction_hypothesis() -> No
     )
 
     resolved, higher = _higher(proof)
-    structure = next(item for item in higher.structures if item.kind == ProofStructureKind.INDUCTION)
+    structure = next(
+        item for item in higher.structures if item.kind == ProofStructureKind.INDUCTION
+    )
 
     assert structure.assertion_status == InferenceStatus.CONFIDENT
     assert structure.support_status == InferenceStatus.CONFIDENT
@@ -344,7 +347,9 @@ def test_induction_wording_with_missing_step_remains_opaque_and_unresolved() -> 
     )
 
     _resolved, higher = _higher(proof)
-    structure = next(item for item in higher.structures if item.kind == ProofStructureKind.INDUCTION)
+    structure = next(
+        item for item in higher.structures if item.kind == ProofStructureKind.INDUCTION
+    )
 
     assert structure.assertion_status == InferenceStatus.CONFIDENT
     assert structure.support_status == InferenceStatus.UNRESOLVED
