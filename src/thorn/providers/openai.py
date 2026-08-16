@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from openai import OpenAI
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
@@ -38,7 +40,7 @@ class OpenAIProvider:
         envelope = attack_request_envelope(unit, self.model)
         response = self.client.responses.parse(
             model=self.model,
-            input=envelope.input_messages(),
+            input=cast(Any, envelope.input_messages()),
             text_format=AttackReport,
         )
         self._record_usage(response)
@@ -50,7 +52,7 @@ class OpenAIProvider:
         envelope = semantic_request_envelope(request, self.model)
         response = self.client.responses.parse(
             model=self.model,
-            input=envelope.input_messages(),
+            input=cast(Any, envelope.input_messages()),
             text_format=AttackReport,
         )
         self._record_usage(response)
@@ -65,7 +67,7 @@ class OpenAIProvider:
         envelope = proof_review_request_envelope(request, self.model)
         response = self.client.responses.parse(
             model=self.model,
-            input=envelope.input_messages(),
+            input=cast(Any, envelope.input_messages()),
             text_format=ProofReviewModelResponse,
         )
         self._record_usage(response)
@@ -77,7 +79,7 @@ class OpenAIProvider:
         envelope = defense_request_envelope(unit, findings, self.model)
         response = self.client.responses.parse(
             model=self.model,
-            input=envelope.input_messages(),
+            input=cast(Any, envelope.input_messages()),
             text_format=DefenseReport,
         )
         self._record_usage(response)
