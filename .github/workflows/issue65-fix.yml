@@ -44,6 +44,14 @@ jobs:
               "    result: dict[str, list[ProofStepEdge]] = {}",
               1,
           )
+          text = text.replace(
+              '    direction = f"{_render_ref(ir, transformation.rewrite_from_ref)}→{_render_ref(ir, transformation.rewrite_to_ref)}"',
+              '    direction = (\n'
+              '        f"{_render_ref(ir, transformation.rewrite_from_ref)}"\n'
+              '        f"→{_render_ref(ir, transformation.rewrite_to_ref)}"\n'
+              '    )',
+              1,
+          )
           path.write_text(text)
           PY
           python -m pip install ruff
