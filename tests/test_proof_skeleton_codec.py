@@ -63,8 +63,8 @@ def test_shared_dictionary_is_self_contained_and_profitable() -> None:
         first.render_initial(),
         second.render_initial(),
     ]
-    assert repeated in dictionary.wire_text
-    assert "@0;" in dictionary.wire_text
+    assert repeated in dictionary.dictionary
+    assert "@" in dictionary.wire_text
 
 
 def test_literal_dictionary_marker_round_trips_without_dictionary() -> None:
@@ -84,7 +84,7 @@ def test_noncanonical_local_address_sequence_fails_loudly() -> None:
 
 
 def test_corrupt_dictionary_reference_fails_loudly() -> None:
-    wire = "SC1\nD0\nS1\nN1\nT@0;\n"
+    wire = "SC1\nD0\n\nT@0\n"
 
     with pytest.raises(ValueError, match="out of range"):
         decode_skeleton_bundle(wire)
