@@ -57,6 +57,7 @@ def test_openai_proof_review_transport_enforces_output_cap(
     monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
     provider = openai_provider.OpenAIProvider(model="test-model")
 
+    assert client.max_retries == 0
     provider.review_proof_turn(_turn())
 
     assert len(client.responses.calls) == 1
