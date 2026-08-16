@@ -28,7 +28,6 @@ from thorn.proof_obligations import (
     ProofObligationIR,
     ProofProposition,
     ProofRuleKind,
-    ProofStepEdge,
     build_proof_obligation_ir,
 )
 from thorn.semantic_review_render import SemanticReviewRequest
@@ -498,11 +497,7 @@ def _matching_uses(
 ) -> list[SymbolUse]:
     if owner_span is None:
         return []
-    return [
-        use
-        for use in uses
-        if use.name == name and _span_overlaps(use.source, owner_span)
-    ]
+    return [use for use in uses if use.name == name and _span_overlaps(use.source, owner_span)]
 
 
 def _resolve_free_reference(
@@ -524,9 +519,7 @@ def _resolve_free_reference(
             for use in matching_uses
             if use.resolved_symbol_identifier is not None
         }
-        unresolved_use = any(
-            use.resolved_symbol_identifier is None for use in matching_uses
-        )
+        unresolved_use = any(use.resolved_symbol_identifier is None for use in matching_uses)
         resolved_addresses = tuple(
             sorted(
                 source_by_identifier[identifier]
@@ -541,7 +534,11 @@ def _resolve_free_reference(
         return ResolutionStatus.UNRESOLVED, ()
 
     lexical_candidates = tuple(
-        sorted(item.address for item in declarations if item.name == name)
+        sorted(
+            item.address
+            for item in declarations
+            if item.name == name and item.kind != DeclarationKind.BINDER
+        )
     )
     if lexical_candidates:
         # Even one same-spelling declaration is only a candidate without an exact
@@ -733,19 +730,25 @@ def _match_instantiation(
         if isinstance(left, OpaqueExpr) and isinstance(right, OpaqueExpr):
             return left == right
         if isinstance(left, ApplyExpr) and isinstance(right, ApplyExpr):
-            return match(
-                left.function,
-                right.function,
-                (*left_path, "function"),
-                (*right_path, "function"),
-            ) and len(left.arguments) == len(right.arguments) and all(
+            return (
                 match(
-                    l_arg,
-                    r_arg,
-                    (*left_path, "arguments", str(index)),
-                    (*right_path, "arguments", str(index)),
+                    left.function,
+                    right.function,
+                    (*left_path, "function"),
+                    (*right_path, "function"),
                 )
-                for index, (l_arg, r_arg) in enumerate(zip(left.arguments, right.arguments))
+                and len(left.arguments) == len(right.arguments)
+                and all(
+                    match(
+                        l_arg,
+                        r_arg,
+                        (*left_path, "arguments", str(index)),
+                        (*right_path, "arguments", str(index)),
+                    )
+                    for index, (l_arg, r_arg) in enumerate(
+                        zip(left.arguments, right.arguments, strict=True)
+                    )
+                )
             )
         if isinstance(left, OperatorExpr) and isinstance(right, OperatorExpr):
             return (
@@ -758,7 +761,9 @@ def _match_instantiation(
                         (*left_path, "arguments", str(index)),
                         (*right_path, "arguments", str(index)),
                     )
-                    for index, (l_arg, r_arg) in enumerate(zip(left.arguments, right.arguments))
+                    for index, (l_arg, r_arg) in enumerate(
+                        zip(left.arguments, right.arguments, strict=True)
+                    )
                 )
             )
         if isinstance(left, RelationExpr) and isinstance(right, RelationExpr):
@@ -778,11 +783,15 @@ def _match_instantiation(
                         (*left_path, "arguments", str(index)),
                         (*right_path, "arguments", str(index)),
                     )
-                    for index, (l_arg, r_arg) in enumerate(zip(left.arguments, right.arguments))
+                    for index, (l_arg, r_arg) in enumerate(
+                        zip(left.arguments, right.arguments, strict=True)
+                    )
                 )
             )
         if isinstance(left, NotExpr) and isinstance(right, NotExpr):
-            return match(left.operand, right.operand, (*left_path, "operand"), (*right_path, "operand"))
+            return match(
+                left.operand, right.operand, (*left_path, "operand"), (*right_path, "operand")
+            )
         if isinstance(left, TupleExpr) and isinstance(right, TupleExpr):
             return len(left.items) == len(right.items) and all(
                 match(
@@ -791,7 +800,7 @@ def _match_instantiation(
                     (*left_path, "items", str(index)),
                     (*right_path, "items", str(index)),
                 )
-                for index, (l_item, r_item) in enumerate(zip(left.items, right.items))
+                for index, (l_item, r_item) in enumerate(zip(left.items, right.items, strict=True))
             )
         if isinstance(left, SetExpr) and isinstance(right, SetExpr):
             return len(left.items) == len(right.items) and all(
@@ -801,7 +810,7 @@ def _match_instantiation(
                     (*left_path, "items", str(index)),
                     (*right_path, "items", str(index)),
                 )
-                for index, (l_item, r_item) in enumerate(zip(left.items, right.items))
+                for index, (l_item, r_item) in enumerate(zip(left.items, right.items, strict=True))
             )
         # Nested binders require declaration-aware matching. Preserve uncertainty
         # instead of doing lexical substitution through a possible shadowing point.
@@ -842,33 +851,87 @@ def _match_exact_replacement(
         if type(left) is not type(right):
             return False
         if isinstance(left, ApplyExpr) and isinstance(right, ApplyExpr):
-            return match(left.function, right.function, (*left_path, "function"), (*right_path, "function")) and len(left.arguments) == len(right.arguments) and all(
-                match(l_arg, r_arg, (*left_path, "arguments", str(index)), (*right_path, "arguments", str(index)))
-                for index, (l_arg, r_arg) in enumerate(zip(left.arguments, right.arguments))
+            return (
+                match(
+                    left.function,
+                    right.function,
+                    (*left_path, "function"),
+                    (*right_path, "function"),
+                )
+                and len(left.arguments) == len(right.arguments)
+                and all(
+                    match(
+                        l_arg,
+                        r_arg,
+                        (*left_path, "arguments", str(index)),
+                        (*right_path, "arguments", str(index)),
+                    )
+                    for index, (l_arg, r_arg) in enumerate(
+                        zip(left.arguments, right.arguments, strict=True)
+                    )
+                )
             )
         if isinstance(left, OperatorExpr) and isinstance(right, OperatorExpr):
-            return left.operator == right.operator and len(left.arguments) == len(right.arguments) and all(
-                match(l_arg, r_arg, (*left_path, "arguments", str(index)), (*right_path, "arguments", str(index)))
-                for index, (l_arg, r_arg) in enumerate(zip(left.arguments, right.arguments))
+            return (
+                left.operator == right.operator
+                and len(left.arguments) == len(right.arguments)
+                and all(
+                    match(
+                        l_arg,
+                        r_arg,
+                        (*left_path, "arguments", str(index)),
+                        (*right_path, "arguments", str(index)),
+                    )
+                    for index, (l_arg, r_arg) in enumerate(
+                        zip(left.arguments, right.arguments, strict=True)
+                    )
+                )
             )
         if isinstance(left, RelationExpr) and isinstance(right, RelationExpr):
-            return left.operator == right.operator and match(left.left, right.left, (*left_path, "left"), (*right_path, "left")) and match(left.right, right.right, (*left_path, "right"), (*right_path, "right"))
+            return (
+                left.operator == right.operator
+                and match(left.left, right.left, (*left_path, "left"), (*right_path, "left"))
+                and match(left.right, right.right, (*left_path, "right"), (*right_path, "right"))
+            )
         if isinstance(left, LogicalExpr) and isinstance(right, LogicalExpr):
-            return left.operator == right.operator and len(left.arguments) == len(right.arguments) and all(
-                match(l_arg, r_arg, (*left_path, "arguments", str(index)), (*right_path, "arguments", str(index)))
-                for index, (l_arg, r_arg) in enumerate(zip(left.arguments, right.arguments))
+            return (
+                left.operator == right.operator
+                and len(left.arguments) == len(right.arguments)
+                and all(
+                    match(
+                        l_arg,
+                        r_arg,
+                        (*left_path, "arguments", str(index)),
+                        (*right_path, "arguments", str(index)),
+                    )
+                    for index, (l_arg, r_arg) in enumerate(
+                        zip(left.arguments, right.arguments, strict=True)
+                    )
+                )
             )
         if isinstance(left, NotExpr) and isinstance(right, NotExpr):
-            return match(left.operand, right.operand, (*left_path, "operand"), (*right_path, "operand"))
+            return match(
+                left.operand, right.operand, (*left_path, "operand"), (*right_path, "operand")
+            )
         if isinstance(left, TupleExpr) and isinstance(right, TupleExpr):
             return len(left.items) == len(right.items) and all(
-                match(l_item, r_item, (*left_path, "items", str(index)), (*right_path, "items", str(index)))
-                for index, (l_item, r_item) in enumerate(zip(left.items, right.items))
+                match(
+                    l_item,
+                    r_item,
+                    (*left_path, "items", str(index)),
+                    (*right_path, "items", str(index)),
+                )
+                for index, (l_item, r_item) in enumerate(zip(left.items, right.items, strict=True))
             )
         if isinstance(left, SetExpr) and isinstance(right, SetExpr):
             return len(left.items) == len(right.items) and all(
-                match(l_item, r_item, (*left_path, "items", str(index)), (*right_path, "items", str(index)))
-                for index, (l_item, r_item) in enumerate(zip(left.items, right.items))
+                match(
+                    l_item,
+                    r_item,
+                    (*left_path, "items", str(index)),
+                    (*right_path, "items", str(index)),
+                )
+                for index, (l_item, r_item) in enumerate(zip(left.items, right.items, strict=True))
             )
         if isinstance(left, QuantifiedExpr) and isinstance(right, QuantifiedExpr):
             return False
@@ -903,7 +966,10 @@ def _instantiation_operations(proof: ProofObligationIR) -> list[InstantiationOpe
             except KeyError:
                 continue
             expression = premise.expression
-            if not isinstance(expression, QuantifiedExpr) or expression.quantifier != Quantifier.FOR_ALL:
+            if (
+                not isinstance(expression, QuantifiedExpr)
+                or expression.quantifier != Quantifier.FOR_ALL
+            ):
                 continue
             match = _match_instantiation(
                 expression.body,
@@ -1039,16 +1105,17 @@ def _substitution_operations(proof: ProofObligationIR) -> list[SubstitutionOpera
             elif premise.expression is not None:
                 input_premises.append(premise)
 
-        confident_match: tuple[
-            str,
-            RelationExpr,
-            ProofProposition,
-            bool,
-            _ReplacementMatch,
-        ] | None = None
-        matches: list[
-            tuple[str, RelationExpr, ProofProposition, bool, _ReplacementMatch]
-        ] = []
+        confident_match: (
+            tuple[
+                str,
+                RelationExpr,
+                ProofProposition,
+                bool,
+                _ReplacementMatch,
+            ]
+            | None
+        ) = None
+        matches: list[tuple[str, RelationExpr, ProofProposition, bool, _ReplacementMatch]] = []
         if conclusion.expression is not None:
             for equality_address, equality in equality_premises:
                 for input_proposition in input_premises:
@@ -1102,8 +1169,7 @@ def _substitution_operations(proof: ProofObligationIR) -> list[SubstitutionOpera
         )
         input_ref = ExpressionRef(owner_address=input_proposition.address)
         sites = tuple(
-            ExpressionRef(owner_address=conclusion.address, path=site)
-            for site in replacement.sites
+            ExpressionRef(owner_address=conclusion.address, path=site) for site in replacement.sites
         )
         operations.append(
             SubstitutionOperation(
@@ -1172,9 +1238,7 @@ def elaborate_symbol_resolution(
         result_identifier=proof.result_identifier,
         proof=proof.model_copy(deep=True),
         scopes=[scope_by_address[key] for key in sorted(scope_by_address)],
-        declarations=[
-            declaration_by_address[key] for key in sorted(declaration_by_address)
-        ],
+        declarations=[declaration_by_address[key] for key in sorted(declaration_by_address)],
         references=references,
         instantiations=_instantiation_operations(proof),
         substitutions=_substitution_operations(proof),
@@ -1193,9 +1257,7 @@ def _relevant_symbol_table_context(
     if symbol_table is None:
         return symbols, candidates, [], []
 
-    owner_spans = [
-        source.source_span for source in proof.sources if source.source_span is not None
-    ]
+    owner_spans = [source.source_span for source in proof.sources if source.source_span is not None]
     uses = [
         use
         for use in symbol_table.uses
@@ -1203,14 +1265,10 @@ def _relevant_symbol_table_context(
     ]
     selected_symbol_ids = {symbol.identifier for symbol in symbols}
     selected_symbol_ids.update(
-        use.resolved_symbol_identifier
-        for use in uses
-        if use.resolved_symbol_identifier is not None
+        use.resolved_symbol_identifier for use in uses if use.resolved_symbol_identifier is not None
     )
     selected_symbols = [
-        symbol
-        for symbol in symbol_table.symbols
-        if symbol.identifier in selected_symbol_ids
+        symbol for symbol in symbol_table.symbols if symbol.identifier in selected_symbol_ids
     ]
     selected_by_id = {symbol.identifier: symbol for symbol in selected_symbols}
     for symbol in symbols:
@@ -1228,9 +1286,7 @@ def _relevant_symbol_table_context(
         if scope.parent_identifier not in scope_ids:
             scope_ids.add(scope.parent_identifier)
             pending.append(scope.parent_identifier)
-    selected_scopes = [
-        scope for scope in symbol_table.scopes if scope.identifier in scope_ids
-    ]
+    selected_scopes = [scope for scope in symbol_table.scopes if scope.identifier in scope_ids]
     return (
         sorted(selected_by_id.values(), key=lambda item: item.identifier),
         candidates,
