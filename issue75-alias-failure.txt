@@ -1,0 +1,48 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_explicit_project_definition_is_selected_only_when_target_uses_it _____
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_explicit_project_definiti0')
+
+    def test_explicit_project_definition_is_selected_only_when_target_uses_it(
+        tmp_path: Path,
+    ) -> None:
+        good = tmp_path / "project-definition-good.tex"
+        bad = tmp_path / "project-definition-bad.tex"
+        _write_project_definition_case(good, r"F(\tau^2)")
+        _write_project_definition_case(bad, r"F(\tau)")
+    
+        good_project, _good_ir, good_doc = _build(good, "prop:main")
+        _bad_project, _bad_ir, bad_doc = _build(bad, "prop:main")
+    
+        project_symbol = next(
+            symbol
+            for symbol in good_project.symbol_table.symbols
+            if symbol.name == r"A_\tau" and symbol.result_identifier is None
+        )
+        project_definition = next(
+            definition
+            for definition in good_project.symbol_table.definitions
+            if definition.symbol_identifier == project_symbol.identifier
+        )
+        assert project_definition.expression_latex == r"F(\tau^2)."
+    
+        good_definition = next(source for source in good_doc.sources if source.address == "D1")
+        bad_definition = next(source for source in bad_doc.sources if source.address == "D1")
+        assert r"\tau^2" in good_definition.text
+        assert r"\tau^2" not in bad_definition.text
+        assert good_doc.render_initial() != bad_doc.render_initial()
+    
+        rescue = render_source_rescue(
+            good_doc,
+            parse_source_rescue_request(good_doc, "NEED_SOURCE D1"),
+        )
+>       assert r"A_\tau" in rescue.text
+E       AssertionError: assert 'A_\\tau' in 'THORN-SOURCE 1 f7e1b4d958b247f228637bc14007390022ad2b6c835e99c87d3a637518ede3e0\nSOURCE @D1\n\\[\nA_{\\tau} \\stackrel{{\\scriptstyle\\text{\\tiny def}}}{{=}} F(\\tau^2).\n\\]\nEND_SOURCE @D1\n'
+E        +  where 'THORN-SOURCE 1 f7e1b4d958b247f228637bc14007390022ad2b6c835e99c87d3a637518ede3e0\nSOURCE @D1\n\\[\nA_{\\tau} \\stackrel{{\\scriptstyle\\text{\\tiny def}}}{{=}} F(\\tau^2).\n\\]\nEND_SOURCE @D1\n' = SourceRescueResponse(document_fingerprint='f7e1b4d958b247f228637bc14007390022ad2b6c835e99c87d3a637518ede3e0', addresse...3e0\nSOURCE @D1\n\\[\nA_{\\tau} \\stackrel{{\\scriptstyle\\text{\\tiny def}}}{{=}} F(\\tau^2).\n\\]\nEND_SOURCE @D1\n').text
+
+tests/test_proof_ir_context_fidelity.py:149: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_proof_ir_context_fidelity.py::test_explicit_project_definition_is_selected_only_when_target_uses_it - AssertionError: assert 'A_\\tau' in 'THORN-SOURCE 1 f7e1b4d958b247f228637bc14007390022ad2b6c835e99c87d3a637518ede3e0\nSOURCE @D1\n\\[\nA_{\\tau} \\stackrel{{\\scriptstyle\\text{\\tiny def}}}{{=}} F(\\tau^2).\n\\]\nEND_SOURCE @D1\n'
+ +  where 'THORN-SOURCE 1 f7e1b4d958b247f228637bc14007390022ad2b6c835e99c87d3a637518ede3e0\nSOURCE @D1\n\\[\nA_{\\tau} \\stackrel{{\\scriptstyle\\text{\\tiny def}}}{{=}} F(\\tau^2).\n\\]\nEND_SOURCE @D1\n' = SourceRescueResponse(document_fingerprint='f7e1b4d958b247f228637bc14007390022ad2b6c835e99c87d3a637518ede3e0', addresse...3e0\nSOURCE @D1\n\\[\nA_{\\tau} \\stackrel{{\\scriptstyle\\text{\\tiny def}}}{{=}} F(\\tau^2).\n\\]\nEND_SOURCE @D1\n').text
+1 failed in 0.39s
