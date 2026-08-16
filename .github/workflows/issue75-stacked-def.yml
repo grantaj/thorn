@@ -1,0 +1,54 @@
+name: Validate issue 75 stacked definitions
+
+on:
+  push:
+    branches:
+      - agent/issue-75-proof-ir-context-fidelity
+    paths:
+      - .github/workflows/issue75-stacked-def.yml
+
+permissions:
+  contents: write
+
+env:
+  OPENAI_API_KEY: ""
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-75-proof-ir-context-fidelity
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Apply nested-definition patch
+        run: python scripts/issue75_stacked_def_patch.py
+      - name: Install
+        run: python -m pip install -e '.[dev]'
+      - name: Project-definition regression
+        run: pytest -q tests/test_proof_ir_context_fidelity.py::test_explicit_project_definition_is_selected_only_when_target_uses_it
+      - name: All issue 75 regressions
+        run: pytest -q tests/test_proof_ir_context_fidelity.py
+      - name: Full keyless suite
+        run: pytest -q
+      - name: Corpus and CLI checks
+        run: |
+          thorn-eval eval/cases --validate-only
+          thorn-eval eval/cases --analyze
+          thorn analyze examples/demo.tex --structural-only
+          thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
+      - name: Static checks
+        run: |
+          ruff check src tests
+          mypy src
+      - name: Commit validated patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/issue75-stacked-def.yml scripts/issue75_stacked_def_patch.py
+          git add src/thorn/symbol_extract.py tests/test_proof_ir_context_fidelity.py
+          git commit -m "Recognize styled explicit project definitions"
+          git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
