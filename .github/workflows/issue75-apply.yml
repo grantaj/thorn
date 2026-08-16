@@ -55,14 +55,27 @@ jobs:
           thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
       - name: Static checks
         run: |
-          ruff check src tests
-          mypy src
+          set +e
+          ruff check src tests > issue75-static.txt 2>&1
+          ruff_status=$?
+          mypy src >> issue75-static.txt 2>&1
+          mypy_status=$?
+          cat issue75-static.txt
+          test "$ruff_status" -eq 0 -a "$mypy_status" -eq 0
+      - name: Capture static failure
+        if: failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add issue75-static.txt
+          git commit -m "Capture issue 75 static failure"
+          git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
       - name: Commit validated implementation
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/issue75-apply.yml scripts/issue75_patch.py
-          git rm -f issue75-failure.txt || true
+          git rm -f issue75-failure.txt issue75-static.txt || true
           git add src/thorn/support_extract.py src/thorn/canonical_proof_ir.py src/thorn/eval_review.py
           git commit -m "Preserve load-bearing Proof IR context"
           git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
