@@ -31,7 +31,15 @@ jobs:
       - name: Definition-context regression
         run: pytest -q tests/test_proof_ir_context_fidelity.py::test_statement_dependency_survives_and_is_source_rescuable
       - name: Result-precondition regression
-        run: pytest -q tests/test_proof_ir_context_fidelity.py::test_result_application_keeps_unmet_precondition_distinct_from_control
+        run: pytest -q tests/test_proof_ir_context_fidelity.py::test_result_application_keeps_unmet_precondition_distinct_from_control > issue75-failure.txt 2>&1
+      - name: Capture precondition failure
+        if: failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add issue75-failure.txt
+          git commit -m "Capture issue 75 regression failure"
+          git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
       - name: Asserted-property regression
         run: pytest -q tests/test_proof_ir_context_fidelity.py::test_generic_asserted_support_is_preserved_without_confidence_promotion
       - name: Existing affected tests
@@ -53,6 +61,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/issue75-apply.yml scripts/issue75_patch.py
+          git rm -f issue75-failure.txt || true
           git add src/thorn/support_extract.py src/thorn/canonical_proof_ir.py src/thorn/eval_review.py
           git commit -m "Preserve load-bearing Proof IR context"
           git push origin HEAD:agent/issue-75-proof-ir-context-fidelity
