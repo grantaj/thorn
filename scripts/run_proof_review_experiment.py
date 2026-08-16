@@ -272,7 +272,13 @@ def main() -> int:
             proof_review_request_envelope(turn, args.model) for turn in capture.turns
         ]
         rescue_turns = [turn for turn in capture.turns if turn.stage == "rescue"]
-        requested_addresses = [
+        model_requested_addresses = [
+            address
+            for response in capture.responses
+            if response.action == "need_source"
+            for address in response.source_addresses
+        ]
+        rescued_addresses = [
             address
             for turn in rescue_turns
             for address in turn.requested_source_addresses
@@ -286,7 +292,7 @@ def main() -> int:
         rescue_turn_bytes = sum(
             len(turn.user_content.encode("utf-8")) for turn in rescue_turns
         )
-        if requested_addresses:
+        if rescue_turns:
             rescue_count += 1
 
         initial = proof_review_experiment_turn(unit, document, arm)
@@ -303,8 +309,9 @@ def main() -> int:
                 "protocol_error": protocol_error,
                 "findings": findings,
                 "finding_count": len(findings),
-                "source_rescued": bool(requested_addresses),
-                "source_addresses_requested": requested_addresses,
+                "source_rescued": bool(rescue_turns),
+                "source_addresses_requested": model_requested_addresses,
+                "source_addresses_rescued": rescued_addresses,
                 "initial_characters": len(initial_envelope.user_content),
                 "initial_utf8_bytes": len(initial_envelope.user_content.encode("utf-8")),
                 "rescued_source_characters": rescued_source_characters,
