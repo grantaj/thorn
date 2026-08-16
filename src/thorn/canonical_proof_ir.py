@@ -582,6 +582,7 @@ def build_canonical_proof_ir(
             math_index += 1
             address = f"C{math_index}"
             kind = CanonicalNodeKind.CLAIM
+        assert atom is not None
         claim_addresses[claim.identifier] = address
         nodes.append(
             CanonicalProofNode(address=address, kind=kind, atom=atom, opaque=opaque)
@@ -640,7 +641,11 @@ def build_canonical_proof_ir(
                 atom=_support_payload(edge),
             )
         )
-        referenced = dependency_by_label.get(edge.target_label)
+        referenced = (
+            dependency_by_label.get(edge.target_label)
+            if edge.target_label is not None
+            else None
+        )
         sources.append(
             CanonicalProofSource(
                 address=address,
