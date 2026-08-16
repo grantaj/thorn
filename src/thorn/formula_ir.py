@@ -396,24 +396,24 @@ class _Parser:
         if token.text == "(":
             first = self._expression(0)
             if self._accept(","):
-                items = [first]
+                tuple_items = [first]
                 while True:
-                    items.append(self._expression(0))
+                    tuple_items.append(self._expression(0))
                     if self._accept(")"):
                         break
                     self._expect(",")
-                return TupleExpr(items=tuple(items))
+                return TupleExpr(items=tuple(tuple_items))
             self._expect(")")
             return first
         if token.text == "{":
-            items: list[MathExpr] = []
+            set_items: list[MathExpr] = []
             if not self._accept("}"):
                 while True:
-                    items.append(self._expression(0))
+                    set_items.append(self._expression(0))
                     if self._accept("}"):
                         break
                     self._expect(",")
-            return SetExpr(items=tuple(items))
+            return SetExpr(items=tuple(set_items))
         raise _ParseError(f"unexpected token {token.text!r}")
 
 
@@ -491,12 +491,16 @@ def _lower_recursive(text: str) -> MathExpr:
         (("or",), LogicalOperator.OR),
         (("and",), LogicalOperator.AND),
     )
-    for phrases, operator in word_operators:
+    for phrases, logical_operator in word_operators:
         split = _top_level_word_split(value, phrases)
         if split is None:
             continue
         left, _, right = split
-        return _combine(operator.value, _lower_or_opaque(left), _lower_or_opaque(right))
+        return _combine(
+            logical_operator.value,
+            _lower_or_opaque(left),
+            _lower_or_opaque(right),
+        )
 
     relation_phrases: tuple[tuple[tuple[str, ...], RelationOperator], ...] = (
         (("is less than or equal to", "is at most"), RelationOperator.LESS_EQUAL),
@@ -510,13 +514,13 @@ def _lower_recursive(text: str) -> MathExpr:
         (("is less than",), RelationOperator.LESS_THAN),
         (("is greater than",), RelationOperator.GREATER_THAN),
     )
-    for phrases, operator in relation_phrases:
+    for phrases, relation_operator in relation_phrases:
         split = _top_level_word_split(value, phrases)
         if split is None:
             continue
         left, _, right = split
         return RelationExpr(
-            operator=operator,
+            operator=relation_operator,
             left=_lower_or_opaque(left),
             right=_lower_or_opaque(right),
         )
