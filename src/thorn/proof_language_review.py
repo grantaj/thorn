@@ -200,7 +200,7 @@ def _closed_world_response_model(
             action=(Literal["review"], ...),
             source_addresses=(tuple[()], ()),
         )
-        return cast(type[ProofReviewModelResponse], model)
+        return model
 
     address_literal: Any = cast(Any, Literal)[allowed_source_addresses]
     source_addresses_type: Any = tuple[address_literal, ...]
@@ -212,7 +212,7 @@ def _closed_world_response_model(
             Field(default=(), max_length=max_source_addresses),
         ),
     )
-    return cast(type[ProofReviewModelResponse], model)
+    return model
 
 
 class ProofReviewTurnRequest(BaseModel):
