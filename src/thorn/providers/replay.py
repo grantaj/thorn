@@ -383,12 +383,13 @@ class ForensicReplayProvider(ReplayProvider):
                 )
             path = candidates[0]
         else:
-            path = by_fingerprint.get(selected)
-            if path is None:
+            selected_path = by_fingerprint.get(selected)
+            if selected_path is None:
                 raise ReplayMissError(
                     "no quarantined response "
                     f"{selected} for {envelope.kind} fingerprint {fingerprint}"
                 )
+            path = selected_path
 
         try:
             exchange = RecordedRejectedExchange.model_validate_json(
