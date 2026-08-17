@@ -56,10 +56,10 @@ def _project_document(path: Path, target: str) -> LLMProofLanguage:
     project = extract_project(path)
     unit = project.unit(target)
     context = build_result_review_context(project, target)
-    semantic_request = build_semantic_review_request(context.items[0])
+    request = build_semantic_review_request(context.items[0])
     semantic = build_semantic_transformation_ir(
         unit,
-        semantic_request,
+        request,
         symbol_table=project.symbol_table,
         dependency_graph=project.dependency_graph,
     )
@@ -75,19 +75,19 @@ def _need(
     items: tuple[ProofReviewItem, ...] | None = None,
     source_items: tuple[str, ...] | None = None,
 ) -> ProofReviewModelResponse:
-    items = items or (
+    carried = items or (
         _item(
             1,
             "Does the stated step follow from the available assumptions?",
             kind="question",
         ),
     )
-    source_items = source_items or (items[-1].id,)
+    motivated = source_items or (carried[-1].id,)
     return ProofReviewModelResponse(
         action="need_source",
         source_addresses=addresses,
-        review_items=items,
-        source_review_item_ids=source_items,
+        review_items=carried,
+        source_review_item_ids=motivated,
     )
 
 
@@ -137,16 +137,18 @@ class _Transport:
         return self.responses.pop(0)
 
 
+def _rescue_turn(initial: ProofReviewModelResponse):
+    request = ProofLanguageReviewRequest(document=_document())
+    first = build_proof_review_turn(request)
+    return request, build_rescue_turn(request, first, initial)
+
+
 def test_independent_concern_survives_rescue_for_another_question() -> None:
     initial = _need(
         "E2",
         items=(
             _item(1, "An upstream implication is already unsupported."),
-            _item(
-                2,
-                "Does the downstream definition justify this use?",
-                kind="question",
-            ),
+            _item(2, "Does the downstream definition justify this use?", kind="question"),
         ),
         source_items=("R2",),
     )
@@ -236,13 +238,7 @@ def test_source_revises_carried_concern_without_textual_identity_matching() -> N
 def test_source_may_reveal_genuinely_new_concern() -> None:
     initial = _need(
         "E1",
-        items=(
-            _item(
-                1,
-                "Does the definition settle this step?",
-                kind="question",
-            ),
-        ),
+        items=(_item(1, "Does the definition settle this step?", kind="question"),),
     )
     final = ProofReviewModelResponse(
         action="review",
@@ -258,16 +254,12 @@ def test_source_may_reveal_genuinely_new_concern() -> None:
     assert [finding.id for finding in report.findings] == ["F2"]
 
 
-def test_multiple_dependencies_carry_upstream_concern_while_rescuing_downstream() -> None:
+def test_multiple_dependencies_keep_upstream_concern_when_rescuing_downstream() -> None:
     initial = _need(
         "E2",
         items=(
             _item(1, "The load-bearing upstream inference is unsupported."),
-            _item(
-                2,
-                "The downstream use needs exact evidence.",
-                kind="question",
-            ),
+            _item(2, "The downstream use needs exact evidence.", kind="question"),
         ),
         source_items=("R2",),
     )
@@ -293,11 +285,7 @@ def test_clean_clarification_question_can_be_explicitly_discharged() -> None:
     initial = _need(
         "E1",
         items=(
-            _item(
-                1,
-                "Does the definition establish both directions?",
-                kind="question",
-            ),
+            _item(1, "Does the definition establish both directions?", kind="question"),
         ),
     )
     final = ProofReviewModelResponse(
@@ -309,12 +297,6 @@ def test_clean_clarification_question_can_be_explicitly_discharged() -> None:
         _Transport([initial, final]),
     )
     assert report.findings == []
-
-
-def _rescue_turn(initial: ProofReviewModelResponse):
-    request = ProofLanguageReviewRequest(document=_document())
-    first = build_proof_review_turn(request)
-    return request, build_rescue_turn(request, first, initial)
 
 
 def test_carried_concern_cannot_be_omitted_even_via_model_copy_bypass() -> None:
@@ -333,8 +315,7 @@ def test_carried_concern_cannot_be_omitted_even_via_model_copy_bypass() -> None:
 
 
 def test_duplicate_disposition_is_rejected() -> None:
-    initial = _need("E1")
-    _, rescue = _rescue_turn(initial)
+    _, rescue = _rescue_turn(_need("E1"))
     response = ProofReviewModelResponse(
         action="review",
         dispositions=(
@@ -347,8 +328,7 @@ def test_duplicate_disposition_is_rejected() -> None:
 
 
 def test_unknown_disposition_identity_is_rejected() -> None:
-    initial = _need("E1")
-    _, rescue = _rescue_turn(initial)
+    _, rescue = _rescue_turn(_need("E1"))
     response = ProofReviewModelResponse(
         action="review",
         dispositions=(_disposition("R2", "discharged"),),
@@ -358,8 +338,7 @@ def test_unknown_disposition_identity_is_rejected() -> None:
 
 
 def test_silent_rename_as_new_finding_does_not_disposition_old_item() -> None:
-    initial = _need("E1")
-    _, rescue = _rescue_turn(initial)
+    _, rescue = _rescue_turn(_need("E1"))
     response = ProofReviewModelResponse(
         action="review",
         findings=(_finding("F9", "Renamed concern"),),
@@ -393,8 +372,7 @@ def test_confirming_one_carried_item_cannot_drop_another() -> None:
 
 
 def test_discharge_without_link_to_carried_item_is_rejected() -> None:
-    initial = _need("E1")
-    _, rescue = _rescue_turn(initial)
+    _, rescue = _rescue_turn(_need("E1"))
     response = ProofReviewModelResponse(
         action="review",
         dispositions=(_disposition("R2", "discharged"),),
@@ -404,8 +382,7 @@ def test_discharge_without_link_to_carried_item_is_rejected() -> None:
 
 
 def test_new_finding_cannot_reuse_carried_review_identity() -> None:
-    initial = _need("E1")
-    _, rescue = _rescue_turn(initial)
+    _, rescue = _rescue_turn(_need("E1"))
     response = ProofReviewModelResponse(
         action="review",
         dispositions=(_disposition("R1", "discharged"),),
@@ -419,8 +396,7 @@ def test_new_finding_cannot_reuse_carried_review_identity() -> None:
 
 
 def test_second_need_source_is_rejected_without_third_turn() -> None:
-    initial = _need("E1")
-    transport = _Transport([initial, _need("E2")])
+    transport = _Transport([_need("E1"), _need("E2")])
     with pytest.raises(ProofReviewProtocolError, match="second source-rescue"):
         review_proof_language(
             ProofLanguageReviewRequest(document=_document()),
@@ -446,14 +422,14 @@ def test_review_state_has_no_nested_source_address_channel() -> None:
     assert not {"source_address", "source_addresses"} & set(disposition_schema)
 
 
-def test_packet_allowed_set_guard_still_blocks_forged_held_source_before_disclosure() -> None:
+def test_packet_guard_blocks_forged_held_source_before_disclosure() -> None:
     document = _document(held_only=("H1",))
     request = ProofLanguageReviewRequest(document=document)
-    initial_turn = build_proof_review_turn(request)
-    forged = initial_turn.model_copy(
+    initial = build_proof_review_turn(request)
+    forged = initial.model_copy(
         update={
             "allowed_source_addresses": (
-                *initial_turn.allowed_source_addresses,
+                *initial.allowed_source_addresses,
                 "H1",
             )
         }
@@ -465,12 +441,12 @@ def test_packet_allowed_set_guard_still_blocks_forged_held_source_before_disclos
         build_rescue_turn(request, forged, _need("H1"))
 
 
-def test_same_packet_and_source_addresses_but_different_carried_state_changes_fingerprint() -> None:
+def test_changed_carried_state_changes_rescue_fingerprint() -> None:
     request = ProofLanguageReviewRequest(document=_document())
-    initial_turn = build_proof_review_turn(request)
+    initial = build_proof_review_turn(request)
     first = build_rescue_turn(
         request,
-        initial_turn,
+        initial,
         _need(
             "E1",
             items=(_item(1, "Question one", kind="question"),),
@@ -478,7 +454,7 @@ def test_same_packet_and_source_addresses_but_different_carried_state_changes_fi
     )
     second = build_rescue_turn(
         request,
-        initial_turn,
+        initial,
         _need(
             "E1",
             items=(_item(1, "Different question", kind="question"),),
@@ -491,16 +467,19 @@ def test_same_packet_and_source_addresses_but_different_carried_state_changes_fi
     assert first_envelope.messages != second_envelope.messages
 
 
-def test_recording_with_different_prior_state_cannot_replay_and_never_goes_live(
+def test_replay_rejects_same_packet_and_source_with_different_prior_state(
     tmp_path: Path,
 ) -> None:
     request = ProofLanguageReviewRequest(document=_document())
-    first_turn = build_proof_review_turn(request)
-    recorded_initial = _need(
-        "E1",
-        items=(_item(1, "Question one", kind="question"),),
+    initial = build_proof_review_turn(request)
+    recorded = build_rescue_turn(
+        request,
+        initial,
+        _need(
+            "E1",
+            items=(_item(1, "Question one", kind="question"),),
+        ),
     )
-    recorded_rescue = build_rescue_turn(request, first_turn, recorded_initial)
     recorder = RecordingProvider(
         _Transport(
             [
@@ -512,11 +491,11 @@ def test_recording_with_different_prior_state_cannot_replay_and_never_goes_live(
         ),
         tmp_path,
     )
-    recorder.review_proof_turn(recorded_rescue)
+    recorder.review_proof_turn(recorded)
 
-    changed_rescue = build_rescue_turn(
+    changed = build_rescue_turn(
         request,
-        first_turn,
+        initial,
         _need(
             "E1",
             items=(_item(1, "Different carried question", kind="question"),),
@@ -524,28 +503,28 @@ def test_recording_with_different_prior_state_cannot_replay_and_never_goes_live(
     )
     replay = ReplayProvider("test-model", tmp_path)
     with pytest.raises(ReplayMissError):
-        replay.review_proof_turn(changed_rescue)
+        replay.review_proof_turn(changed)
     assert replay.requests == 0
     assert replay.live_requests == 0
 
 
-def test_clean_unusual_notation_protocol_can_carry_then_discharge_clarification() -> None:
+def test_clean_unusual_notation_can_carry_then_discharge_clarification() -> None:
     document = _project_document(
         Path("eval/cases/ladder/02_readability/clean_unusual_notation.tex"),
         "thm:unusual-notation",
     )
     request = ProofLanguageReviewRequest(document=document)
-    initial_turn = build_proof_review_turn(request)
-    assert "D1" in initial_turn.allowed_source_addresses
+    initial = build_proof_review_turn(request)
+    assert "D1" in initial.allowed_source_addresses
     rescue = build_rescue_turn(
         request,
-        initial_turn,
+        initial,
         _need(
             "D1",
             items=(
                 _item(
                     1,
-                    "Does the authoritative definition settle the notation direction?",
+                    "Does authoritative source settle the notation direction?",
                     kind="question",
                 ),
             ),
@@ -559,7 +538,7 @@ def test_clean_unusual_notation_protocol_can_carry_then_discharge_clarification(
     assert validated.dispositions[0].status == "discharged"
 
 
-def test_rh_witness_protocol_can_carry_upstream_scrutiny_while_requesting_downstream_source() -> None:
+def test_rh_witness_can_carry_upstream_scrutiny_during_downstream_rescue() -> None:
     document = _project_document(
         Path(
             "eval/cases/ladder/09_hidden_assumptions/"
@@ -568,22 +547,19 @@ def test_rh_witness_protocol_can_carry_upstream_scrutiny_while_requesting_downst
         "thm:rh-prime-window",
     )
     request = ProofLanguageReviewRequest(document=document)
-    initial_turn = build_proof_review_turn(request)
-    assert initial_turn.allowed_source_addresses
-    address = initial_turn.allowed_source_addresses[-1]
+    initial = build_proof_review_turn(request)
+    assert initial.allowed_source_addresses
+    address = initial.allowed_source_addresses[-1]
     source_request = _need(
         address,
         items=(
             _item(1, "A load-bearing upstream dependency requires scrutiny."),
-            _item(
-                2,
-                "A downstream proof step needs exact evidence.",
-                kind="question",
-            ),
+            _item(2, "A downstream step needs exact evidence.", kind="question"),
         ),
         source_items=("R2",),
     )
-    rescue = build_rescue_turn(request, initial_turn, source_request)
+    rescue = build_rescue_turn(request, initial, source_request)
+    assert rescue.prior_response is not None
     assert tuple(item.id for item in rescue.prior_response.review_items) == (
         "R1",
         "R2",
