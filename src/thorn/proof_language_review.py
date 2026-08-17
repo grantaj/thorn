@@ -31,12 +31,21 @@ ReviewStage = Literal["initial", "rescue"]
 ReviewAction = Literal["review", "need_source"]
 ReviewItemKind = Literal["question", "concern"]
 ReviewDispositionStatus = Literal["confirmed", "revised", "discharged"]
-SourceAddress = Annotated[str, StringConstraints(pattern=r"^[A-Za-z][A-Za-z0-9:._-]*$")]
-ReviewItemId = Annotated[str, StringConstraints(pattern=r"^R[1-9][0-9]*$")]
+SourceAddress = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z][A-Za-z0-9:._-]*$"),
+]
+ReviewItemId = Annotated[
+    str,
+    StringConstraints(pattern=r"^R[1-9][0-9]*$"),
+]
 
-_SOURCE_HANDLE_RE = re.compile(r"@([A-Za-z][A-Za-z0-9:._-]*(?:,[A-Za-z][A-Za-z0-9:._-]*)*)")
+_SOURCE_HANDLE_RE = re.compile(
+    r"@([A-Za-z][A-Za-z0-9:._-]*(?:,[A-Za-z][A-Za-z0-9:._-]*)*)"
+)
 _OBLIGATION_CONTEXT_RE = re.compile(
-    r"^(?:HOLE|GOAL)\s+\S+\s+([A-Za-z][A-Za-z0-9:._-]*):.*?\|\s*ctx\s+([^|]+?)\s*\|"
+    r"^(?:HOLE|GOAL)\s+\S+\s+([A-Za-z][A-Za-z0-9:._-]*):"
+    r".*?\|\s*ctx\s+([^|]+?)\s*\|"
 )
 
 _PROOF_IR_REVIEW_POLICY = (
@@ -63,6 +72,7 @@ def _source_addresses_in_text(text: str) -> tuple[str, ...]:
 
 def advertised_source_addresses(document: LLMProofLanguage) -> tuple[str, ...]:
     """Return the canonical finite set of source handles advertised to review."""
+
     return tuple(sorted(_source_addresses_in_text(document.render_initial())))
 
 
@@ -74,10 +84,17 @@ def _expanded_source_addresses(
 ) -> tuple[str, ...]:
     """Expand requested source to unresolved Proof-IR prerequisite context.
 
+    ``HOLE`` and ``GOAL`` lines already expose the deterministic local context of
+    unresolved propositions. When the model asks for a proposition's exact
+    source, include the exact source for unresolved context propositions first.
+    This is a bounded source-selection operation over the existing proof-language
+    packet; it does not infer any new mathematical edge.
+
     ``advertised`` is the initial turn's stored closed-world contract. It is
     deliberately passed in rather than recomputed so schema generation, runtime
     validation, rescue expansion, fingerprinting, and replay share one set.
     """
+
     contexts: dict[str, tuple[str, ...]] = {}
     proposition_source: dict[str, str] = {}
     for line in document.lines:
@@ -121,9 +138,11 @@ def _expanded_source_addresses(
         if source is not None:
             add_source(source)
         else:
-            # Global hypotheses/definitions can be proposition addresses in ``ctx``
-            # without their own HOLE/GOAL line. If the proposition itself is already
-            # advertised, it belongs in the same mechanically bounded closure.
+            # Global hypotheses/definitions are proposition addresses in ``ctx``
+            # but do not have their own HOLE/GOAL line, so #86's original map
+            # could not discover their exact source. If the proposition itself
+            # is already an advertised source handle, it is a mechanically
+            # reachable prerequisite and belongs in the same bounded closure.
             add_source(proposition)
 
     for address in requested:
@@ -132,6 +151,7 @@ def _expanded_source_addresses(
             add_source(address)
         else:
             visit(proposition)
+
     return tuple(expanded)
 
 
@@ -141,7 +161,9 @@ class ProofReviewProtocolError(RuntimeError):
 
 class ProofReviewItem(BaseModel):
     """One local question or concern carried across the single rescue boundary."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
+
     id: ReviewItemId
     kind: ReviewItemKind
     summary: str = Field(min_length=1)
@@ -149,7 +171,9 @@ class ProofReviewItem(BaseModel):
 
 class ProofReviewDisposition(BaseModel):
     """Explicit final accounting for one carried review item."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
+
     item_id: ReviewItemId
     status: ReviewDispositionStatus
     explanation: str = Field(min_length=1)
@@ -166,7 +190,9 @@ class ProofReviewDisposition(BaseModel):
 
 class ProofReviewModelResponse(BaseModel):
     """One structured model response in the proof-language review protocol."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
+
     action: ReviewAction
     findings: tuple[CandidateFinding, ...] = ()
     source_addresses: tuple[SourceAddress, ...] = ()
@@ -190,10 +216,13 @@ class ProofReviewModelResponse(BaseModel):
             raise ValueError("source requests must contain at least one address")
         if not self.review_items:
             raise ValueError("source requests must contain explicit review items")
+
         ids = tuple(item.id for item in self.review_items)
         expected = tuple(f"R{index}" for index in range(1, len(ids) + 1))
         if ids != expected:
-            raise ValueError("review item identities must be the canonical sequence R1, R2, ...")
+            raise ValueError(
+                "review item identities must be the canonical sequence R1, R2, ..."
+            )
         if not self.source_review_item_ids:
             raise ValueError("source requests must identify which review items motivate rescue")
         if len(set(self.source_review_item_ids)) != len(self.source_review_item_ids):
@@ -234,9 +263,15 @@ def _closed_world_response_model(
     stage: ReviewStage,
     carried_review_item_ids: tuple[str, ...],
 ) -> type[ProofReviewModelResponse]:
-    """Build the semantic response shape with request-specific protocol typing."""
+    """Build the existing response shape with request-specific protocol typing.
+
+    The generated class deliberately keeps the stable ``ProofReviewModelResponse``
+    schema title. The fingerprint therefore records protocol content, not an
+    incidental generated Python name.
+    """
+
     if stage == "rescue":
-        disposition_model = _carried_disposition_model(carried_review_item_ids)
+        disposition_model: Any = _carried_disposition_model(carried_review_item_ids)
         dispositions_type: Any = tuple[disposition_model, ...]
         return create_model(
             "ProofReviewModelResponse",
@@ -255,7 +290,6 @@ def _closed_world_response_model(
             ),
         )
 
-    common_fields: dict[str, tuple[Any, Any]] = {"dispositions": (tuple[()], ())}
     if not source_rescue_allowed or not allowed_source_addresses:
         return create_model(
             "ProofReviewModelResponse",
@@ -264,7 +298,7 @@ def _closed_world_response_model(
             source_addresses=(tuple[()], ()),
             review_items=(tuple[()], ()),
             source_review_item_ids=(tuple[()], ()),
-            **common_fields,
+            dispositions=(tuple[()], ()),
         )
 
     address_literal: Any = cast(Any, Literal)[allowed_source_addresses]
@@ -276,13 +310,15 @@ def _closed_world_response_model(
             source_addresses_type,
             Field(default=(), max_length=max_source_addresses),
         ),
-        **common_fields,
+        dispositions=(tuple[()], ()),
     )
 
 
 class ProofReviewTurnRequest(BaseModel):
     """Provider-neutral description of one transport turn and response contract."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
+
     protocol_version: Literal["thorn-proof-review/1"] = PROTOCOL_VERSION
     representation: Representation
     stage: ReviewStage
@@ -336,11 +372,15 @@ class ProofReviewTurnRequest(BaseModel):
         return self
 
     def carried_review_item_ids(self) -> tuple[str, ...]:
+        """Return the exact local item identities carried by the rescue transcript."""
+
         if self.stage != "rescue" or self.prior_response is None:
             return ()
         return tuple(item.id for item in self.prior_response.review_items)
 
     def response_model(self) -> type[ProofReviewModelResponse]:
+        """Return the structured-output model for this exact turn contract."""
+
         return _closed_world_response_model(
             self.allowed_source_addresses,
             self.max_source_addresses,
@@ -350,12 +390,16 @@ class ProofReviewTurnRequest(BaseModel):
         )
 
     def response_schema(self) -> dict[str, object]:
+        """Return the deterministic provider-neutral effective response schema."""
+
         return self.response_model().model_json_schema()
 
 
 class ProofLanguageReviewRequest(BaseModel):
     """Thorn-owned request for semantic review over one ``thorn-proof/1`` packet."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
+
     protocol_version: Literal["thorn-proof-review/1"] = PROTOCOL_VERSION
     document: LLMProofLanguage
     allow_source_rescue: bool = True
@@ -380,20 +424,24 @@ def _validate_rescue_accountability(
         if response.dispositions:
             raise ProofReviewProtocolError("initial review responses cannot contain dispositions")
         return
+
     expected = request.carried_review_item_ids()
     disposition_ids = tuple(item.item_id for item in response.dispositions)
     if len(set(disposition_ids)) != len(disposition_ids):
         raise ProofReviewProtocolError("a carried review item was dispositioned more than once")
+
     unknown = [item_id for item_id in disposition_ids if item_id not in expected]
     if unknown:
         raise ProofReviewProtocolError(
             "final response disposition references unknown review item: " + ", ".join(unknown)
         )
+
     missing = [item_id for item_id in expected if item_id not in disposition_ids]
     if missing:
         raise ProofReviewProtocolError(
             "final response omitted carried review item: " + ", ".join(missing)
         )
+
     reused = [finding.id for finding in response.findings if finding.id in expected]
     if reused:
         raise ProofReviewProtocolError(
@@ -406,6 +454,7 @@ def validate_proof_review_response(
     response: ProofReviewModelResponse,
 ) -> ProofReviewModelResponse:
     """Validate and normalize a response against this exact turn contract."""
+
     if response.action == "need_source":
         if not request.source_rescue_allowed:
             raise ProofReviewProtocolError("model requested source but source rescue is disabled")
@@ -481,7 +530,9 @@ def build_raw_review_turn(content: str) -> ProofReviewTurnRequest:
     )
 
 
-def build_proof_review_turn(request: ProofLanguageReviewRequest) -> ProofReviewTurnRequest:
+def build_proof_review_turn(
+    request: ProofLanguageReviewRequest,
+) -> ProofReviewTurnRequest:
     document = request.document
     allowed_source_addresses = (
         advertised_source_addresses(document) if request.allow_source_rescue else ()
@@ -520,6 +571,7 @@ def build_rescue_turn(
         raise ProofReviewProtocolError("rescue turn requires a structured source request")
     if initial_turn.initial_packet_fingerprint != request.document.fingerprint():
         raise ProofReviewProtocolError("initial turn does not match the proof-language packet")
+
     advertised = advertised_source_addresses(request.document)
     if initial_turn.allowed_source_addresses != advertised:
         raise ProofReviewProtocolError(
@@ -579,6 +631,7 @@ def review_proof_language(
     transport: ProofReviewTransport,
 ) -> AttackReport:
     """Review a proof-language packet with at most one exact source-rescue round."""
+
     initial_turn = build_proof_review_turn(request)
     first = validate_proof_review_response(
         initial_turn,
