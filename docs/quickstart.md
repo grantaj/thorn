@@ -101,7 +101,7 @@ LLM review is mathematical review assistance, not formal proof certification. A 
 
 ## 5. The current Lean handoff
 
-Thorn also has a deliberately small Lean export over the same canonical proof representation. Issue #115 found an important current boundary in this exact example: the backend can replay the final theorem application when its result-support edges are mechanically confident, but the **normal local-NLP path currently marks those explicit result-reference supports ambiguous**. Thorn therefore correctly refuses to promote them into a Lean proof term.
+Thorn also has a deliberately small Lean export over the same canonical proof representation. The clean quickstart's final theorem is an exact theorem-application case: on the **normal local-NLP path**, Thorn now preserves the two explicit cited-result uses as confident support only because their source role, exact result identity, target formula, and application shape agree mechanically.
 
 The repository pins Lean in `lean-toolchain` (currently Lean 4.30.0). Install [Elan](https://github.com/leanprover/elan) if `lean` is not already available; from the repository root, Elan will honor the pinned toolchain. Check it with:
 
@@ -109,29 +109,21 @@ The repository pins Lean in `lean-toolchain` (currently Lean 4.30.0). Install [E
 lean --version
 ```
 
-The normal product command is:
+Run the normal product command:
 
 ```bash
 thorn lean examples/quickstart/clean/paper.tex \
-  --result thm:main --output .thorn/quickstart-main.lean
-```
-
-At the current #115 boundary, do **not** expect this normal command to report `complete`: the explicit lemma applications are retained but uncertainty-marked before the Lean lowering boundary. This is a Thorn proof-recovery limitation, not a Lean error, and the evaluation deliberately does not teach the Lean renderer to ignore that uncertainty.
-
-For developers who want to reproduce the already-established #77 backend proof-of-life, the constrained structural-only path bypasses the local linguistic uncertainty layer:
-
-```bash
-thorn lean examples/quickstart/clean/paper.tex \
-  --structural-only \
   --result thm:main --output .thorn/quickstart-main.lean
 lean .thorn/quickstart-main.lean
 ```
 
-That structural-only run reports `Status: complete` and the pinned Lean executable accepts the generated theorem. It demonstrates that the bounded theorem-application backend works **when canonical input is sufficiently confident**. It is not the normal user-facing proof-recovery path and should not be interpreted as evidence that Thorn may simply discard linguistic uncertainty to gain formal coverage.
+For this example Thorn reports `Status: complete`, emits no Thorn formalisation holes, and the pinned Lean executable accepts the generated theorem. The second lemma application is not accepted merely because the source says “By Lemma”: Thorn independently matches the cited result at `x := 2` and finds the required `E(2)` premise in local proof context. A citation that is merely expository, does not match the claimed target, has a contradictory binding, or lacks a required premise is not silently promoted into a checked proof step.
 
 The generated theorem establishes only that the recovered final theorem follows from the recovered lemma statements in the subset Thorn knows how to translate. It does **not** mean Thorn translated or Lean-verified the informal proofs of those lemmas, and it does not certify the whole manuscript. Unsupported mathematics remains unsupported or becomes an explicit source-linked formalisation obligation rather than being guessed into Lean.
 
-See [`lean-handoff.md`](lean-handoff.md) for the exact supported subset and [`../eval/LEAN_REPLAY_OPPORTUNITY.md`](../eval/LEAN_REPLAY_OPPORTUNITY.md) for the #115 evaluation that exposed this boundary.
+`--structural-only` remains available as a constrained/debugging path, but it is not needed for this walkthrough. The normal local language model is part of the user-facing recovery path and the Lean contract exercises this example through that path.
+
+See [`lean-handoff.md`](lean-handoff.md) for the exact supported subset, [`../eval/LEAN_REPLAY_OPPORTUNITY.md`](../eval/LEAN_REPLAY_OPPORTUNITY.md) for the #115 evaluation that exposed the earlier ambiguity boundary, and [`../eval/LEAN_REPLAY_OPPORTUNITY_POST_119.md`](../eval/LEAN_REPLAY_OPPORTUNITY_POST_119.md) for the #119 rerun.
 
 ## What Thorn has and has not established
 

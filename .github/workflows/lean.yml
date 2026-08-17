@@ -27,12 +27,20 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install -e '.[dev]'
+      - name: Install Thorn and the normal local English model
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m spacy download en_core_web_sm
       - name: Verify pinned Lean
         run: lean --version
       - name: Run Lean handoff acceptance
-        run: pytest -q tests/test_lean_export.py
-      - name: Exercise public onboarding Lean seam
+        run: pytest -q tests/test_lean_export.py tests/test_issue_119_explicit_proof_citations.py
+      - name: Exercise public onboarding Lean seam on the normal path
         run: |
-          thorn lean examples/quickstart/clean/paper.tex --structural-only --result thm:main --output /tmp/thorn-quickstart.lean
+          thorn lean examples/quickstart/clean/paper.tex --result thm:main --output /tmp/thorn-quickstart.lean
+          grep -q -- '-- Thorn Lean export status: complete' /tmp/thorn-quickstart.lean
+          if grep -q 'sorry' /tmp/thorn-quickstart.lean; then
+            echo 'normal quickstart Lean export unexpectedly contains sorry' >&2
+            exit 1
+          fi
           lean /tmp/thorn-quickstart.lean
