@@ -105,12 +105,12 @@ def _need(*addresses: str) -> ProofReviewModelResponse:
         source_addresses=addresses,
         review_items=(
             ProofReviewItem(
-                id="R1",
+                id="RV1",
                 kind="question",
                 summary="Does the exact source settle the unresolved proof step?",
             ),
         ),
-        source_review_item_ids=("R1",),
+        source_review_item_ids=("RV1",),
     )
 
 
@@ -119,7 +119,7 @@ def _rescue_review() -> ProofReviewModelResponse:
         action="review",
         dispositions=(
             ProofReviewDisposition(
-                item_id="R1",
+                item_id="RV1",
                 status="discharged",
                 explanation="The exact source settles the review question.",
             ),
@@ -227,12 +227,12 @@ def test_structured_source_request_rejects_malformed_addresses() -> None:
             source_addresses=("../paper.tex",),
             review_items=(
                 ProofReviewItem(
-                    id="R1",
+                    id="RV1",
                     kind="question",
                     summary="Question requiring exact source.",
                 ),
             ),
-            source_review_item_ids=("R1",),
+            source_review_item_ids=("RV1",),
         )
     with pytest.raises(ValidationError):
         ProofReviewModelResponse(action="need_source")
