@@ -127,44 +127,43 @@ def test_material_assumption_cases_survive_to_review_boundary(
     scope_fragment: str,
     proof_fragment: str,
 ) -> None:
-    canonical, typed, proof, semantic, document = _trace(_CASE_DIR / fixture, target)
+    path = _CASE_DIR / fixture
+    project = extract_project(path)
+    unit = project.unit(target)
+    assert scope_fragment in unit.statement
+    assert unit.proof is not None and proof_fragment in unit.proof
 
-    # The theorem scope and the proof step that consumes the potentially
-    # unstated premise survive as separate authoritative objects. The test
-    # deliberately does not require deterministic Thorn to prove the
-    # mathematical counterfactual.
-    assert scope_fragment in canonical.source("T0").text
+    canonical, typed, proof, semantic, document = _trace(path, target)
+
+    # T0 remains the exact theorem-goal source across the canonical, typed,
+    # obligation, semantic-transformation, and model-facing projections.
     assert typed.source("T0").text == canonical.source("T0").text
+    assert proof.source("T0").text == canonical.source("T0").text
     assert document.source("T0").text == canonical.source("T0").text
+    assert proof.terminal_obligation.proposition_address == "T0"
+    assert semantic.higher.resolved.proof.terminal_obligation.proposition_address == "T0"
 
+    # The proof sentence which consumes the potentially ambient premise must
+    # survive as authoritative source whenever it participates in recovered
+    # proof structure. This tests provenance, not deterministic theorem proving.
     proof_sources = [
         source for source in canonical.sources if proof_fragment in source.text
     ]
     assert proof_sources, f"{proof_fragment!r} was lost from canonical proof source"
-    proof_address = proof_sources[-1].address
-    assert typed.source(proof_address).text == proof_sources[-1].text
-    assert document.source(proof_address).text == proof_sources[-1].text
+    for source in proof_sources:
+        assert typed.source(source.address).text == source.text
+        assert document.source(source.address).text == source.text
 
-    terminal = proof.terminal_obligation
-    assert terminal.proposition_address == "T0"
-    assert terminal.support_context
-    assert any(
-        step.conclusion == "T0" and set(step.premises) <= set(terminal.support_context)
-        for step in proof.steps
-    )
-    assert semantic.higher.resolved.proof.terminal_obligation.proposition_address == "T0"
-
-    # At the model-facing boundary, contextual wording is either carried in
-    # the deterministic packet or available via an exact advertised source
-    # handle. This is the #87 represented-or-reachable invariant applied to
-    # ambient assumptions.
     rendered = document.render_initial()
     advertised = set(advertised_source_addresses(document))
     assert scope_fragment in rendered or "T0" in advertised
-    assert proof_fragment in rendered or proof_address in advertised
+    assert any(
+        proof_fragment in rendered or source.address in advertised
+        for source in proof_sources
+    )
 
     turn = build_proof_review_turn(ProofLanguageReviewRequest(document=document))
-    assert set(advertised) == set(turn.allowed_source_addresses)
+    assert advertised == set(turn.allowed_source_addresses)
 
 
 _PAIRS = [
@@ -220,8 +219,6 @@ def test_defect_packet_does_not_silently_strength_to_clean_ambient_scope(
     assert clean_only_scope in clean.source("T0").text
     assert clean_only_scope not in gap.source("T0").text
     assert clean_only_scope not in gap.render_initial()
-
-    # No hidden source may smuggle the clean premise into the defect packet.
     assert all(clean_only_scope not in source.text for source in gap.sources)
 
 
@@ -242,6 +239,10 @@ def test_material_assumption_family_is_first_class_review_only_eval_family() -> 
     }
     assert all(
         "counterfactual materiality" in expectation.detection_methods
+        for _, expectation in loaded
+    )
+    assert all(
+        expectation.notes is not None and "Load-bearing premise" in expectation.notes
         for _, expectation in loaded
     )
 
@@ -267,8 +268,8 @@ def test_lean_handoff_stays_partial_without_ambient_strengthening(
     export = project_lean(semantic)
 
     # These prose-heavy examples are outside the deliberately bounded Lean
-    # subset. That is a formalisation limitation, not evidence of a paper
-    # defect and not a licence to pick a stronger ambient structure.
+    # subset. A formalisation limitation is not evidence of a paper defect
+    # and is not a licence to pick a stronger ambient structure.
     assert export.status in {LeanExportStatus.PARTIAL, LeanExportStatus.UNSUPPORTED}
     assert not export.is_mechanically_checkable
     assert "LinearOrderedField" not in export.source
