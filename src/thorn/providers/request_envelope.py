@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
-from thorn.proof_language_review import ProofReviewTurnRequest
+from thorn.proof_language_review import PROMPT_VERSION, ProofReviewTurnRequest
 from thorn.semantic_review_compact import render_compact_semantic_review_request
 from thorn.semantic_review_render import SemanticReviewRequest, render_semantic_review_request
 
@@ -134,7 +134,7 @@ def proof_review_request_envelope(
 ) -> ProviderRequestEnvelope:
     """Build one exact transport envelope for a proof-review protocol turn."""
 
-    system_prompt = _read_prompt("proof_language_reviewer_v1.md")
+    system_prompt = _read_prompt(f"{PROMPT_VERSION}.md")
     messages: tuple[dict[str, str], ...] | None = None
     if (
         request.stage == "rescue"
