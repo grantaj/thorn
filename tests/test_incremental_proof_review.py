@@ -227,7 +227,11 @@ def test_rescued_source_change_rechecks_even_when_initial_packet_is_identical(
 def test_non_material_target_change_reuses_identical_packet(tmp_path: Path) -> None:
     cache = ProofReviewCache(tmp_path / "cache")
     transport = _Transport([_clean()])
-    run_cached_proof_review(_synthetic("Unused source.", target_fingerprint="before"), transport, cache)
+    run_cached_proof_review(
+        _synthetic("Unused source.", target_fingerprint="before"),
+        transport,
+        cache,
+    )
     result = run_cached_proof_review(
         _synthetic("Unused source.", target_fingerprint="after"),
         transport,
