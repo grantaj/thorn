@@ -76,7 +76,8 @@ def _observe_case(case: dict[str, Any]) -> dict[str, object]:
     path = CORPUS / case["path"]
     actual_hash = _sha256(path)
     project = extract_project(path)
-    unit = project.unit(case["target"])
+    review_target = case.get("review_target", case["target"])
+    unit = project.unit(review_target)
     prepared = prepare_proof_review(project, unit)
     document = prepared.document
     analysis = analyze_project(project)
@@ -107,7 +108,8 @@ def _observe_case(case: dict[str, Any]) -> dict[str, object]:
         "path": case["path"],
         "source_sha256": actual_hash,
         "source_hash_matches_frozen": actual_hash == case["source_sha256"],
-        "result_identifier": unit.identifier,
+        "target_result_identifier": case["target"],
+        "review_result_identifier": unit.identifier,
         "direct_dependencies": project.dependency_graph.direct_dependency_ids(unit.identifier),
         "transitive_dependencies": project.dependency_graph.transitive_dependency_ids(
             unit.identifier

@@ -39,7 +39,8 @@
       "required_source_fragments": [
         "I=[0,1)",
         "bounded interval"
-      ]
+      ],
+      "review_target": "lem:uniformize"
     },
     {
       "id": "A2",

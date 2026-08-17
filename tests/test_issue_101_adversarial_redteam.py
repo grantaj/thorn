@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _ROOT / "scripts" / "issue_101_redteam.py"
 
