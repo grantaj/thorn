@@ -5,11 +5,7 @@ from typing import Any, cast
 from openai import OpenAI
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
-from thorn.proof_language_review import (
-    ProofReviewModelResponse,
-    ProofReviewTurnRequest,
-    validate_proof_review_response,
-)
+from thorn.proof_language_review import ProofReviewModelResponse, ProofReviewTurnRequest
 from thorn.providers.request_envelope import (
     attack_request_envelope,
     defense_request_envelope,
@@ -83,7 +79,10 @@ class OpenAIProvider:
             raise RuntimeError("proof-language reviewer returned no structured result")
         if not isinstance(response.output_parsed, ProofReviewModelResponse):
             raise RuntimeError("proof-language reviewer returned the wrong structured result")
-        return validate_proof_review_response(request, response.output_parsed)
+        # Provider transport owns request-specific structured parsing. Thorn's
+        # proof-review layer owns the higher-level protocol validator so a
+        # recording wrapper can retain schema-valid responses that fail it.
+        return response.output_parsed
 
     def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
         envelope = defense_request_envelope(unit, findings, self.model)
