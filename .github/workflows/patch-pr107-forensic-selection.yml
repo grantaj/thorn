@@ -135,10 +135,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install uv
-          uv sync
-          uv run pytest tests/test_rejected_replay.py -q
-          uv run ruff check src/thorn/providers/replay.py tests/test_rejected_replay.py
+          python -m pip install -e '.[dev]'
+          pytest tests/test_rejected_replay.py -q
+          ruff check src/thorn/providers/replay.py tests/test_rejected_replay.py
 
       - name: Commit fix and remove one-shot workflow
         shell: bash
