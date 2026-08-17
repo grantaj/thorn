@@ -15,24 +15,25 @@ from thorn.frontends import get_frontend
 from thorn.latex import extract_project
 from thorn.local_nlp import select_linguistic_frontend
 from thorn.models import AuditFinding, Severity, TheoremUnit, UnitAudit
+from thorn.proof_visualizer import write_proof_visualizer_html
 from thorn.report import ReviewExecution, build_report
 from thorn.report_html import write_report_html
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
-_MODES = {"analyze", "ir", "review", "report"}
+_MODES = {"analyze", "ir", "review", "report", "graph"}
 _DEFAULT_REPORT_SENTINEL = "__thorn_default_report__"
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="thorn",
-        usage="thorn [analyze|ir|review|report] FILE [options]",
+        usage="thorn [analyze|ir|review|report|graph] FILE [options]",
         description="Mathematical document analysis and semantic review for LaTeX manuscripts.",
         epilog=(
             "Modes: 'analyze' runs deterministic structural analysis over Thorn Math IR; "
             "'ir' inspects or exports that IR; 'review' runs model-backed mathematical review; "
-            "'report' writes a self-contained local review report. Omitting the mode means "
-            "'review'."
+            "'report' writes a self-contained local review report; 'graph' writes an interactive "
+            "proof-argument visualisation. Omitting the mode means 'review'."
         ),
     )
     parser.add_argument("file", type=Path, help="main LaTeX file")
@@ -73,12 +74,12 @@ def _parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="output path for `thorn report`",
+        help="output path for `thorn report` or `thorn graph`",
     )
     parser.add_argument(
         "--open",
         action="store_true",
-        help="open the generated report with the operating system's default browser",
+        help="open the generated report/graph with the operating system's default browser",
     )
     return parser
 
@@ -205,6 +206,10 @@ def _default_report_path(main_file: Path) -> Path:
     return main_file.with_name(f"{main_file.stem}.thorn-report.html")
 
 
+def _default_graph_path(main_file: Path) -> Path:
+    return main_file.with_name(f"{main_file.stem}.thorn-proof-graph.html")
+
+
 def _requested_report_path(mode: str, args: argparse.Namespace) -> Path | None:
     main_file: Path = args.file
     output: Path | None = args.output
@@ -216,6 +221,13 @@ def _requested_report_path(mode: str, args: argparse.Namespace) -> Path | None:
     if report_argument == _DEFAULT_REPORT_SENTINEL:
         return _default_report_path(main_file)
     return Path(report_argument)
+
+
+def _open_local_html(written: Path, *, kind: str) -> None:
+    try:
+        webbrowser.open(written.as_uri())
+    except webbrowser.Error as exc:
+        print(f"thorn: could not open {kind} browser: {exc}", file=sys.stderr)
 
 
 def _emit_report(
@@ -243,10 +255,20 @@ def _emit_report(
     stream = sys.stderr if path_to_stderr else sys.stdout
     print(f"Report: {written}", file=stream)
     if open_browser:
-        try:
-            webbrowser.open(written.as_uri())
-        except webbrowser.Error as exc:
-            print(f"thorn: could not open report browser: {exc}", file=sys.stderr)
+        _open_local_html(written, kind="report")
+    return written
+
+
+def _emit_graph(
+    project: ExtractedProject,
+    destination: Path,
+    *,
+    open_browser: bool = False,
+) -> Path:
+    written = write_proof_visualizer_html(project, destination)
+    print(f"Graph: {written}")
+    if open_browser:
+        _open_local_html(written, kind="proof graph")
     return written
 
 
@@ -258,17 +280,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit is not None and args.limit < 1:
         print("thorn: --limit must be positive", file=sys.stderr)
         return 2
-    if mode != "report" and args.output is not None:
-        print("thorn: --output is only valid with `thorn report`", file=sys.stderr)
+    if mode not in {"report", "graph"} and args.output is not None:
+        print("thorn: --output is only valid with `thorn report` or `thorn graph`", file=sys.stderr)
         return 2
-    if mode == "report" and args.report is not None:
-        print("thorn: use --output to choose the `thorn report` destination", file=sys.stderr)
+    if mode in {"report", "graph"} and args.report is not None:
+        print("thorn: use --output to choose the generated HTML destination", file=sys.stderr)
         return 2
     if mode == "ir" and args.report is not None:
         print("thorn: --report is not supported with `thorn ir`", file=sys.stderr)
         return 2
-    if args.open and mode != "report" and args.report is None:
-        print("thorn: --open requires `thorn report` or --report", file=sys.stderr)
+    if args.open and mode not in {"report", "graph"} and args.report is None:
+        print("thorn: --open requires `thorn report`, `thorn graph`, or --report", file=sys.stderr)
         return 2
 
     try:
@@ -295,6 +317,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "ir":
         _print_ir(project, args.format == "json")
+        return 0
+
+    if mode == "graph":
+        _emit_graph(
+            project,
+            args.output or _default_graph_path(args.file),
+            open_browser=args.open,
+        )
         return 0
 
     report_path = _requested_report_path(mode, args)
@@ -340,8 +370,9 @@ def main(argv: list[str] | None = None) -> int:
     if not os.getenv("OPENAI_API_KEY"):
         print(
             "thorn review: OPENAI_API_KEY is not set; use `thorn analyze` for deterministic "
-            "structural diagnostics, `thorn report` for a keyless local report, or "
-            "`thorn ir --format json` to inspect the extracted IR",
+            "structural diagnostics, `thorn report` for a keyless local report, `thorn graph` "
+            "for the recovered proof argument, or `thorn ir --format json` to inspect the "
+            "extracted IR",
             file=sys.stderr,
         )
         return 2
