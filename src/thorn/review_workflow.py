@@ -8,6 +8,7 @@ from thorn.llm_proof_language import LLMProofLanguage, project_llm_proof_languag
 from thorn.models import AttackReport, TheoremUnit
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
+    ProofReviewModelResponse,
     ProofReviewTransport,
     ProofReviewTurnRequest,
     review_proof_language,
@@ -44,7 +45,7 @@ class _TracingTransport:
         self.model = transport.model
         self.turns: list[ProofReviewTurnRequest] = []
 
-    def review_proof_turn(self, request: ProofReviewTurnRequest):
+    def review_proof_turn(self, request: ProofReviewTurnRequest) -> ProofReviewModelResponse:
         self.turns.append(request)
         return self._transport.review_proof_turn(request)
 
