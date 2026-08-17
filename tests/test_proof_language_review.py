@@ -153,7 +153,7 @@ def test_valid_need_source_returns_only_exact_advertised_addresses() -> None:
     initial = build_proof_review_turn(request)
     rescue = build_rescue_turn(request, initial, _need("E1"))
 
-    assert advertised_source_addresses(request.document) == ("E1", "C1")
+    assert advertised_source_addresses(request.document) == ("C1", "E1")
     assert rescue.requested_source_addresses == ("E1",)
     assert "SOURCE @E1\nBy Lemma 4, Q(a).\nEND_SOURCE @E1" in rescue.user_content
     assert "SOURCE @C1" not in rescue.user_content
@@ -318,7 +318,10 @@ def test_openai_provider_transports_exact_proof_review_envelope_keylessly(
     assert len(client.responses.calls) == 1
     call = client.responses.calls[0]
     assert call["model"] == "test-model"
-    assert call["text_format"] is ProofReviewModelResponse
+    text_format = call["text_format"]
+    assert isinstance(text_format, type)
+    assert issubclass(text_format, ProofReviewModelResponse)
+    assert text_format is not ProofReviewModelResponse
     messages = call["input"]
     assert isinstance(messages, list)
     assert "THORN-PROOF 1" in messages[1]["content"]
