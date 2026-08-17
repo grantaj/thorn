@@ -32,3 +32,7 @@ jobs:
         run: lean --version
       - name: Run Lean handoff acceptance
         run: pytest -q tests/test_lean_export.py
+      - name: Exercise public onboarding Lean seam
+        run: |
+          thorn lean examples/quickstart/clean/paper.tex --structural-only --result thm:main --output /tmp/thorn-quickstart.lean
+          lean /tmp/thorn-quickstart.lean

@@ -5,7 +5,7 @@ import json
 import os
 import sys
 import webbrowser
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from thorn import __version__
@@ -13,36 +13,57 @@ from thorn.analysis import AnalysisFinding, analyze_project
 from thorn.dependencies import ExtractedProject
 from thorn.frontends import get_frontend
 from thorn.latex import extract_project
+from thorn.lean_export import LeanExport, project_lean
+from thorn.llm_proof_language import LLMProofLanguage
 from thorn.local_nlp import select_linguistic_frontend
-from thorn.models import AuditFinding, Severity, TheoremUnit, UnitAudit
+from thorn.models import CandidateFinding, Severity, TheoremUnit
 from thorn.proof_visualizer import write_proof_visualizer_html
-from thorn.report import ReviewExecution, build_report
+from thorn.report import ProofReviewReportInput, ReviewExecution, build_report
 from thorn.report_html import write_report_html
+from thorn.review_workflow import PreparedProofReview, prepare_proof_review, run_proof_review
+from thorn.semantic_transformations import SemanticTransformationIR
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
-_MODES = {"analyze", "ir", "review", "report", "graph"}
+_MODES = {"analyze", "ir", "review", "report", "graph", "lean"}
 _DEFAULT_REPORT_SENTINEL = "__thorn_default_report__"
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="thorn",
-        usage="thorn [analyze|ir|review|report|graph] FILE [options]",
-        description="Mathematical document analysis and semantic review for LaTeX manuscripts.",
+        usage="thorn [analyze|ir|review|report|graph|lean] FILE [options]",
+        description=(
+            "Source-linked structural analysis and mathematical review for LaTeX manuscripts."
+        ),
         epilog=(
-            "Modes: 'analyze' runs deterministic structural analysis over Thorn Math IR; "
-            "'ir' inspects or exports that IR; 'review' runs model-backed mathematical review; "
-            "'report' writes a self-contained local review report; 'graph' writes an interactive "
-            "proof-argument visualisation. Omitting the mode means 'review'."
+            "Modes: 'analyze' runs deterministic structural analysis; 'report' writes a "
+            "self-contained local review report; 'graph' visualises the recovered proof argument; "
+            "'review' runs model-backed review over thorn-proof/1; 'lean' exports the currently "
+            "supported canonical Proof-IR subset to Lean; 'ir' inspects the frontend Math IR. "
+            "Omitting the mode means 'review'."
         ),
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("file", type=Path, help="main LaTeX file")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     parser.add_argument("--model", default=os.getenv("THORN_MODEL", "gpt-5.6"))
     parser.add_argument("--limit", type=int, default=None, help="review only the first N results")
-    parser.add_argument("--no-defender", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument("--cache-dir", type=Path, default=Path(".thorn/cache"))
+    parser.add_argument(
+        "--no-defender",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=Path(".thorn/cache"),
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--min-confidence", type=float, default=0.65)
     parser.add_argument("--fail-on", choices=("never", "error", "warning"), default="error")
     parser.add_argument(
@@ -74,7 +95,13 @@ def _parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="output path for `thorn report` or `thorn graph`",
+        help="output path for `thorn report`, `thorn graph`, or `thorn lean`",
+    )
+    parser.add_argument(
+        "--result",
+        default=None,
+        metavar="ID",
+        help="result identifier to export with `thorn lean`",
     )
     parser.add_argument(
         "--open",
@@ -119,22 +146,25 @@ def _print_ir(project: ExtractedProject, as_json: bool) -> None:
         _print_units(project.units, False)
 
 
-def _visible_findings(audits: list[UnitAudit], threshold: float) -> list[AuditFinding]:
+def _visible_proof_findings(
+    reviews: Iterable[ProofReviewReportInput],
+    threshold: float,
+) -> list[tuple[ProofReviewReportInput, CandidateFinding]]:
     return [
-        finding
-        for audit in audits
-        for finding in audit.findings
+        (review, finding)
+        for review in reviews
+        for finding in review.findings
         if finding.confidence >= threshold
     ]
 
 
-def _print_review_text(audits: list[UnitAudit], threshold: float) -> None:
-    findings = _visible_findings(audits, threshold)
+def _print_review_text(reviews: list[ProofReviewReportInput], threshold: float) -> None:
+    findings = _visible_proof_findings(reviews, threshold)
     if not findings:
-        print(f"thorn review: no surviving diagnostics above confidence {threshold:.2f}")
+        print(f"thorn review: no mathematical findings above confidence {threshold:.2f}")
         return
-    for finding in findings:
-        source = finding.source
+    for review, finding in findings:
+        source = review.source
         print(
             f"{source.file}:{source.start_line}-{source.end_line}: "
             f"{finding.severity.value} {finding.rule} {finding.title}"
@@ -144,22 +174,25 @@ def _print_review_text(audits: list[UnitAudit], threshold: float) -> None:
             print(f"  evidence: {evidence}")
         if finding.counterexample:
             print(f"  counterexample: {finding.counterexample}")
-        print(
-            f"  defender: {finding.defender_verdict.value} "
-            f"(confidence {finding.defender_confidence:.2f})"
-        )
-        print(f"  {finding.defender_explanation}")
+        print(f"  confidence: {finding.confidence:.2f}")
         print()
 
 
-def _print_review_json(audits: list[UnitAudit], threshold: float) -> None:
+def _print_review_json(reviews: list[ProofReviewReportInput], threshold: float) -> None:
+    visible = _visible_proof_findings(reviews, threshold)
     payload = {
         "mode": "review",
-        "audited_units": len(audits),
-        "cached_units": sum(1 for audit in audits if audit.cached),
+        "representation": "thorn-proof/1",
+        "protocol": "thorn-proof-review/2",
+        "reviewed_results": len(reviews),
         "findings": [
-            finding.model_dump(mode="json") | {"confidence": finding.confidence}
-            for finding in _visible_findings(audits, threshold)
+            finding.model_dump(mode="json")
+            | {
+                "rule": finding.rule,
+                "result_identifier": review.result_identifier,
+                "source": review.source.model_dump(mode="json"),
+            }
+            for review, finding in visible
         ],
     }
     print(json.dumps(payload, indent=2))
@@ -210,6 +243,10 @@ def _default_graph_path(main_file: Path) -> Path:
     return main_file.with_name(f"{main_file.stem}.thorn-proof-graph.html")
 
 
+def _default_lean_path(main_file: Path) -> Path:
+    return main_file.with_name(f"{main_file.stem}.thorn.lean")
+
+
 def _requested_report_path(mode: str, args: argparse.Namespace) -> Path | None:
     main_file: Path = args.file
     output: Path | None = args.output
@@ -225,8 +262,8 @@ def _requested_report_path(mode: str, args: argparse.Namespace) -> Path | None:
 
 def _open_local_html(written: Path, *, kind: str) -> None:
     try:
-        webbrowser.open(written.as_uri())
-    except webbrowser.Error as exc:
+        webbrowser.open(written.resolve().as_uri())
+    except (OSError, ValueError, webbrowser.Error) as exc:
         print(f"thorn: could not open {kind} browser: {exc}", file=sys.stderr)
 
 
@@ -235,9 +272,10 @@ def _emit_report(
     destination: Path,
     *,
     analysis_findings: list[AnalysisFinding],
-    audits: list[UnitAudit] | None = None,
-    model: str | None = None,
-    review_execution: ReviewExecution = ReviewExecution.UNKNOWN,
+    proof_reviews: list[ProofReviewReportInput] | None = None,
+    proof_states: Mapping[str, SemanticTransformationIR] | None = None,
+    proof_documents: Mapping[str, LLMProofLanguage] | None = None,
+    lean_exports: Mapping[str, LeanExport] | None = None,
     min_confidence: float = 0.65,
     open_browser: bool = False,
     path_to_stderr: bool = False,
@@ -245,9 +283,10 @@ def _emit_report(
     report = build_report(
         project,
         analysis_findings=analysis_findings,
-        audits=audits or (),
-        model=model,
-        review_execution=review_execution,
+        proof_reviews=proof_reviews or (),
+        proof_states=proof_states,
+        proof_documents=proof_documents,
+        lean_exports=lean_exports,
         min_confidence=min_confidence,
         thorn_version=__version__,
     )
@@ -272,6 +311,79 @@ def _emit_graph(
     return written
 
 
+def _prepare_units(
+    project: ExtractedProject,
+    units: Iterable[TheoremUnit],
+) -> dict[str, PreparedProofReview]:
+    return {unit.identifier: prepare_proof_review(project, unit) for unit in units}
+
+
+def _select_lean_unit(project: ExtractedProject, result_identifier: str | None) -> TheoremUnit:
+    if result_identifier is not None:
+        try:
+            return project.unit(result_identifier)
+        except KeyError as exc:
+            available = ", ".join(unit.identifier for unit in project.units) or "(none)"
+            raise ValueError(
+                f"unknown result identifier {result_identifier!r}; available: {available}"
+            ) from exc
+    if len(project.units) == 1:
+        return project.units[0]
+    available = ", ".join(unit.identifier for unit in project.units) or "(none)"
+    raise ValueError(
+        "`thorn lean` needs --result when the manuscript has more than one theorem-like result; "
+        f"available: {available}"
+    )
+
+
+def _emit_lean(
+    project: ExtractedProject,
+    *,
+    result_identifier: str | None,
+    destination: Path,
+    as_json: bool,
+) -> int:
+    try:
+        unit = _select_lean_unit(project, result_identifier)
+        prepared = prepare_proof_review(project, unit)
+    except (KeyError, RuntimeError, ValueError) as exc:
+        print(f"thorn lean: {exc}", file=sys.stderr)
+        return 2
+
+    export = project_lean(prepared.state)
+    written = destination.expanduser().resolve()
+    written.parent.mkdir(parents=True, exist_ok=True)
+    written.write_text(export.source, encoding="utf-8")
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "mode": "lean",
+                    "result_identifier": unit.identifier,
+                    "status": export.status.value,
+                    "mechanically_checkable": export.is_mechanically_checkable,
+                    "output": str(written),
+                    "obligations": [
+                        obligation.model_dump(mode="json") for obligation in export.obligations
+                    ],
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(f"Lean: {written}")
+        print(f"Result: {unit.identifier}")
+        print(f"Status: {export.status.value}")
+        if export.is_mechanically_checkable:
+            print("The exported subset is complete and contains no Thorn formalisation holes.")
+        elif export.obligations:
+            print(f"Open formalisation obligations: {len(export.obligations)}")
+            for obligation in export.obligations:
+                sources = ", ".join(obligation.source_addresses) or "no source handle"
+                print(f"  {obligation.address}: {obligation.reason} ({sources})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     mode, args = _parse_mode(argv)
     if not 0.0 <= args.min_confidence <= 1.0:
@@ -280,17 +392,33 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit is not None and args.limit < 1:
         print("thorn: --limit must be positive", file=sys.stderr)
         return 2
-    if mode not in {"report", "graph"} and args.output is not None:
-        print("thorn: --output is only valid with `thorn report` or `thorn graph`", file=sys.stderr)
+    if mode not in {"report", "graph", "lean"} and args.output is not None:
+        print(
+            "thorn: --output is only valid with `thorn report`, `thorn graph`, or `thorn lean`",
+            file=sys.stderr,
+        )
         return 2
-    if mode in {"report", "graph"} and args.report is not None:
-        print("thorn: use --output to choose the generated HTML destination", file=sys.stderr)
+    if mode in {"report", "graph", "lean"} and args.report is not None:
+        if mode == "lean":
+            print("thorn: --report is not supported with `thorn lean`", file=sys.stderr)
+        else:
+            print("thorn: use --output to choose the generated HTML destination", file=sys.stderr)
         return 2
     if mode == "ir" and args.report is not None:
         print("thorn: --report is not supported with `thorn ir`", file=sys.stderr)
         return 2
+    if mode != "lean" and args.result is not None:
+        print("thorn: --result is only valid with `thorn lean`", file=sys.stderr)
+        return 2
     if args.open and mode not in {"report", "graph"} and args.report is None:
         print("thorn: --open requires `thorn report`, `thorn graph`, or --report", file=sys.stderr)
+        return 2
+    if mode == "review" and args.no_defender:
+        print(
+            "thorn review: --no-defender belonged to the retired legacy raw-review CLI; "
+            "the normal review path now uses thorn-proof/1 and thorn-proof-review/2",
+            file=sys.stderr,
+        )
         return 2
 
     try:
@@ -326,6 +454,14 @@ def main(argv: list[str] | None = None) -> int:
             open_browser=args.open,
         )
         return 0
+
+    if mode == "lean":
+        return _emit_lean(
+            project,
+            result_identifier=args.result,
+            destination=args.output or _default_lean_path(args.file),
+            as_json=args.format == "json",
+        )
 
     report_path = _requested_report_path(mode, args)
     analysis_findings = (
@@ -377,41 +513,71 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    # Model-backed dependencies are imported only after the explicit review boundary.
-    from thorn.audit import audit_unit, default_cache
+    # Model transport is imported only after the explicit paid-review boundary.
     from thorn.providers.openai import OpenAIProvider
 
+    try:
+        prepared_by_result = _prepare_units(project, units)
+    except (KeyError, RuntimeError, ValueError) as exc:
+        print(f"thorn: could not prepare canonical proof review: {exc}", file=sys.stderr)
+        return 2
+
     provider = OpenAIProvider(model=args.model)
-    cache = None if args.no_cache else default_cache(args.cache_dir)
-    audits: list[UnitAudit] = []
+    proof_reviews: list[ProofReviewReportInput] = []
     for index, unit in enumerate(units, start=1):
         if args.format == "text":
-            print(f"thorn: auditing {index}/{len(units)} {unit.identifier} ...", file=sys.stderr)
-        try:
-            audits.append(
-                audit_unit(unit, provider, use_defender=not args.no_defender, cache=cache)
+            print(
+                f"thorn: reviewing {index}/{len(units)} {unit.identifier} "
+                "with thorn-proof/1 ...",
+                file=sys.stderr,
             )
-        except Exception as exc:  # provider/network failures are CLI diagnostics, not tracebacks
-            print(f"thorn: audit failed for {unit.identifier}: {exc}", file=sys.stderr)
+        prepared = prepared_by_result[unit.identifier]
+        try:
+            completed = run_proof_review(prepared, provider)
+        except Exception as exc:  # provider/network/protocol failures become CLI diagnostics
+            print(f"thorn: review failed for {unit.identifier}: {exc}", file=sys.stderr)
             return 2
 
+        source = unit.proof_range or unit.statement_range
+        proof_reviews.append(
+            ProofReviewReportInput(
+                result_identifier=unit.identifier,
+                findings=tuple(
+                    finding
+                    for finding in completed.report.findings
+                    if finding.confidence >= args.min_confidence
+                ),
+                initial_turn=completed.initial_turn,
+                rescue_turn=completed.rescue_turn,
+                document=prepared.document,
+                model=args.model,
+                execution=ReviewExecution.LIVE,
+                source=source,
+            )
+        )
+
     if args.format == "json":
-        _print_review_json(audits, args.min_confidence)
+        _print_review_json(proof_reviews, args.min_confidence)
     else:
-        _print_review_text(audits, args.min_confidence)
+        _print_review_text(proof_reviews, args.min_confidence)
 
     if report_path is not None:
         _emit_report(
             project,
             report_path,
             analysis_findings=analysis_findings,
-            audits=audits,
-            model=args.model,
-            review_execution=ReviewExecution.LIVE,
+            proof_reviews=proof_reviews,
+            proof_states={
+                identifier: prepared.state for identifier, prepared in prepared_by_result.items()
+            },
+            proof_documents={
+                identifier: prepared.document
+                for identifier, prepared in prepared_by_result.items()
+            },
             min_confidence=args.min_confidence,
             open_browser=args.open,
             path_to_stderr=args.format == "json",
         )
 
-    review_findings = _visible_findings(audits, args.min_confidence)
-    return _exit_code((finding.severity for finding in review_findings), args.fail_on)
+    review_findings = _visible_proof_findings(proof_reviews, args.min_confidence)
+    return _exit_code((finding.severity for _, finding in review_findings), args.fail_on)

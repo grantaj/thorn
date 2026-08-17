@@ -1,0 +1,38 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+
+\title{A Small Transfer Argument}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+For a natural number $n$, let $E(n)$ mean that $n$ is even, and let $S(n)$ mean that
+$n^2$ is even.
+
+\begin{lemma}[A concrete even number]\label{lem:even-two}
+$E(2)$.
+\end{lemma}
+\begin{proof}
+Since $2=2\cdot 1$, the number $2$ is even. Thus $E(2)$.
+\end{proof}
+
+\begin{lemma}[Squaring preserves evenness]\label{lem:even-square}
+For every natural $x$, if $E(x)$, then $S(x)$.
+\end{lemma}
+\begin{proof}
+If $x$ is even, write $x=2k$. Then $x^2=2(2k^2)$ is even, so $S(x)$.
+\end{proof}
+
+\begin{theorem}[The square of two is even]\label{thm:main}
+$S(2)$.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:even-two}, $E(2)$.
+By Lemma~\ref{lem:even-square}, $S(2)$.
+\end{proof}
+
+\end{document}
