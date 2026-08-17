@@ -140,7 +140,7 @@ def build_proof_review_inventory(
     }
     records: list[dict[str, object]] = []
     shared_prompt_sha256: str | None = None
-    shared_schema_sha256: str | None = None
+    response_schema_sha256s: set[str] = set()
     total_source_addresses = 0
     total_source_handles = 0
 
@@ -170,14 +170,11 @@ def build_proof_review_inventory(
                 separators=(",", ":"),
             )
             schema_sha = hashlib.sha256(schema_json.encode("utf-8")).hexdigest()
+            response_schema_sha256s.add(schema_sha)
             if shared_prompt_sha256 is None:
                 shared_prompt_sha256 = prompt_sha
             elif shared_prompt_sha256 != prompt_sha:
                 raise ValueError("experiment arms do not share one system prompt")
-            if shared_schema_sha256 is None:
-                shared_schema_sha256 = schema_sha
-            elif shared_schema_sha256 != schema_sha:
-                raise ValueError("experiment arms do not share one response schema")
 
             characters = len(envelope.user_content)
             utf8_bytes = len(envelope.user_content.encode("utf-8"))
@@ -188,6 +185,7 @@ def build_proof_review_inventory(
                 "utf8_bytes": utf8_bytes,
                 "fingerprint": envelope.fingerprint(),
                 "packet_fingerprint": envelope.initial_packet_fingerprint,
+                "response_schema_sha256": schema_sha,
                 "source_rescue_allowed": (
                     "SOURCE_RESCUE allowed-once" in envelope.user_content
                 ),
@@ -213,6 +211,7 @@ def build_proof_review_inventory(
             }
         )
 
+    schema_hashes = sorted(response_schema_sha256s)
     return {
         "manifest": str(manifest_path),
         "manifest_version": manifest.version,
@@ -227,7 +226,11 @@ def build_proof_review_inventory(
         "initial_packets": len(records) * len(PROOF_REVIEW_EXPERIMENT_ARMS),
         "experiment_arms": list(PROOF_REVIEW_EXPERIMENT_ARMS),
         "semantic_prompt_sha256": shared_prompt_sha256,
-        "response_schema_sha256": shared_schema_sha256,
+        "response_schema_sha256": schema_hashes[0] if len(schema_hashes) == 1 else None,
+        "response_schema_sha256s": schema_hashes,
+        "response_schema_policy": (
+            "request-specific closed-world source selection over each turn's advertised handles"
+        ),
         "payload_totals": payload_totals,
         "request_totals": totals,
         "advertised_source_addresses": total_source_addresses,
