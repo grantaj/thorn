@@ -201,7 +201,7 @@ def test_rescue_rejects_same_finding_identity_for_two_carried_items() -> None:
         validate_proof_review_response(rescue, response)
 
 
-def test_duplicate_rescue_finding_replay_is_rejected_identically(
+def test_duplicate_rescue_finding_is_rejected_before_recording(
     tmp_path: Path,
 ) -> None:
     request = ProofLanguageReviewRequest(document=_document())
@@ -225,14 +225,35 @@ def test_duplicate_rescue_finding_replay_is_rejected_identically(
         match="reuses finding identity across rescue accounting: F1",
     ):
         review_proof_language(request, recorder)
+
+    # The valid initial source request is recordable, but the invalid final
+    # response is rejected before it can become accepted replay evidence.
+    assert len(tuple(tmp_path.glob("*.json"))) == 1
+
+
+def test_valid_rescue_finding_record_replay_remains_exact(tmp_path: Path) -> None:
+    request = ProofLanguageReviewRequest(document=_document())
+    final = ProofReviewModelResponse(
+        action="review",
+        findings=(_finding("F2"),),
+        dispositions=(
+            ProofReviewDisposition(
+                item_id="RV1",
+                status="confirmed",
+                explanation="Concern confirmed.",
+                finding=_finding("F1"),
+            ),
+        ),
+    )
+    recorder = RecordingProvider(_Transport([_need(), final]), tmp_path)
+
+    live_report = review_proof_language(request, recorder)
+    assert [finding.id for finding in live_report.findings] == ["F1", "F2"]
     assert len(tuple(tmp_path.glob("*.json"))) == 2
 
     replay = ReplayProvider("test-model", tmp_path)
-    with pytest.raises(
-        ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
-    ):
-        review_proof_language(request, replay)
+    replay_report = review_proof_language(request, replay)
+    assert replay_report == live_report
     assert replay.requests == 2
     assert replay.replay_hits == 2
     assert replay.live_requests == 0
