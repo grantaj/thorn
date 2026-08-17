@@ -1,0 +1,30 @@
+{
+  "name": "Ordinary integer cancellation",
+  "kind": "clean",
+  "modes": [
+    "review"
+  ],
+  "source": "Synthetic material-assumption control",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 9,
+  "capability": "stop descending into foundations when ordinary arithmetic semantics are settled and deeper alternatives do not affect the proof judgement",
+  "target_identifier": "thm:integer-cancellation-clean",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "material_assumption_control_foundational",
+  "detection_methods": [
+    "context and scope check",
+    "counterfactual materiality"
+  ],
+  "reader_consequence": "not_applicable",
+  "deception_level": "plausible",
+  "downstream_impact": "isolated",
+  "scope_relation": "exact",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "exact",
+  "notes": "Load-bearing premise: cancellation by 2 is used for ordinary integers. The source fixes the standard integer domain sufficiently for human mathematics; no deeper foundational formalisation is review-relevant here."
+}
