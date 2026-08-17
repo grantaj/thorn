@@ -115,6 +115,13 @@ def _expanded_source_addresses(
         source = proposition_source.get(proposition)
         if source is not None:
             add_source(source)
+        else:
+            # Global hypotheses/definitions are proposition addresses in ``ctx``
+            # but do not have their own HOLE/GOAL line, so #86's original map
+            # could not discover their exact source. If the proposition itself
+            # is already an advertised source handle, it is a mechanically
+            # reachable prerequisite and belongs in the same bounded closure.
+            add_source(proposition)
 
     for address in requested:
         proposition = address if address in contexts else source_proposition.get(address)
