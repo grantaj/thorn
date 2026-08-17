@@ -67,7 +67,7 @@ def _project_document(path: Path, target: str) -> LLMProofLanguage:
 
 
 def _item(index: int, summary: str, *, kind: str = "concern") -> ProofReviewItem:
-    return ProofReviewItem(id=f"R{index}", kind=kind, summary=summary)
+    return ProofReviewItem(id=f"RV{index}", kind=kind, summary=summary)
 
 
 def _need(
@@ -150,17 +150,17 @@ def test_independent_concern_survives_rescue_for_another_question() -> None:
             _item(1, "An upstream implication is already unsupported."),
             _item(2, "Does the downstream definition justify this use?", kind="question"),
         ),
-        source_items=("R2",),
+        source_items=("RV2",),
     )
     final = ProofReviewModelResponse(
         action="review",
         dispositions=(
             _disposition(
-                "R1",
+                "RV1",
                 "confirmed",
                 finding=_finding("F1", "Upstream implication fails"),
             ),
-            _disposition("R2", "discharged"),
+            _disposition("RV2", "discharged"),
         ),
     )
     transport = _Transport([initial, final])
@@ -179,7 +179,7 @@ def test_source_exonerates_carried_concern_and_final_report_is_clean() -> None:
     )
     final = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R1", "discharged"),),
+        dispositions=(_disposition("RV1", "discharged"),),
     )
     report = review_proof_language(
         ProofLanguageReviewRequest(document=_document()),
@@ -197,7 +197,7 @@ def test_source_confirms_carried_concern_as_final_finding() -> None:
         action="review",
         dispositions=(
             _disposition(
-                "R1",
+                "RV1",
                 "confirmed",
                 finding=_finding("F1", "Implication is invalid"),
             ),
@@ -219,7 +219,7 @@ def test_source_revises_carried_concern_without_textual_identity_matching() -> N
         action="review",
         dispositions=(
             _disposition(
-                "R1",
+                "RV1",
                 "revised",
                 finding=_finding(
                     "F1",
@@ -242,7 +242,7 @@ def test_source_may_reveal_genuinely_new_concern() -> None:
     )
     final = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R1", "discharged"),),
+        dispositions=(_disposition("RV1", "discharged"),),
         findings=(
             _finding("F2", "Exact evidence exposes a separate invalid implication"),
         ),
@@ -261,17 +261,17 @@ def test_multiple_dependencies_keep_upstream_concern_when_rescuing_downstream() 
             _item(1, "The load-bearing upstream inference is unsupported."),
             _item(2, "The downstream use needs exact evidence.", kind="question"),
         ),
-        source_items=("R2",),
+        source_items=("RV2",),
     )
     final = ProofReviewModelResponse(
         action="review",
         dispositions=(
             _disposition(
-                "R1",
+                "RV1",
                 "confirmed",
                 finding=_finding("F1", "Upstream support is invalid"),
             ),
-            _disposition("R2", "discharged"),
+            _disposition("RV2", "discharged"),
         ),
     )
     report = review_proof_language(
@@ -290,13 +290,41 @@ def test_clean_clarification_question_can_be_explicitly_discharged() -> None:
     )
     final = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R1", "discharged"),),
+        dispositions=(_disposition("RV1", "discharged"),),
     )
     report = review_proof_language(
         ProofLanguageReviewRequest(document=_document()),
         _Transport([initial, final]),
     )
     assert report.findings == []
+
+
+def test_bounded_source_may_leave_question_explicitly_unresolved() -> None:
+    initial = _need(
+        "E1",
+        items=(
+            _item(1, "Does the source establish the missing premise?", kind="question"),
+        ),
+    )
+    final = ProofReviewModelResponse(
+        action="review",
+        dispositions=(_disposition("RV1", "unresolved"),),
+    )
+    report = review_proof_language(
+        ProofLanguageReviewRequest(document=_document()),
+        _Transport([initial, final]),
+    )
+    assert report.findings == []
+
+    _, rescue = _rescue_turn(initial)
+    validated = validate_proof_review_response(rescue, final)
+    assert validated.dispositions[0].status == "unresolved"
+    with pytest.raises(ValidationError, match="must not produce a finding"):
+        _disposition(
+            "RV1",
+            "unresolved",
+            finding=_finding("F1", "Do not invent a defect from unresolved evidence"),
+        )
 
 
 def test_carried_concern_cannot_be_omitted_even_via_model_copy_bypass() -> None:
@@ -307,7 +335,7 @@ def test_carried_concern_cannot_be_omitted_even_via_model_copy_bypass() -> None:
     _, rescue = _rescue_turn(initial)
     valid = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R1", "discharged"),),
+        dispositions=(_disposition("RV1", "discharged"),),
     )
     forged = valid.model_copy(update={"dispositions": ()})
     with pytest.raises(ProofReviewProtocolError, match="omitted carried review item"):
@@ -319,8 +347,8 @@ def test_duplicate_disposition_is_rejected() -> None:
     response = ProofReviewModelResponse(
         action="review",
         dispositions=(
-            _disposition("R1", "discharged"),
-            _disposition("R1", "discharged"),
+            _disposition("RV1", "discharged"),
+            _disposition("RV1", "discharged"),
         ),
     )
     with pytest.raises(ProofReviewProtocolError, match="more than once"):
@@ -331,7 +359,7 @@ def test_unknown_disposition_identity_is_rejected() -> None:
     _, rescue = _rescue_turn(_need("E1"))
     response = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R2", "discharged"),),
+        dispositions=(_disposition("RV2", "discharged"),),
     )
     with pytest.raises(ProofReviewProtocolError, match="unknown review item"):
         validate_proof_review_response(rescue, response)
@@ -354,20 +382,20 @@ def test_confirming_one_carried_item_cannot_drop_another() -> None:
             _item(1, "Concern A"),
             _item(2, "Question B", kind="question"),
         ),
-        source_items=("R2",),
+        source_items=("RV2",),
     )
     _, rescue = _rescue_turn(initial)
     response = ProofReviewModelResponse(
         action="review",
         dispositions=(
             _disposition(
-                "R1",
+                "RV1",
                 "confirmed",
                 finding=_finding("F1", "A confirmed"),
             ),
         ),
     )
-    with pytest.raises(ProofReviewProtocolError, match="R2"):
+    with pytest.raises(ProofReviewProtocolError, match="RV2"):
         validate_proof_review_response(rescue, response)
 
 
@@ -375,7 +403,7 @@ def test_discharge_without_link_to_carried_item_is_rejected() -> None:
     _, rescue = _rescue_turn(_need("E1"))
     response = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R2", "discharged"),),
+        dispositions=(_disposition("RV2", "discharged"),),
     )
     with pytest.raises(ProofReviewProtocolError, match="unknown review item"):
         validate_proof_review_response(rescue, response)
@@ -385,8 +413,8 @@ def test_new_finding_cannot_reuse_carried_review_identity() -> None:
     _, rescue = _rescue_turn(_need("E1"))
     response = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R1", "discharged"),),
-        findings=(_finding("R1", "Masquerading new concern"),),
+        dispositions=(_disposition("RV1", "discharged"),),
+        findings=(_finding("RV1", "Masquerading new concern"),),
     )
     with pytest.raises(
         ProofReviewProtocolError,
@@ -409,7 +437,7 @@ def test_review_state_has_no_nested_source_address_channel() -> None:
     with pytest.raises(ValidationError):
         ProofReviewItem.model_validate(
             {
-                "id": "R1",
+                "id": "RV1",
                 "kind": "question",
                 "summary": "Question",
                 "source_address": "E1",
@@ -485,7 +513,7 @@ def test_replay_rejects_same_packet_and_source_with_different_prior_state(
             [
                 ProofReviewModelResponse(
                     action="review",
-                    dispositions=(_disposition("R1", "discharged"),),
+                    dispositions=(_disposition("RV1", "discharged"),),
                 )
             ]
         ),
@@ -532,13 +560,13 @@ def test_clean_unusual_notation_can_carry_then_discharge_clarification() -> None
     )
     final = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R1", "discharged"),),
+        dispositions=(_disposition("RV1", "discharged"),),
     )
     validated = validate_proof_review_response(rescue, final)
     assert validated.dispositions[0].status == "discharged"
 
 
-def test_rh_witness_can_carry_upstream_scrutiny_during_downstream_rescue() -> None:
+def test_rh_witness_keeps_proof_dependency_and_review_namespaces_disjoint() -> None:
     document = _project_document(
         Path(
             "eval/cases/ladder/09_hidden_assumptions/"
@@ -546,6 +574,10 @@ def test_rh_witness_can_carry_upstream_scrutiny_during_downstream_rescue() -> No
         ),
         "thm:rh-prime-window",
     )
+    packet = document.render_initial()
+    assert "R1" in packet
+    assert "RV1" not in packet
+
     request = ProofLanguageReviewRequest(document=document)
     initial = build_proof_review_turn(request)
     assert initial.allowed_source_addresses
@@ -556,17 +588,23 @@ def test_rh_witness_can_carry_upstream_scrutiny_during_downstream_rescue() -> No
             _item(1, "A load-bearing upstream dependency requires scrutiny."),
             _item(2, "A downstream step needs exact evidence.", kind="question"),
         ),
-        source_items=("R2",),
+        source_items=("RV2",),
     )
     rescue = build_rescue_turn(request, initial, source_request)
     assert rescue.prior_response is not None
     assert tuple(item.id for item in rescue.prior_response.review_items) == (
-        "R1",
-        "R2",
+        "RV1",
+        "RV2",
     )
+    envelope = proof_review_request_envelope(rescue, "test-model")
+    assert envelope.messages is not None
+    transcript = "\n".join(message["content"] for message in envelope.messages)
+    assert "R1" in transcript
+    assert '"id":"RV1"' in transcript
+
     malformed = ProofReviewModelResponse(
         action="review",
-        dispositions=(_disposition("R2", "discharged"),),
+        dispositions=(_disposition("RV2", "discharged"),),
     )
-    with pytest.raises(ProofReviewProtocolError, match="R1"):
+    with pytest.raises(ProofReviewProtocolError, match="RV1"):
         validate_proof_review_response(rescue, malformed)
