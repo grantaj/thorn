@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -96,7 +97,7 @@ class _Transport:
 
 
 @pytest.mark.parametrize("status", ["confirmed", "revised"])
-def test_rescue_rejects_finding_repeated_in_disposition_and_new_findings(
+def test_rescue_normalizes_exact_finding_repeated_across_accounting(
     status: str,
 ) -> None:
     _, rescue = _rescue_turn()
@@ -114,9 +115,77 @@ def test_rescue_rejects_finding_repeated_in_disposition_and_new_findings(
         ),
     )
 
+    normalized = validate_proof_review_response(rescue, response)
+
+    assert normalized.findings == ()
+    assert normalized.dispositions[0].finding == duplicated
+
+
+def test_rescue_rejects_conflicting_payload_for_carried_finding_identity() -> None:
+    _, rescue = _rescue_turn()
+    carried = _finding("F1")
+    conflicting = carried.model_copy(update={"explanation": "Conflicting explanation."})
+    response = ProofReviewModelResponse(
+        action="review",
+        findings=(conflicting,),
+        dispositions=(
+            ProofReviewDisposition(
+                item_id="RV1",
+                status="confirmed",
+                explanation="The carried concern is confirmed.",
+                finding=carried,
+            ),
+        ),
+    )
+
     with pytest.raises(
         ProofReviewProtocolError,
         match="reuses finding identity across rescue accounting: F1",
+    ):
+        validate_proof_review_response(rescue, response)
+
+
+def test_rescue_normalization_preserves_new_finding_order() -> None:
+    _, rescue = _rescue_turn()
+    duplicated = _finding("F1")
+    response = ProofReviewModelResponse(
+        action="review",
+        findings=(_finding("F2"), duplicated, _finding("F3")),
+        dispositions=(
+            ProofReviewDisposition(
+                item_id="RV1",
+                status="confirmed",
+                explanation="The carried concern is confirmed.",
+                finding=duplicated,
+            ),
+        ),
+    )
+
+    first = validate_proof_review_response(rescue, response)
+    second = validate_proof_review_response(rescue, response)
+
+    assert [finding.id for finding in first.findings] == ["F2", "F3"]
+    assert first == second
+
+
+def test_rescue_rejects_duplicate_top_level_finding_identity() -> None:
+    _, rescue = _rescue_turn()
+    duplicated = _finding("F2")
+    response = ProofReviewModelResponse(
+        action="review",
+        findings=(duplicated, duplicated),
+        dispositions=(
+            ProofReviewDisposition(
+                item_id="RV1",
+                status="discharged",
+                explanation="The carried concern is discharged.",
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        ProofReviewProtocolError,
+        match="reuses finding identity across rescue accounting: F2",
     ):
         validate_proof_review_response(rescue, response)
 
@@ -201,7 +270,7 @@ def test_rescue_rejects_same_finding_identity_for_two_carried_items() -> None:
         validate_proof_review_response(rescue, response)
 
 
-def test_duplicate_rescue_finding_is_rejected_before_recording(
+def test_duplicate_rescue_finding_is_normalized_before_recording_and_replays_exactly(
     tmp_path: Path,
 ) -> None:
     request = ProofLanguageReviewRequest(document=_document())
@@ -220,15 +289,25 @@ def test_duplicate_rescue_finding_is_rejected_before_recording(
     )
     recorder = RecordingProvider(_Transport([_need(), final]), tmp_path)
 
-    with pytest.raises(
-        ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
-    ):
-        review_proof_language(request, recorder)
+    live_report = review_proof_language(request, recorder)
+    assert [finding.id for finding in live_report.findings] == ["F1"]
 
-    # The valid initial source request is recordable, but the invalid final
-    # response is rejected before it can become accepted replay evidence.
-    assert len(tuple(tmp_path.glob("*.json"))) == 1
+    recordings = [
+        json.loads(path.read_text(encoding="utf-8")) for path in tmp_path.glob("*.json")
+    ]
+    assert len(recordings) == 2
+    final_recording = next(
+        recording for recording in recordings if recording["response"]["dispositions"]
+    )
+    assert final_recording["response"]["findings"] == []
+    assert final_recording["response"]["dispositions"][0]["finding"]["id"] == "F1"
+
+    replay = ReplayProvider("test-model", tmp_path)
+    replay_report = review_proof_language(request, replay)
+    assert replay_report == live_report
+    assert replay.requests == 2
+    assert replay.replay_hits == 2
+    assert replay.live_requests == 0
 
 
 def test_valid_rescue_finding_record_replay_remains_exact(tmp_path: Path) -> None:
