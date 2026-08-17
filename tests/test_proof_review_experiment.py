@@ -72,7 +72,8 @@ def test_abc_arms_share_prompt_model_and_provider_contract_without_source_handle
     assert envelopes["proof_ir"].representation == "thorn-proof/1"
     assert envelopes["proof_ir_rescue"].representation == "thorn-proof/1"
     assert "SOURCE_RESCUE disabled" in envelopes["proof_ir"].user_content
-    assert "SOURCE_RESCUE allowed-once" in envelopes["proof_ir_rescue"].user_content
+    assert "SOURCE_RESCUE disabled" in envelopes["proof_ir_rescue"].user_content
+    assert "SOURCE_RESCUE allowed-once" not in envelopes["proof_ir_rescue"].user_content
     assert envelopes["proof_ir"].user_content.split("\n\n", 1)[1] == document.render_initial()
     rescue_payload = envelopes["proof_ir_rescue"].user_content.split("\n\n", 1)[1]
     assert rescue_payload == document.render_initial()
