@@ -69,7 +69,9 @@ def load_proof_review_manifest(path: Path) -> ProofReviewChallengeManifest:
     if manifest.issue != 78 or not manifest.frozen:
         raise ValueError("proof-review challenge must be the frozen issue-78 manifest")
     if manifest.prompt_version != _FROZEN_PROMPT_VERSION:
-        raise ValueError("proof-review challenge prompt freeze does not match the archived v1 contract")
+        raise ValueError(
+            "proof-review challenge prompt freeze does not match the archived v1 contract"
+        )
     if manifest.protocol_version != _FROZEN_PROTOCOL_VERSION:
         raise ValueError(
             "proof-review challenge protocol freeze does not match the archived v1 contract"
