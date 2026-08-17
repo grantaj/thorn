@@ -71,12 +71,12 @@ def _need_payload(*addresses: str) -> dict[str, object]:
         "source_addresses": addresses,
         "review_items": [
             {
-                "id": "R1",
+                "id": "RV1",
                 "kind": "question",
                 "summary": "Does the exact source settle this review question?",
             }
         ],
-        "source_review_item_ids": ["R1"],
+        "source_review_item_ids": ["RV1"],
     }
 
 
@@ -86,12 +86,12 @@ def _need(*addresses: str) -> ProofReviewModelResponse:
         source_addresses=addresses,
         review_items=(
             ProofReviewItem(
-                id="R1",
+                id="RV1",
                 kind="question",
                 summary="Does the exact source settle this review question?",
             ),
         ),
-        source_review_item_ids=("R1",),
+        source_review_item_ids=("RV1",),
     )
 
 
