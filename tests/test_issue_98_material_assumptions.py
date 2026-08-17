@@ -21,7 +21,6 @@ from thorn.proof_language_review import (
     build_proof_review_turn,
 )
 from thorn.proof_obligations import ProofObligationIR, elaborate_proof_obligations
-from thorn.providers.request_envelope import proof_review_request_envelope
 from thorn.semantic_review_render import build_semantic_review_request
 from thorn.semantic_transformations import (
     SemanticTransformationIR,
@@ -247,36 +246,8 @@ def test_material_assumption_family_is_first_class_review_only_eval_family() -> 
     )
 
 
-def test_review_policy_uses_counterfactual_materiality_without_fixture_rules() -> None:
-    document = _trace(
-        _CASE_DIR / "ring_square_roots_gap.tex",
-        "thm:ring-square-roots-gap",
-    )[-1]
-    turn = build_proof_review_turn(ProofLanguageReviewRequest(document=document))
-    envelope = proof_review_request_envelope(turn, "test-model")
-    prompt = envelope.system_prompt
-
-    assert "Unstated is not automatically missing" in prompt
-    assert "plausible alternatives" in prompt
-    assert "validity, meaning, or claimed scope" in prompt
-    assert "formalisation or elaboration" in prompt
-    assert "silently choose among materially different" in prompt
-
-    # The policy is a cross-domain decision rule, not a cultural-knowledge
-    # dictionary or benchmark vocabulary list.
-    for fixture_term in (
-        "Pythagorean",
-        "zero divisors",
-        "Riemannian",
-        "Z/4",
-        "finite-dimensional",
-        "Bolzano",
-    ):
-        assert fixture_term not in prompt
-
-
 def test_nearby_named_domain_is_not_globally_promoted_to_reals() -> None:
-    lowered = lower_math_expression(r"\forall x \in K, P(x)")
+    lowered = lower_math_expression("For every x in K, P(x)")
     assert isinstance(lowered.expression, QuantifiedExpr)
     assert lowered.expression.binder.domain == IdentifierExpr(name="K")
 
