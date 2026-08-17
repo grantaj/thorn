@@ -8,7 +8,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from thorn.eval import CaseExpectation
+from thorn.llm_proof_language import LLMProofLanguage
 from thorn.local_nlp import select_linguistic_frontend
+from thorn.models import TheoremUnit
 from thorn.proof_language_experiment import (
     PROOF_REVIEW_EXPERIMENT_ARMS,
     ProofReviewExperimentArm,
@@ -158,12 +161,16 @@ def build_sentinel_case_data(
     manifest: ProofReviewSentinelManifest,
     *,
     structural_only: bool,
-):
+) -> list[
+    tuple[ProofReviewChallengeEntry, CaseExpectation, TheoremUnit, LLMProofLanguage]
+]:
     linguistic_frontend = select_linguistic_frontend(
         structural_only=structural_only,
         factory=SpacyLinguisticFrontend,
     )
-    result = []
+    result: list[
+        tuple[ProofReviewChallengeEntry, CaseExpectation, TheoremUnit, LLMProofLanguage]
+    ] = []
     for entry in manifest.cases:
         expectation, unit, document = build_case_proof_document(
             Path(entry.metadata),
