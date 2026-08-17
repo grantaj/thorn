@@ -269,7 +269,13 @@ def test_extrema_fixture_traces_bounded_claim_to_open_attainment_goal() -> None:
         for node in canonical.nodes
         if "attains its minimum and maximum" in canonical.source(node.address).text
     )
-    assert len({goal.address, bounded_prose.address, bound_display.address, final_claim.address}) == 4
+    distinct_addresses = {
+        goal.address,
+        bounded_prose.address,
+        bound_display.address,
+        final_claim.address,
+    }
+    assert len(distinct_addresses) == 4
     assert bound_display.kind == CanonicalNodeKind.CLAIM
     assert final_claim.kind == CanonicalNodeKind.OPAQUE_PROSE
 
