@@ -5,6 +5,7 @@ import pytest
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
+    ProofReviewItem,
     ProofReviewModelResponse,
     ProofReviewProtocolError,
     build_proof_review_turn,
@@ -13,7 +14,18 @@ from thorn.proof_language_review import (
 
 
 def _need(*addresses: str) -> ProofReviewModelResponse:
-    return ProofReviewModelResponse(action="need_source", source_addresses=addresses)
+    return ProofReviewModelResponse(
+        action="need_source",
+        source_addresses=addresses,
+        review_items=(
+            ProofReviewItem(
+                id="R1",
+                kind="question",
+                summary="Does exact prerequisite source settle this review question?",
+            ),
+        ),
+        source_review_item_ids=("R1",),
+    )
 
 
 def _chain_document() -> LLMProofLanguage:
