@@ -207,6 +207,17 @@ def extract_symbol_table(
     from thorn.symbol_extract import extract_symbol_table as run_extractor
 
     table = run_extractor(project, regions)
+
+    # Result/proof extraction is intentionally local, but ordinary manuscripts
+    # also place authoritative declarations immediately before theorem-like
+    # environments. Recover only explicit, mechanically recognizable project
+    # introductions and then record their uses through the existing scope IR.
+    from thorn.project_context import add_project_authoritative_context
+    from thorn.project_context_source import preserve_project_authoritative_source
+
+    add_project_authoritative_context(project, regions, table)
+    preserve_project_authoritative_source(project, table)
+
     if linguistic_frontend is not None:
         from thorn.linguistic_symbols import add_linguistic_symbol_candidates
 
