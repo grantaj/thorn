@@ -1,0 +1,19 @@
+\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+
+\title{A Broken Internal Reference}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{theorem}\label{thm:square-nonnegative}
+For every real number $x$, one has $x^2\geq 0$.
+\end{theorem}
+\begin{proof}
+This is exactly the conclusion of Lemma~\ref{lem:squares-are-nonnegative}.
+\end{proof}
+
+\end{document}
