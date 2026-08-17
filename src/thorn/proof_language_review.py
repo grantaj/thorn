@@ -268,10 +268,33 @@ def _closed_world_response_model(
 ) -> type[ProofReviewModelResponse]:
     """Build the existing response shape with request-specific protocol typing.
 
+    Every array retains an explicit JSON-Schema ``items`` type, including arrays
+    that are mechanically constrained to length zero. OpenAI Structured Outputs
+    requires array schemas to declare ``items``; ``maxItems: 0`` still makes the
+    empty tuple the only representable value and therefore preserves #88's
+    closed-world source-selection contract.
+
     The generated class deliberately keeps the stable ``ProofReviewModelResponse``
     schema title. The fingerprint therefore records protocol content, not an
     incidental generated Python name.
     """
+
+    empty_source_addresses = (
+        tuple[SourceAddress, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_review_items = (
+        tuple[ProofReviewItem, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_source_review_item_ids = (
+        tuple[ReviewItemId, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_dispositions = (
+        tuple[ProofReviewDisposition, ...],
+        Field(default=(), max_length=0),
+    )
 
     if stage == "rescue":
         disposition_model: Any = _carried_disposition_model(carried_review_item_ids)
@@ -280,9 +303,9 @@ def _closed_world_response_model(
             "ProofReviewModelResponse",
             __base__=ProofReviewModelResponse,
             action=(Literal["review"], ...),
-            source_addresses=(tuple[()], ()),
-            review_items=(tuple[()], ()),
-            source_review_item_ids=(tuple[()], ()),
+            source_addresses=empty_source_addresses,
+            review_items=empty_review_items,
+            source_review_item_ids=empty_source_review_item_ids,
             dispositions=(
                 dispositions_type,
                 Field(
@@ -298,10 +321,10 @@ def _closed_world_response_model(
             "ProofReviewModelResponse",
             __base__=ProofReviewModelResponse,
             action=(Literal["review"], ...),
-            source_addresses=(tuple[()], ()),
-            review_items=(tuple[()], ()),
-            source_review_item_ids=(tuple[()], ()),
-            dispositions=(tuple[()], ()),
+            source_addresses=empty_source_addresses,
+            review_items=empty_review_items,
+            source_review_item_ids=empty_source_review_item_ids,
+            dispositions=empty_dispositions,
         )
 
     address_literal: Any = cast(Any, Literal)[allowed_source_addresses]
@@ -313,7 +336,7 @@ def _closed_world_response_model(
             source_addresses_type,
             Field(default=(), max_length=max_source_addresses),
         ),
-        dispositions=(tuple[()], ()),
+        dispositions=empty_dispositions,
     )
 
 
@@ -533,14 +556,12 @@ def build_raw_review_turn(content: str) -> ProofReviewTurnRequest:
     )
 
 
-def build_proof_review_turn(
-    request: ProofLanguageReviewRequest,
-) -> ProofReviewTurnRequest:
+def build_proof_review_turn(request: ProofLanguageReviewRequest) -> ProofReviewTurnRequest:
     document = request.document
-    allowed_source_addresses = (
+    advertised = (
         advertised_source_addresses(document) if request.allow_source_rescue else ()
     )
-    source_rescue_allowed = request.allow_source_rescue and bool(allowed_source_addresses)
+    source_rescue_allowed = request.allow_source_rescue and bool(advertised)
     return ProofReviewTurnRequest(
         representation="thorn-proof/1",
         stage="initial",
@@ -552,100 +573,125 @@ def build_proof_review_turn(
             source_rescue_allowed=source_rescue_allowed,
         ),
         source_rescue_allowed=source_rescue_allowed,
-        allowed_source_addresses=allowed_source_addresses if source_rescue_allowed else (),
-        max_source_addresses=(request.max_source_addresses if source_rescue_allowed else 0),
+        allowed_source_addresses=advertised,
+        max_source_addresses=request.max_source_addresses if source_rescue_allowed else 0,
     )
 
 
-def _source_command(addresses: tuple[str, ...]) -> str:
-    return "NEED_SOURCE " + ",".join(addresses)
+def _parse_rescue_source_content(source_text: str) -> dict[str, str]:
+    result: dict[str, str] = {}
+    current: str | None = None
+    chunks: list[str] = []
+    for line in source_text.splitlines():
+        if line.startswith("SOURCE @"):
+            if current is not None:
+                result[current] = "\n".join(chunks).strip()
+            current = line[len("SOURCE @") :].strip()
+            chunks = []
+            continue
+        chunks.append(line)
+    if current is not None:
+        result[current] = "\n".join(chunks).strip()
+    return result
+
+
+def _render_rescue_user_content(
+    source_text: str,
+) -> str:
+    return f"THORN-SOURCE-RESCUE 2\n{_FINAL_RESCUE_POLICY}\n\n{source_text}"
 
 
 def build_rescue_turn(
     request: ProofLanguageReviewRequest,
     initial_turn: ProofReviewTurnRequest,
-    source_request: ProofReviewModelResponse,
+    response: ProofReviewModelResponse,
 ) -> ProofReviewTurnRequest:
+    document = request.document
     if initial_turn.representation != "thorn-proof/1":
-        raise ProofReviewProtocolError("raw review does not support source rescue")
-    if not request.allow_source_rescue or not initial_turn.source_rescue_allowed:
-        raise ProofReviewProtocolError("source rescue is disabled for this review arm")
-    if source_request.action != "need_source":
-        raise ProofReviewProtocolError("rescue turn requires a structured source request")
-    if initial_turn.initial_packet_fingerprint != request.document.fingerprint():
-        raise ProofReviewProtocolError("initial turn does not match the proof-language packet")
+        raise ProofReviewProtocolError("source rescue is only defined for thorn-proof/1")
+    if not initial_turn.source_rescue_allowed:
+        raise ProofReviewProtocolError("source rescue was not enabled for this initial turn")
+    if response.action != "need_source":
+        raise ProofReviewProtocolError("source rescue requires a need_source response")
+    if initial_turn.initial_packet_fingerprint != document.fingerprint():
+        raise ProofReviewProtocolError("initial turn is not bound to this proof-language packet")
+    if len(response.source_addresses) > initial_turn.max_source_addresses:
+        raise ProofReviewProtocolError("source rescue exceeds the configured address cap")
 
-    advertised = advertised_source_addresses(request.document)
+    # Rebind the stored selection universe to the actual initial packet before any
+    # source disclosure. The stored turn contract remains authoritative for all
+    # downstream behavior; this recomputation is only an integrity assertion that
+    # prevents a forged/copied turn from widening that contract to another held
+    # source handle.
+    advertised = advertised_source_addresses(document)
     if initial_turn.allowed_source_addresses != advertised:
         raise ProofReviewProtocolError(
             "initial turn source-selection contract does not match proof-language packet"
         )
-    if initial_turn.max_source_addresses != request.max_source_addresses:
-        raise ProofReviewProtocolError("initial turn does not match the review source-address cap")
 
-    source_request = validate_proof_review_response(initial_turn, source_request)
-    expanded_addresses = _expanded_source_addresses(
-        request.document,
-        source_request.source_addresses,
+    response = validate_proof_review_response(initial_turn, response)
+    expanded = _expanded_source_addresses(
+        document,
+        response.source_addresses,
         advertised=initial_turn.allowed_source_addresses,
     )
-    try:
-        parsed = parse_source_rescue_request(
-            request.document,
-            _source_command(expanded_addresses),
-            max_addresses=initial_turn.max_source_addresses,
-            round_number=1,
+    if len(expanded) > initial_turn.max_source_addresses:
+        raise ProofReviewProtocolError(
+            "source rescue prerequisite expansion exceeds the configured address cap"
         )
-        rescue = render_source_rescue(request.document, parsed)
-    except (KeyError, ValueError) as exc:
-        raise ProofReviewProtocolError(str(exc)) from exc
-
+    rescue = render_source_rescue(
+        document,
+        parse_source_rescue_request(
+            document,
+            "NEED_SOURCE " + ",".join(expanded),
+        ),
+    )
     return ProofReviewTurnRequest(
         representation="thorn-proof/1",
         stage="rescue",
-        initial_packet_fingerprint=request.document.fingerprint(),
-        user_content=(
-            "THORN-REVIEW SOURCE-RESCUE 2\n"
-            f"INITIAL_PACKET_FINGERPRINT {request.document.fingerprint()}\n"
-            "SOURCE_RESCUE exhausted\n"
-            f"{_FINAL_RESCUE_POLICY}\n\n"
-            f"{rescue.text}"
-        ),
+        initial_packet_fingerprint=document.fingerprint(),
+        user_content=_render_rescue_user_content(rescue.text),
         source_rescue_allowed=False,
-        allowed_source_addresses=(),
         max_source_addresses=0,
-        requested_source_addresses=parsed.addresses,
+        requested_source_addresses=expanded,
         initial_user_content=initial_turn.user_content,
-        prior_response=source_request,
+        prior_response=response,
     )
 
 
-def _attack_report_from_response(response: ProofReviewModelResponse) -> AttackReport:
-    carried_findings = [
+def _attack_report_from_response(
+    result_identifier: str,
+    response: ProofReviewModelResponse,
+) -> AttackReport:
+    findings = list(response.findings)
+    findings.extend(
         disposition.finding
         for disposition in response.dispositions
         if disposition.finding is not None
-    ]
-    return AttackReport(findings=[*carried_findings, *response.findings])
+    )
+    return AttackReport(
+        result_identifier=result_identifier,
+        findings=tuple(findings),
+    )
 
 
 def review_proof_language(
     request: ProofLanguageReviewRequest,
     transport: ProofReviewTransport,
 ) -> AttackReport:
-    """Review a proof-language packet with at most one exact source-rescue round."""
-
-    initial_turn = build_proof_review_turn(request)
-    first = validate_proof_review_response(
-        initial_turn,
-        transport.review_proof_turn(initial_turn),
+    first_turn = build_proof_review_turn(request)
+    first_response = validate_proof_review_response(
+        first_turn,
+        transport.review_proof_turn(first_turn),
     )
-    if first.action == "review":
-        return _attack_report_from_response(first)
+    if first_response.action == "review":
+        return _attack_report_from_response(request.document.result_identifier, first_response)
 
-    rescue_turn = build_rescue_turn(request, initial_turn, first)
-    second = transport.review_proof_turn(rescue_turn)
-    if second.action != "review":
-        raise ProofReviewProtocolError("a second source-rescue request is not allowed")
-    second = validate_proof_review_response(rescue_turn, second)
-    return _attack_report_from_response(second)
+    rescue_turn = build_rescue_turn(request, first_turn, first_response)
+    second_response = validate_proof_review_response(
+        rescue_turn,
+        transport.review_proof_turn(rescue_turn),
+    )
+    if second_response.action != "review":
+        raise ProofReviewProtocolError("source rescue is exhausted after one round")
+    return _attack_report_from_response(request.document.result_identifier, second_response)
