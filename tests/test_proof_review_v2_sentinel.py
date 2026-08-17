@@ -16,7 +16,7 @@ def test_v2_sentinel_is_one_matched_clean_defect_pair() -> None:
 
     assert manifest.experiment == SENTINEL_EXPERIMENT
     assert manifest.issue == 90
-    assert manifest.model == "gpt-5.6"
+    assert manifest.model == "gpt-5.6-sol"
     assert manifest.max_live_requests == 8
     assert manifest.sdk_max_retries == 0
     assert [entry.role for entry in manifest.cases] == ["clean", "defect"]
