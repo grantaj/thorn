@@ -354,3 +354,53 @@ def test_accepted_recording_does_not_serialize_delegate_secrets(tmp_path: Path) 
     text = accepted[0].read_text(encoding="utf-8")
     assert "sk-delegate-secret" not in text
     assert not (tmp_path / "rejected").exists()
+
+def test_explicit_forensic_selection_overrides_accepted_recording_for_same_request(
+    tmp_path: Path,
+) -> None:
+    _, _, rescue = _turns()
+    accepted_response = ProofReviewModelResponse(
+        action="review",
+        dispositions=(
+            ProofReviewDisposition(
+                item_id="RV1",
+                status="discharged",
+                explanation="The carried concern is discharged.",
+            ),
+        ),
+    )
+    accepted_recorder = RecordingProvider(_Transport([accepted_response]), tmp_path)
+    assert accepted_recorder.review_proof_turn(rescue) == accepted_response
+
+    rejected_recorder = RecordingProvider(
+        _Transport([_conflicting_response()]),
+        tmp_path,
+    )
+    with pytest.raises(
+        ProofReviewProtocolError,
+        match="reuses finding identity across rescue accounting: F1",
+    ):
+        rejected_recorder.review_proof_turn(rescue)
+
+    normal = ReplayProvider("test-model", tmp_path)
+    assert normal.review_proof_turn(rescue) == accepted_response
+    assert normal.replay_hits == 1
+    assert normal.live_requests == 0
+
+    rejected = _rejected_paths(tmp_path, rescue)
+    assert len(rejected) == 1
+    request_fingerprint = proof_review_request_envelope(rescue, "test-model").fingerprint()
+    forensic = ForensicReplayProvider(
+        "test-model",
+        tmp_path,
+        rejected_response_fingerprints={request_fingerprint: rejected[0].stem},
+    )
+    with pytest.raises(
+        ProofReviewProtocolError,
+        match="reuses finding identity across rescue accounting: F1",
+    ):
+        forensic.review_proof_turn(rescue)
+    assert forensic.replay_hits == 0
+    assert forensic.forensic_hits == 1
+    assert forensic.live_requests == 0
+

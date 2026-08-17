@@ -346,7 +346,7 @@ class ReplayProvider:
 
 
 class ForensicReplayProvider(ReplayProvider):
-    """Replay accepted turns normally and explicit quarantined failures for diagnosis."""
+    """Replay accepted turns normally or explicitly selected quarantined failures."""
 
     def __init__(
         self,
@@ -426,12 +426,14 @@ class ForensicReplayProvider(ReplayProvider):
         self,
         request: ProofReviewTurnRequest,
     ) -> ProofReviewModelResponse:
-        try:
-            return super().review_proof_turn(request)
-        except ReplayMissError:
-            pass
-
         envelope = proof_review_request_envelope(request, self.model)
+        fingerprint = envelope.fingerprint()
+        if fingerprint not in self.rejected_response_fingerprints:
+            try:
+                return super().review_proof_turn(request)
+            except ReplayMissError:
+                pass
+
         exchange = self._load_rejected(envelope)
         if (
             exchange.rejection.kind != "proof_review_protocol"
