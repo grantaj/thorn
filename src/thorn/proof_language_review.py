@@ -11,6 +11,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
+    ValidationError,
     create_model,
     field_validator,
     model_validator,
@@ -28,18 +29,14 @@ PROTOCOL_VERSION: Literal["thorn-proof-review/1"] = "thorn-proof-review/1"
 Representation = Literal["raw", "thorn-proof/1"]
 ReviewStage = Literal["initial", "rescue"]
 ReviewAction = Literal["review", "need_source"]
-SourceAddress = Annotated[
-    str,
-    StringConstraints(pattern=r"^[A-Za-z][A-Za-z0-9:._-]*$"),
-]
+ReviewItemKind = Literal["question", "concern"]
+ReviewDispositionStatus = Literal["confirmed", "revised", "discharged"]
+SourceAddress = Annotated[str, StringConstraints(pattern=r"^[A-Za-z][A-Za-z0-9:._-]*$")]
+ReviewItemId = Annotated[str, StringConstraints(pattern=r"^R[1-9][0-9]*$")]
 
-
-_SOURCE_HANDLE_RE = re.compile(
-    r"@([A-Za-z][A-Za-z0-9:._-]*(?:,[A-Za-z][A-Za-z0-9:._-]*)*)"
-)
+_SOURCE_HANDLE_RE = re.compile(r"@([A-Za-z][A-Za-z0-9:._-]*(?:,[A-Za-z][A-Za-z0-9:._-]*)*)")
 _OBLIGATION_CONTEXT_RE = re.compile(
-    r"^(?:HOLE|GOAL)\s+\S+\s+([A-Za-z][A-Za-z0-9:._-]*):"
-    r".*?\|\s*ctx\s+([^|]+?)\s*\|"
+    r"^(?:HOLE|GOAL)\s+\S+\s+([A-Za-z][A-Za-z0-9:._-]*):.*?\|\s*ctx\s+([^|]+?)\s*\|"
 )
 
 _PROOF_IR_REVIEW_POLICY = (
@@ -48,10 +45,11 @@ _PROOF_IR_REVIEW_POLICY = (
     "defect solely because deterministic recovery remains unresolved."
 )
 _FINAL_RESCUE_POLICY = (
-    "FINAL_RESCUE_POLICY source rescue is now exhausted. If deterministic "
-    "recovery remains unresolved, do not convert that uncertainty into a "
-    "mathematical finding unless the supplied mathematical content itself "
-    "establishes the defect."
+    "FINAL_RESCUE_POLICY source rescue is now exhausted. Treat supplied source as "
+    "new evidence for the carried review state. Every carried review item must receive "
+    "exactly one disposition; new findings may also be reported. If deterministic "
+    "recovery remains unresolved, do not convert that uncertainty into a mathematical "
+    "finding unless the supplied mathematical content itself establishes the defect."
 )
 
 
@@ -65,7 +63,6 @@ def _source_addresses_in_text(text: str) -> tuple[str, ...]:
 
 def advertised_source_addresses(document: LLMProofLanguage) -> tuple[str, ...]:
     """Return the canonical finite set of source handles advertised to review."""
-
     return tuple(sorted(_source_addresses_in_text(document.render_initial())))
 
 
@@ -77,17 +74,10 @@ def _expanded_source_addresses(
 ) -> tuple[str, ...]:
     """Expand requested source to unresolved Proof-IR prerequisite context.
 
-    ``HOLE`` and ``GOAL`` lines already expose the deterministic local context of
-    unresolved propositions. When the model asks for a proposition's exact
-    source, include the exact source for unresolved context propositions first.
-    This is a bounded source-selection operation over the existing proof-language
-    packet; it does not infer any new mathematical edge.
-
     ``advertised`` is the initial turn's stored closed-world contract. It is
     deliberately passed in rather than recomputed so schema generation, runtime
     validation, rescue expansion, fingerprinting, and replay share one set.
     """
-
     contexts: dict[str, tuple[str, ...]] = {}
     proposition_source: dict[str, str] = {}
     for line in document.lines:
@@ -131,11 +121,9 @@ def _expanded_source_addresses(
         if source is not None:
             add_source(source)
         else:
-            # Global hypotheses/definitions are proposition addresses in ``ctx``
-            # but do not have their own HOLE/GOAL line, so #86's original map
-            # could not discover their exact source. If the proposition itself
-            # is already an advertised source handle, it is a mechanically
-            # reachable prerequisite and belongs in the same bounded closure.
+            # Global hypotheses/definitions can be proposition addresses in ``ctx``
+            # without their own HOLE/GOAL line. If the proposition itself is already
+            # advertised, it belongs in the same mechanically bounded closure.
             add_source(proposition)
 
     for address in requested:
@@ -144,7 +132,6 @@ def _expanded_source_addresses(
             add_source(address)
         else:
             visit(proposition)
-
     return tuple(expanded)
 
 
@@ -152,23 +139,70 @@ class ProofReviewProtocolError(RuntimeError):
     """Raised when a proof-language review violates Thorn's bounded protocol."""
 
 
+class ProofReviewItem(BaseModel):
+    """One local question or concern carried across the single rescue boundary."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    id: ReviewItemId
+    kind: ReviewItemKind
+    summary: str = Field(min_length=1)
+
+
+class ProofReviewDisposition(BaseModel):
+    """Explicit final accounting for one carried review item."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    item_id: ReviewItemId
+    status: ReviewDispositionStatus
+    explanation: str = Field(min_length=1)
+    finding: CandidateFinding | None = None
+
+    @model_validator(mode="after")
+    def _validate_finding(self) -> ProofReviewDisposition:
+        if self.status == "discharged" and self.finding is not None:
+            raise ValueError("discharged review items must not produce a finding")
+        if self.status in {"confirmed", "revised"} and self.finding is None:
+            raise ValueError(f"{self.status} review items must produce a finding")
+        return self
+
+
 class ProofReviewModelResponse(BaseModel):
     """One structured model response in the proof-language review protocol."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
-
     action: ReviewAction
     findings: tuple[CandidateFinding, ...] = ()
     source_addresses: tuple[SourceAddress, ...] = ()
+    review_items: tuple[ProofReviewItem, ...] = ()
+    source_review_item_ids: tuple[ReviewItemId, ...] = ()
+    dispositions: tuple[ProofReviewDisposition, ...] = ()
 
     @model_validator(mode="after")
     def _validate_action_payload(self) -> ProofReviewModelResponse:
-        if self.action == "review" and self.source_addresses:
-            raise ValueError("review responses must not request source")
-        if self.action == "need_source" and self.findings:
-            raise ValueError("source requests must not include findings")
-        if self.action == "need_source" and not self.source_addresses:
+        if self.action == "review":
+            if self.source_addresses:
+                raise ValueError("review responses must not request source")
+            if self.review_items or self.source_review_item_ids:
+                raise ValueError("review responses must not introduce carried review state")
+            return self
+        if self.findings:
+            raise ValueError("source requests must not include final findings")
+        if self.dispositions:
+            raise ValueError("source requests must not include final dispositions")
+        if not self.source_addresses:
             raise ValueError("source requests must contain at least one address")
+        if not self.review_items:
+            raise ValueError("source requests must contain explicit review items")
+        ids = tuple(item.id for item in self.review_items)
+        expected = tuple(f"R{index}" for index in range(1, len(ids) + 1))
+        if ids != expected:
+            raise ValueError("review item identities must be the canonical sequence R1, R2, ...")
+        if not self.source_review_item_ids:
+            raise ValueError("source requests must identify which review items motivate rescue")
+        if len(set(self.source_review_item_ids)) != len(self.source_review_item_ids):
+            raise ValueError("source-request review item identities must be unique")
+        unknown = [item_id for item_id in self.source_review_item_ids if item_id not in ids]
+        if unknown:
+            raise ValueError(
+                "source request references unknown review item identities: " + ", ".join(unknown)
+            )
         return self
 
     def canonical_json(self) -> str:
@@ -181,45 +215,74 @@ class ProofReviewModelResponse(BaseModel):
 
 
 @lru_cache(maxsize=256)
+def _carried_disposition_model(
+    carried_review_item_ids: tuple[str, ...],
+) -> type[ProofReviewDisposition]:
+    item_literal: Any = cast(Any, Literal)[carried_review_item_ids]
+    return create_model(
+        "ProofReviewDisposition",
+        __base__=ProofReviewDisposition,
+        item_id=(item_literal, ...),
+    )
+
+
+@lru_cache(maxsize=256)
 def _closed_world_response_model(
     allowed_source_addresses: tuple[str, ...],
     max_source_addresses: int,
     source_rescue_allowed: bool,
+    stage: ReviewStage,
+    carried_review_item_ids: tuple[str, ...],
 ) -> type[ProofReviewModelResponse]:
-    """Build the existing response shape with request-specific source typing.
-
-    The generated class deliberately keeps the stable ``ProofReviewModelResponse``
-    schema title. The fingerprint therefore records protocol content (the finite
-    allowed values and request cap), not an incidental generated Python name.
-    """
-
-    if not source_rescue_allowed or not allowed_source_addresses:
-        model = create_model(
+    """Build the semantic response shape with request-specific protocol typing."""
+    if stage == "rescue":
+        disposition_model = _carried_disposition_model(carried_review_item_ids)
+        dispositions_type: Any = tuple[disposition_model, ...]
+        return create_model(
             "ProofReviewModelResponse",
             __base__=ProofReviewModelResponse,
             action=(Literal["review"], ...),
             source_addresses=(tuple[()], ()),
+            review_items=(tuple[()], ()),
+            source_review_item_ids=(tuple[()], ()),
+            dispositions=(
+                dispositions_type,
+                Field(
+                    ...,
+                    min_length=len(carried_review_item_ids),
+                    max_length=len(carried_review_item_ids),
+                ),
+            ),
         )
-        return model
+
+    common_fields: dict[str, tuple[Any, Any]] = {"dispositions": (tuple[()], ())}
+    if not source_rescue_allowed or not allowed_source_addresses:
+        return create_model(
+            "ProofReviewModelResponse",
+            __base__=ProofReviewModelResponse,
+            action=(Literal["review"], ...),
+            source_addresses=(tuple[()], ()),
+            review_items=(tuple[()], ()),
+            source_review_item_ids=(tuple[()], ()),
+            **common_fields,
+        )
 
     address_literal: Any = cast(Any, Literal)[allowed_source_addresses]
     source_addresses_type: Any = tuple[address_literal, ...]
-    model = create_model(
+    return create_model(
         "ProofReviewModelResponse",
         __base__=ProofReviewModelResponse,
         source_addresses=(
             source_addresses_type,
             Field(default=(), max_length=max_source_addresses),
         ),
+        **common_fields,
     )
-    return model
 
 
 class ProofReviewTurnRequest(BaseModel):
     """Provider-neutral description of one transport turn and response contract."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
-
     protocol_version: Literal["thorn-proof-review/1"] = PROTOCOL_VERSION
     representation: Representation
     stage: ReviewStage
@@ -247,18 +310,21 @@ class ProofReviewTurnRequest(BaseModel):
     def _validate_stage(self) -> ProofReviewTurnRequest:
         if self.stage == "initial" and self.requested_source_addresses:
             raise ValueError("initial turns cannot contain requested source addresses")
-        if (
-            self.stage == "initial"
-            and (self.initial_user_content is not None or self.prior_response is not None)
+        if self.stage == "initial" and (
+            self.initial_user_content is not None or self.prior_response is not None
         ):
             raise ValueError("initial turns cannot contain rescue transcript fields")
         if self.stage == "rescue" and not self.requested_source_addresses:
             raise ValueError("rescue turns require source addresses")
-        if (
-            self.stage == "rescue"
-            and (self.initial_user_content is None or self.prior_response is None)
+        if self.stage == "rescue" and (
+            self.initial_user_content is None or self.prior_response is None
         ):
             raise ValueError("rescue turns require the exact initial turn and prior response")
+        if self.stage == "rescue" and self.prior_response is not None:
+            if self.prior_response.action != "need_source":
+                raise ValueError("rescue prior response must be the source-request turn")
+            if not self.prior_response.review_items:
+                raise ValueError("rescue prior response must contain carried review state")
         if self.stage == "rescue" and self.source_rescue_allowed:
             raise ValueError("source rescue is exhausted after the first request")
         if self.stage == "rescue" and self.allowed_source_addresses:
@@ -269,26 +335,27 @@ class ProofReviewTurnRequest(BaseModel):
             raise ValueError("enabled source rescue requires a positive source-address cap")
         return self
 
-    def response_model(self) -> type[ProofReviewModelResponse]:
-        """Return the structured-output model for this exact turn contract."""
+    def carried_review_item_ids(self) -> tuple[str, ...]:
+        if self.stage != "rescue" or self.prior_response is None:
+            return ()
+        return tuple(item.id for item in self.prior_response.review_items)
 
+    def response_model(self) -> type[ProofReviewModelResponse]:
         return _closed_world_response_model(
             self.allowed_source_addresses,
             self.max_source_addresses,
             self.source_rescue_allowed,
+            self.stage,
+            self.carried_review_item_ids(),
         )
 
     def response_schema(self) -> dict[str, object]:
-        """Return the deterministic provider-neutral effective response schema."""
-
         return self.response_model().model_json_schema()
 
 
 class ProofLanguageReviewRequest(BaseModel):
     """Thorn-owned request for semantic review over one ``thorn-proof/1`` packet."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
-
     protocol_version: Literal["thorn-proof-review/1"] = PROTOCOL_VERSION
     document: LLMProofLanguage
     allow_source_rescue: bool = True
@@ -305,12 +372,40 @@ class ProofReviewTransport(Protocol):
     def review_proof_turn(self, request: ProofReviewTurnRequest) -> ProofReviewModelResponse: ...
 
 
+def _validate_rescue_accountability(
+    request: ProofReviewTurnRequest,
+    response: ProofReviewModelResponse,
+) -> None:
+    if request.stage != "rescue":
+        if response.dispositions:
+            raise ProofReviewProtocolError("initial review responses cannot contain dispositions")
+        return
+    expected = request.carried_review_item_ids()
+    disposition_ids = tuple(item.item_id for item in response.dispositions)
+    if len(set(disposition_ids)) != len(disposition_ids):
+        raise ProofReviewProtocolError("a carried review item was dispositioned more than once")
+    unknown = [item_id for item_id in disposition_ids if item_id not in expected]
+    if unknown:
+        raise ProofReviewProtocolError(
+            "final response disposition references unknown review item: " + ", ".join(unknown)
+        )
+    missing = [item_id for item_id in expected if item_id not in disposition_ids]
+    if missing:
+        raise ProofReviewProtocolError(
+            "final response omitted carried review item: " + ", ".join(missing)
+        )
+    reused = [finding.id for finding in response.findings if finding.id in expected]
+    if reused:
+        raise ProofReviewProtocolError(
+            "new finding reuses a carried review identity: " + ", ".join(reused)
+        )
+
+
 def validate_proof_review_response(
     request: ProofReviewTurnRequest,
     response: ProofReviewModelResponse,
 ) -> ProofReviewModelResponse:
-    """Validate and normalize a response against the request-specific source contract."""
-
+    """Validate and normalize a response against this exact turn contract."""
     if response.action == "need_source":
         if not request.source_rescue_allowed:
             raise ProofReviewProtocolError("model requested source but source rescue is disabled")
@@ -332,7 +427,17 @@ def validate_proof_review_response(
                 "source address was not advertised in the initial packet: "
                 + ", ".join(unadvertised)
             )
-    return ProofReviewModelResponse.model_validate(response.model_dump(mode="python"))
+
+    _validate_rescue_accountability(request, response)
+    try:
+        effective = request.response_model().model_validate(response.model_dump(mode="python"))
+    except ValidationError as exc:
+        raise ProofReviewProtocolError(
+            f"model response violates the {request.stage} proof-review contract: {exc}"
+        ) from exc
+    normalized = ProofReviewModelResponse.model_validate(effective.model_dump(mode="python"))
+    _validate_rescue_accountability(request, normalized)
+    return normalized
 
 
 def _content_fingerprint(representation: Representation, content: str) -> str:
@@ -376,9 +481,7 @@ def build_raw_review_turn(content: str) -> ProofReviewTurnRequest:
     )
 
 
-def build_proof_review_turn(
-    request: ProofLanguageReviewRequest,
-) -> ProofReviewTurnRequest:
+def build_proof_review_turn(request: ProofLanguageReviewRequest) -> ProofReviewTurnRequest:
     document = request.document
     allowed_source_addresses = (
         advertised_source_addresses(document) if request.allow_source_rescue else ()
@@ -462,23 +565,31 @@ def build_rescue_turn(
     )
 
 
+def _attack_report_from_response(response: ProofReviewModelResponse) -> AttackReport:
+    carried_findings = [
+        disposition.finding
+        for disposition in response.dispositions
+        if disposition.finding is not None
+    ]
+    return AttackReport(findings=[*carried_findings, *response.findings])
+
+
 def review_proof_language(
     request: ProofLanguageReviewRequest,
     transport: ProofReviewTransport,
 ) -> AttackReport:
     """Review a proof-language packet with at most one exact source-rescue round."""
-
     initial_turn = build_proof_review_turn(request)
     first = validate_proof_review_response(
         initial_turn,
         transport.review_proof_turn(initial_turn),
     )
     if first.action == "review":
-        return AttackReport(findings=list(first.findings))
+        return _attack_report_from_response(first)
 
     rescue_turn = build_rescue_turn(request, initial_turn, first)
     second = transport.review_proof_turn(rescue_turn)
     if second.action != "review":
         raise ProofReviewProtocolError("a second source-rescue request is not allowed")
     second = validate_proof_review_response(rescue_turn, second)
-    return AttackReport(findings=list(second.findings))
+    return _attack_report_from_response(second)
