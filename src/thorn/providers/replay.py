@@ -6,7 +6,11 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
-from thorn.proof_language_review import ProofReviewModelResponse, ProofReviewTurnRequest
+from thorn.proof_language_review import (
+    ProofReviewModelResponse,
+    ProofReviewTurnRequest,
+    validate_proof_review_response,
+)
 from thorn.providers.base import EvaluationProvider
 from thorn.providers.request_envelope import (
     ProviderRequestEnvelope,
@@ -135,7 +139,10 @@ class RecordingProvider:
     ) -> ProofReviewModelResponse:
         envelope = proof_review_request_envelope(request, self.model)
         before = RecordedUsage.snapshot(self._delegate)
-        response = self._delegate.review_proof_turn(request)
+        response = validate_proof_review_response(
+            request,
+            self._delegate.review_proof_turn(request),
+        )
         usage = RecordedUsage.snapshot(self._delegate).minus(before)
         self._write(envelope, response, usage)
         return response
@@ -217,7 +224,8 @@ class ReplayProvider:
         request: ProofReviewTurnRequest,
     ) -> ProofReviewModelResponse:
         exchange = self._load(proof_review_request_envelope(request, self.model))
-        response = ProofReviewModelResponse.model_validate(exchange.response)
+        response = request.response_model().model_validate(exchange.response)
+        response = validate_proof_review_response(request, response)
         self._record_hit(exchange)
         return response
 

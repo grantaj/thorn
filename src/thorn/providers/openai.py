@@ -5,7 +5,11 @@ from typing import Any, cast
 from openai import OpenAI
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
-from thorn.proof_language_review import ProofReviewModelResponse, ProofReviewTurnRequest
+from thorn.proof_language_review import (
+    ProofReviewModelResponse,
+    ProofReviewTurnRequest,
+    validate_proof_review_response,
+)
 from thorn.providers.request_envelope import (
     attack_request_envelope,
     defense_request_envelope,
@@ -71,13 +75,15 @@ class OpenAIProvider:
         response = self.client.responses.parse(
             model=self.model,
             input=cast(Any, envelope.input_messages()),
-            text_format=ProofReviewModelResponse,
+            text_format=request.response_model(),
             max_output_tokens=envelope.max_output_tokens,
         )
         self._record_usage(response)
         if response.output_parsed is None:
             raise RuntimeError("proof-language reviewer returned no structured result")
-        return response.output_parsed
+        if not isinstance(response.output_parsed, ProofReviewModelResponse):
+            raise RuntimeError("proof-language reviewer returned the wrong structured result")
+        return validate_proof_review_response(request, response.output_parsed)
 
     def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
         envelope = defense_request_envelope(unit, findings, self.model)
