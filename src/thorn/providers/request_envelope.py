@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
-from thorn.proof_language_review import ProofReviewModelResponse, ProofReviewTurnRequest
+from thorn.proof_language_review import ProofReviewTurnRequest
 from thorn.semantic_review_compact import render_compact_semantic_review_request
 from thorn.semantic_review_render import SemanticReviewRequest, render_semantic_review_request
 
@@ -155,7 +155,7 @@ def proof_review_request_envelope(
         model=model,
         system_prompt=system_prompt,
         user_content=request.user_content,
-        response_schema=ProofReviewModelResponse.model_json_schema(),
+        response_schema=request.response_schema(),
         protocol_version=request.protocol_version,
         representation=request.representation,
         stage=request.stage,
