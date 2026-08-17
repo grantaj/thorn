@@ -20,7 +20,18 @@ from thorn.models import CandidateFinding, Severity, TheoremUnit
 from thorn.proof_visualizer import write_proof_visualizer_html
 from thorn.report import ProofReviewReportInput, ReviewExecution, build_report
 from thorn.report_html import write_report_html
-from thorn.review_workflow import PreparedProofReview, prepare_proof_review, run_proof_review
+from thorn.review_cache import (
+    ProofReviewCache,
+    ReviewCacheDecision,
+    ReviewCacheStatus,
+    ReviewCacheSummary,
+)
+from thorn.review_workflow import (
+    PreparedProofReview,
+    prepare_proof_review,
+    run_cached_proof_review,
+    run_proof_review,
+)
 from thorn.semantic_transformations import SemanticTransformationIR
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
@@ -56,13 +67,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-cache",
         action="store_true",
-        help=argparse.SUPPRESS,
+        help="disable dependency-aware semantic-review cache reuse",
     )
     parser.add_argument(
         "--cache-dir",
         type=Path,
         default=Path(".thorn/cache"),
-        help=argparse.SUPPRESS,
+        help="semantic-review cache directory (default: .thorn/cache)",
     )
     parser.add_argument("--min-confidence", type=float, default=0.65)
     parser.add_argument("--fail-on", choices=("never", "error", "warning"), default="error")
@@ -178,9 +189,15 @@ def _print_review_text(reviews: list[ProofReviewReportInput], threshold: float) 
         print()
 
 
-def _print_review_json(reviews: list[ProofReviewReportInput], threshold: float) -> None:
+def _print_review_json(
+    reviews: list[ProofReviewReportInput],
+    threshold: float,
+    *,
+    cache_summary: ReviewCacheSummary | None = None,
+    cache_decisions: tuple[ReviewCacheDecision, ...] = (),
+) -> None:
     visible = _visible_proof_findings(reviews, threshold)
-    payload = {
+    payload: dict[str, object] = {
         "mode": "review",
         "representation": "thorn-proof/1",
         "protocol": "thorn-proof-review/2",
@@ -195,6 +212,14 @@ def _print_review_json(reviews: list[ProofReviewReportInput], threshold: float) 
             for review, finding in visible
         ],
     }
+    if cache_summary is not None:
+        payload["cache"] = {
+            "enabled": True,
+            "summary": cache_summary.model_dump(mode="json"),
+            "decisions": [item.model_dump(mode="json") for item in cache_decisions],
+        }
+    else:
+        payload["cache"] = {"enabled": False}
     print(json.dumps(payload, indent=2))
 
 
@@ -384,6 +409,15 @@ def _emit_lean(
     return 0
 
 
+def _cache_summary_text(summary: ReviewCacheSummary) -> str:
+    return (
+        f"thorn: semantic review cache: {summary.reused_units} reused, "
+        f"{summary.rechecked_units} rechecked; avoided "
+        f"{summary.provider_requests_avoided} provider requests "
+        f"(~{summary.estimated_input_tokens_avoided} input tokens)"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     mode, args = _parse_mode(argv)
     if not 0.0 <= args.min_confidence <= 1.0:
@@ -523,6 +557,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     provider = OpenAIProvider(model=args.model)
+    review_cache = None if args.no_cache else ProofReviewCache(args.cache_dir.expanduser())
+    cache_decisions: list[ReviewCacheDecision] = []
     proof_reviews: list[ProofReviewReportInput] = []
     for index, unit in enumerate(units, start=1):
         if args.format == "text":
@@ -532,11 +568,28 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
         prepared = prepared_by_result[unit.identifier]
+        execution = ReviewExecution.LIVE
         try:
-            completed = run_proof_review(prepared, provider)
+            if review_cache is None:
+                completed = run_proof_review(prepared, provider)
+                cache_decision = None
+            else:
+                incremental = run_cached_proof_review(prepared, provider, review_cache)
+                completed = incremental.review
+                cache_decision = incremental.cache
+                cache_decisions.append(cache_decision)
+                if cache_decision.status == ReviewCacheStatus.REUSED:
+                    execution = ReviewExecution.CACHE
         except Exception as exc:  # provider/network/protocol failures become CLI diagnostics
             print(f"thorn: review failed for {unit.identifier}: {exc}", file=sys.stderr)
             return 2
+
+        if args.format == "text" and cache_decision is not None:
+            print(
+                f"thorn: {unit.identifier}: {cache_decision.status.value} "
+                f"({cache_decision.reason.value})",
+                file=sys.stderr,
+            )
 
         source = unit.proof_range or unit.statement_range
         proof_reviews.append(
@@ -551,13 +604,26 @@ def main(argv: list[str] | None = None) -> int:
                 rescue_turn=completed.rescue_turn,
                 document=prepared.document,
                 model=args.model,
-                execution=ReviewExecution.LIVE,
+                execution=execution,
                 source=source,
             )
         )
 
+    cache_summary = (
+        ReviewCacheSummary.from_decisions(tuple(cache_decisions))
+        if review_cache is not None
+        else None
+    )
+    if cache_summary is not None and args.format == "text":
+        print(_cache_summary_text(cache_summary), file=sys.stderr)
+
     if args.format == "json":
-        _print_review_json(proof_reviews, args.min_confidence)
+        _print_review_json(
+            proof_reviews,
+            args.min_confidence,
+            cache_summary=cache_summary,
+            cache_decisions=tuple(cache_decisions),
+        )
     else:
         _print_review_text(proof_reviews, args.min_confidence)
 
