@@ -149,4 +149,7 @@ def test_review_contract_forbids_converting_recovery_uncertainty_to_defect() -> 
     assert "Never report a defect solely because" in initial.user_content
     assert "FINAL_RESCUE_POLICY" in rescue.user_content
     assert "do not convert that uncertainty into a mathematical finding" in rescue.user_content
-    assert "Use unresolved when the bounded evidence still does not settle an item" in rescue.user_content
+    assert (
+        "Use unresolved when the bounded evidence still does not settle an item"
+        in rescue.user_content
+    )
