@@ -1,0 +1,71 @@
+{
+  "format_version": 1,
+  "issue": 101,
+  "assurance_revision": "79dc8b5986b0242240fcc2e5ab0de7437a08a9ff",
+  "defect_invariant": "Every defective paper claims one uniform index for x^n on [0,1), while the domain still accumulates at the excluded endpoint 1.",
+  "control": {
+    "id": "C0",
+    "path": "clean_control.tex",
+    "source_sha256": "d5beef31dad9fe8478a2d819f498ce7bfafaab23f2f4dfa9d017e43eb160429f",
+    "target": "thm:uniform-decay",
+    "role": "clean_control",
+    "required_source_fragments": [
+      "I_\\rho=[0,\\rho]",
+      "compact interval"
+    ]
+  },
+  "variants": [
+    {
+      "id": "B0",
+      "parent": null,
+      "path": "baseline.tex",
+      "source_sha256": "cea3e0ea215fb7c6cb3d7823ad747f251605e41f823b26bd18529a8d0d7bbf45",
+      "target": "thm:uniform-decay",
+      "attack_family": "baseline",
+      "hypothesis": "Establish the ordinary-writing baseline and locate the uniformity/compactness defect.",
+      "required_source_fragments": [
+        "I=[0,1)",
+        "bounded interval"
+      ]
+    },
+    {
+      "id": "A1",
+      "parent": "B0",
+      "path": "variant_lemma_laundering.tex",
+      "source_sha256": "36f1da32d992f02c74093deeb55158a4b1e5716965282449da77adcacd6df2ff",
+      "target": "thm:uniform-decay",
+      "attack_family": "lemma_laundering",
+      "hypothesis": "Move the false finite-subcover step upstream so the main theorem looks like a routine result application.",
+      "required_source_fragments": [
+        "I=[0,1)",
+        "bounded interval"
+      ]
+    },
+    {
+      "id": "A2",
+      "parent": "B0",
+      "path": "variant_prose_uniformity.tex",
+      "source_sha256": "8621964954aadd7d85c6b6310d782be5073360e5f1a7ffb30a95e393d3795eff",
+      "target": "thm:uniform-decay",
+      "attack_family": "prose_quantifier_and_distant_convention",
+      "hypothesis": "Express the uniform quantifier only through an ordinary prose-defined property and test whether its authoritative definition remains represented or source-reachable.",
+      "required_source_fragments": [
+        "0\\leq x<1",
+        "depending on the tolerance but not"
+      ]
+    },
+    {
+      "id": "A3",
+      "parent": "B0",
+      "path": "variant_citation_laundering.tex",
+      "source_sha256": "f53d7c5eed1f0145406c3c4dda50680a852b14c2c4cd3705c17940ec5f27f403",
+      "target": "thm:uniform-decay",
+      "attack_family": "theorem_application_laundering",
+      "hypothesis": "Present the bad finite-subcover step as an application of a correctly stated finite-cover principle outside its hypotheses.",
+      "required_source_fragments": [
+        "I=[0,1)",
+        "finite-cover principle"
+      ]
+    }
+  ]
+}

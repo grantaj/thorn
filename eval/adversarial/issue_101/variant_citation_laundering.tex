@@ -1,0 +1,55 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+
+\title{A uniform estimate for geometric response profiles}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Setup}
+
+Let \(I=[0,1)\) and \(a_n(x)=x^n\). Recall the finite-cover principle in
+the form used below: every open cover of a compact interval admits a finite
+subcover.
+
+\begin{lemma}\label{lem:pointwise-neighbourhood}
+For every \(x\in I\) and \(\varepsilon>0\), there are \(N_x\) and a
+relative open neighbourhood \(U_x\) of \(x\) such that
+\[
+ y^n<\varepsilon \qquad(y\in U_x,\ n\geq N_x).
+\]
+\end{lemma}
+
+\begin{proof}
+Choose \(N_x\) with \(x^{N_x}<\varepsilon\), which is possible because
+\(x^n\to0\) for every fixed \(x<1\). Continuity of \(y^{N_x}\) gives
+\(U_x\), and \(y^n\leq y^{N_x}\) for \(n\geq N_x\).
+\end{proof}
+
+\section{Uniform estimate}
+
+\begin{theorem}\label{thm:uniform-decay}
+For every \(\varepsilon>0\) there is \(N\) such that
+\[
+ x^n<\varepsilon
+ \qquad\text{for all }x\in I\text{ and all }n\geq N.
+\]
+\end{theorem}
+
+\begin{proof}
+Fix \(\varepsilon>0\) and use Lemma~\ref{lem:pointwise-neighbourhood}.
+The sets \(U_x\) form an open cover of the bounded interval \(I\).
+By the finite-cover principle, choose
+\(U_{x_1},\ldots,U_{x_m}\) covering \(I\). With
+\(N=\max_j N_{x_j}\), any \(x\in I\) lies in some \(U_{x_j}\), and for
+\(n\geq N\),
+\[
+ x^n\leq x^{N_{x_j}}<\varepsilon.
+\]
+\end{proof}
+
+\end{document}
