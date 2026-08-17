@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "experiment": "post-90-v2-sentinel",
+  "issue": 90,
+  "frozen": false,
+  "description": "Matched two-case transfer sentinel for the post-#87/#88/#89/#90 thorn-proof-review/2 boundary. Freeze all mathematical fixtures, prompt bytes, model/safety settings, and six initial A/B/C request contracts before any live call; do not tune after outcomes.",
+  "thorn_base_revision": "c88572645bca494c79922ee8d4b8faae13be3a4b",
+  "prompt_version": "proof_language_reviewer_v2",
+  "protocol_version": "thorn-proof-review/2",
+  "model": "gpt-5.6",
+  "seed": 90,
+  "max_output_tokens": 4096,
+  "sdk_max_retries": 0,
+  "max_live_requests": 8,
+  "representation_arms": [
+    "raw",
+    "proof_ir",
+    "proof_ir_rescue"
+  ],
+  "semantic_prompt_sha256": null,
+  "file_sha256": {},
+  "initial_requests": {},
+  "intended_scoring": {
+    "primary": [
+      "defect_explanation_correct",
+      "clean_control_has_no_mathematical_finding",
+      "protocol_state_is_accountable"
+    ],
+    "defect_rule": "A defect result counts as correct only if the final review identifies that the proof establishes existence but not uniqueness, or gives an equivalent mathematical objection. Merely citing an open GOAL, '?' marker, or parser uncertainty is not correct. The two square-root witnesses are especially strong evidence.",
+    "clean_rule": "The clean result counts as correct only with no mathematical finding. Parser or recovery uncertainty must not be converted into a defect. A final unresolved review item is inconclusive rather than a clean success.",
+    "rescue_rule": "Source rescue is optional. If used, source addresses must come from the initial closed-world advertised set, carried RV items must receive exactly one final disposition, and an independently recognized concern must not silently disappear.",
+    "decision_gate": {
+      "green": "Raw A and rescue-capable C both correctly identify the defect, both keep the clean control free of mathematical findings, and C has no protocol/state failure. B is diagnostic rather than gating.",
+      "yellow": "Raw A succeeds but C misses the defect, leaves the clean case unresolved, or otherwise cannot complete despite faithful bounded evidence.",
+      "red": "C produces a mathematical false positive on the clean control, violates the closed-world/state protocol, or loses a previously explicit independent concern across rescue."
+    },
+    "no_tuning_rule": "No fixture, prompt, schema, scoring rule, model, output cap, retry policy, or request contract may be changed after the first live request. Any failure is diagnosed from exact recording/replay before a new separately frozen experiment."
+  },
+  "cases": [
+    {
+      "metadata": "eval/proof-review-v2-sentinel/clean.json",
+      "pair": "existence-versus-uniqueness-transfer",
+      "role": "clean",
+      "expected_issue": "clean control: the theorem claims existence only and the proof supplies an explicit witness"
+    },
+    {
+      "metadata": "eval/proof-review-v2-sentinel/defect.json",
+      "pair": "existence-versus-uniqueness-transfer",
+      "role": "defect",
+      "expected_issue": "the theorem claims uniqueness, but the proof establishes existence only; both positive and negative square roots satisfy the defined relation"
+    }
+  ]
+}

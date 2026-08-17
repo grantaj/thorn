@@ -1,0 +1,31 @@
+{
+  "name": "v2 sentinel defect: existence does not prove uniqueness",
+  "kind": "finding",
+  "source": "Post-#90 frozen v2 sentinel",
+  "accepted_categories": [
+    "unsupported_claim",
+    "invalid_implication",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 4,
+  "capability": "detect a theorem-goal uniqueness claim when the recovered proof establishes only existence",
+  "target_identifier": "thm:lift",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "gap",
+  "locality": "proof",
+  "fault_class": "proof_weaker_than_statement",
+  "detection_methods": [
+    "proof-goal comparison",
+    "counterexample"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "proof_establishes_less",
+  "notes": "The proof gives the positive square root only. Both +sqrt(v^2+1) and -sqrt(v^2+1) satisfy the relation, so uniqueness is false."
+}

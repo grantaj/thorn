@@ -1,0 +1,23 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+
+\begin{document}
+
+For real numbers define $u \triangleleft v$ to mean $u^2=v^2+1$.
+
+\begin{theorem}\label{thm:lift}
+For every real number $v$, there exists a real number $u$
+such that $u\triangleleft v$.
+\end{theorem}
+
+\begin{proof}
+Fix $v\in\mathbb R$. Since $v^2+1>0$, let
+\[
+u=\sqrt{v^2+1}.
+\]
+Then $u^2=v^2+1$, so by definition $u\triangleleft v$.
+Thus such a real number $u$ exists.
+\end{proof}
+
+\end{document}
