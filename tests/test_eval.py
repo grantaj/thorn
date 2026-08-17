@@ -67,6 +67,10 @@ class FixtureProvider:
         "thm:scope-extra-assumption": FindingCategory.SCOPE_MISMATCH,
         "thm:scope-surplus-hypothesis": FindingCategory.SCOPE_SURPLUS,
         "thm:scope-stronger-conclusion": FindingCategory.SCOPE_SURPLUS,
+        "thm:riemannian-pythagoras-gap": FindingCategory.HYPOTHESIS_MISMATCH,
+        "thm:ring-square-roots-gap": FindingCategory.HYPOTHESIS_MISMATCH,
+        "thm:modular-integer-cancellation-gap": FindingCategory.HYPOTHESIS_MISMATCH,
+        "thm:arbitrary-dimensional-subsequence-gap": FindingCategory.HYPOTHESIS_MISMATCH,
     }
 
     _INFO_FINDINGS = {

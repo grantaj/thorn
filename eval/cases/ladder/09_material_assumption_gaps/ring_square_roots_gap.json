@@ -1,0 +1,36 @@
+{
+  "name": "Square roots of one over an arbitrary ring",
+  "kind": "finding",
+  "modes": [
+    "review"
+  ],
+  "source": "Synthetic material-assumption defect",
+  "accepted_categories": [
+    "hypothesis_mismatch",
+    "scope_mismatch",
+    "invalid_implication",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 9,
+  "capability": "retain domain sensitivity when a familiar algebraic inference fails in materially broader structures",
+  "target_identifier": "thm:ring-square-roots-gap",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "material_assumption_gap_domain",
+  "detection_methods": [
+    "type/domain check",
+    "counterexample",
+    "counterfactual materiality"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "proof_requires_more",
+  "conclusion_relation": "exact",
+  "notes": "Load-bearing premise: the proof infers one factor vanishes from a zero product. Arbitrary rings may have zero divisors and nontrivial involutions, so a domain/no-zero-divisors premise is materially missing from the claimed scope."
+}

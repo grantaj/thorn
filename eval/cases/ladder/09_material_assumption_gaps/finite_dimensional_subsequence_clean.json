@@ -1,0 +1,30 @@
+{
+  "name": "Bounded subsequences in finite-dimensional normed spaces",
+  "kind": "clean",
+  "modes": [
+    "review"
+  ],
+  "source": "Synthetic material-assumption control",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 9,
+  "capability": "accept compactness reasoning when finite dimensionality is established by theorem scope",
+  "target_identifier": "thm:finite-dimensional-subsequence-clean",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "material_assumption_control_dimension",
+  "detection_methods": [
+    "scope check",
+    "counterfactual materiality"
+  ],
+  "reader_consequence": "not_applicable",
+  "deception_level": "plausible",
+  "downstream_impact": "isolated",
+  "scope_relation": "exact",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "exact",
+  "notes": "Load-bearing premise: bounded closed balls are compact in the finite-dimensional setting used by the proof. The theorem states finite dimensionality, so no additional ambient assumption finding is warranted."
+}

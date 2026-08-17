@@ -1,0 +1,36 @@
+{
+  "name": "Integer-looking cancellation under modular semantics",
+  "kind": "finding",
+  "modes": [
+    "review"
+  ],
+  "source": "Synthetic material-assumption defect",
+  "accepted_categories": [
+    "hypothesis_mismatch",
+    "invalid_implication",
+    "counterexample",
+    "scope_mismatch"
+  ],
+  "minimum_severity": "error",
+  "level": 9,
+  "capability": "make even foundational-looking arithmetic review-relevant when the paper itself changes the semantics in a load-bearing way",
+  "target_identifier": "thm:modular-integer-cancellation-gap",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "material_assumption_gap_foundational",
+  "detection_methods": [
+    "type/domain check",
+    "counterexample",
+    "counterfactual materiality"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "proof_requires_more",
+  "conclusion_relation": "exact",
+  "notes": "Load-bearing premise: cancellation by 2 requires cancellability. In Z/4Z, 2*0=2*2 while 0!=2, so the paper's explicit modular interpretation makes the ordinary-looking cancellation invalid."
+}

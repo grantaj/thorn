@@ -1,0 +1,36 @@
+{
+  "name": "Finite-dimensional compactness silently used in arbitrary dimension",
+  "kind": "finding",
+  "modes": [
+    "review"
+  ],
+  "source": "Synthetic material-assumption defect",
+  "accepted_categories": [
+    "hypothesis_mismatch",
+    "scope_mismatch",
+    "counterexample",
+    "invalid_implication"
+  ],
+  "minimum_severity": "error",
+  "level": 9,
+  "capability": "surface finite-dimensionality when the claimed normed-space scope leaves infinite-dimensional alternatives that invalidate the proof",
+  "target_identifier": "thm:arbitrary-dimensional-subsequence-gap",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "material_assumption_gap_dimension",
+  "detection_methods": [
+    "scope check",
+    "counterexample",
+    "counterfactual materiality"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "proof_requires_more",
+  "conclusion_relation": "exact",
+  "notes": "Load-bearing premise: the proof needs compactness of bounded closed balls, which depends on finite dimensionality. Infinite-dimensional normed spaces are allowed by the statement and materially change the conclusion."
+}

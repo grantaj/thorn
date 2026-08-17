@@ -251,6 +251,29 @@ in either class depending on the direction of the mismatch.
 - an unstated foundational axiom inconsistent with the paper's declared setting;
 - a bad lemma that is present but irrelevant to an independently proved theorem.
 
+### Material assumption gaps
+
+`unstated` is not synonymous with `missing`. Material-assumption review uses a local stopping rule:
+**would plausible alternatives to the unstated premise materially change proof validity, theorem meaning,
+or claimed scope?** If not, Thorn should not surface the premise merely because a formal system would
+require it explicitly. If yes, authoritative source context must adequately determine the intended
+premise; otherwise the unresolved choice is a material assumption gap.
+
+The test matrix distinguishes four cases that should not be collapsed:
+
+| Assumption situation | Meaning | Thorn treatment |
+| --- | --- | --- |
+| explicit hidden dependency | a proof depends on an unstated external result, axiom, or premise whose use can be identified | review the dependency according to its mathematical status |
+| harmless ambient/cultural background | expert-readable context settles the intended convention, or plausible alternatives do not affect this proof judgement | stay quiet; do not descend into foundational formalisation |
+| materially ambiguous or missing ambient prerequisite | a load-bearing proof edge or claimed scope depends on a premise for which plausible alternatives change validity, meaning, or scope, and context does not settle the choice | surface the mathematical assumption gap without claiming the theorem is thereby proved false |
+| formalisation-only assumption | Lean or another formal system needs an explicit type, structure, typeclass, topology, order, or similar witness, but human mathematical context already settles the relevant judgement | keep it a formalisation obligation, not a paper finding |
+
+Materiality is local to the proof edge or claimed scope. Thorn must neither maintain a dictionary of
+"safe" cultural assumptions nor silently select whichever stronger ambient structure makes an argument
+or Lean export succeed. The public paired regressions live in
+`eval/cases/ladder/09_material_assumption_gaps` and exercise geometry, algebra, foundational-looking
+arithmetic, and dimension-sensitive functional analysis through the same context/scope/provenance rule.
+
 ### Semantic emptiness
 
 - a theorem merely restates a definition;

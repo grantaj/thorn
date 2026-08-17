@@ -12,7 +12,7 @@ def test_analysis_expectations_cover_every_analysis_enabled_case_exactly() -> No
     review_cases = [case for case in cases if "review" in case[1].modes]
 
     assert len(analysis_cases) >= 52
-    assert len(review_cases) == 46
+    assert len(review_cases) == 54
     assert set(expectations) == {expectation.name for _, expectation in analysis_cases}
 
 
