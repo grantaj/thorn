@@ -15,6 +15,7 @@ from thorn.llm_proof_language import (
 )
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
+    ProofReviewItem,
     ProofReviewModelResponse,
     ProofReviewProtocolError,
     ProofReviewTurnRequest,
@@ -63,8 +64,35 @@ def _proof_document(path: Path, target: str) -> LLMProofLanguage:
     return project_llm_proof_language(semantic)
 
 
+def _need_payload(*addresses: str) -> dict[str, object]:
+    return {
+        "action": "need_source",
+        "findings": [],
+        "source_addresses": addresses,
+        "review_items": [
+            {
+                "id": "R1",
+                "kind": "question",
+                "summary": "Does the exact source settle this review question?",
+            }
+        ],
+        "source_review_item_ids": ["R1"],
+    }
+
+
 def _need(*addresses: str) -> ProofReviewModelResponse:
-    return ProofReviewModelResponse(action="need_source", source_addresses=addresses)
+    return ProofReviewModelResponse(
+        action="need_source",
+        source_addresses=addresses,
+        review_items=(
+            ProofReviewItem(
+                id="R1",
+                kind="question",
+                summary="Does the exact source settle this review question?",
+            ),
+        ),
+        source_review_item_ids=("R1",),
+    )
 
 
 def _schema_source_values(turn: ProofReviewTurnRequest) -> tuple[str, ...]:
@@ -106,9 +134,7 @@ def test_zero_advertised_handles_make_need_source_unrepresentable() -> None:
     assert schema["properties"]["source_addresses"]["maxItems"] == 0
     assert _schema_source_values(turn) == ()
     with pytest.raises(ValidationError):
-        turn.response_model().model_validate(
-            {"action": "need_source", "findings": [], "source_addresses": []}
-        )
+        turn.response_model().model_validate(_need_payload())
 
 
 def test_one_and_many_advertised_handles_are_exact_schema_values() -> None:
@@ -121,15 +147,11 @@ def test_one_and_many_advertised_handles_are_exact_schema_values() -> None:
 
     assert _schema_source_values(singleton) == ("E1",)
     assert _schema_source_values(many) == ("C1", "E1", "P2")
-    singleton.response_model().model_validate(
-        {"action": "need_source", "findings": [], "source_addresses": ["E1"]}
-    )
+    singleton.response_model().model_validate(_need_payload("E1"))
     addresses = many.allowed_source_addresses
     for size in range(1, len(addresses) + 1):
         for subset in combinations(addresses, size):
-            many.response_model().model_validate(
-                {"action": "need_source", "findings": [], "source_addresses": subset}
-            )
+            many.response_model().model_validate(_need_payload(*subset))
 
 
 @pytest.mark.parametrize(
@@ -156,13 +178,7 @@ def test_issue_91_authoritative_context_handles_are_selectable_by_same_contract(
     turn = build_proof_review_turn(ProofLanguageReviewRequest(document=document))
 
     assert authoritative_address in turn.allowed_source_addresses
-    turn.response_model().model_validate(
-        {
-            "action": "need_source",
-            "findings": [],
-            "source_addresses": [authoritative_address],
-        }
-    )
+    turn.response_model().model_validate(_need_payload(authoritative_address))
 
 
 def test_selectable_universe_may_exceed_eight_but_one_response_may_not() -> None:
@@ -174,29 +190,11 @@ def test_selectable_universe_may_exceed_eight_but_one_response_may_not() -> None
 
     assert set(_schema_source_values(turn)) == set(addresses)
     assert source_schema["maxItems"] == 8
-    turn.response_model().model_validate(
-        {
-            "action": "need_source",
-            "findings": [],
-            "source_addresses": addresses[:8],
-        }
-    )
+    turn.response_model().model_validate(_need_payload(*addresses[:8]))
     with pytest.raises(ValidationError):
-        turn.response_model().model_validate(
-            {
-                "action": "need_source",
-                "findings": [],
-                "source_addresses": addresses[:9],
-            }
-        )
+        turn.response_model().model_validate(_need_payload(*addresses[:9]))
     with pytest.raises(ValidationError):
-        turn.response_model().model_validate(
-            {
-                "action": "need_source",
-                "findings": [],
-                "source_addresses": ("A0",) * 9,
-            }
-        )
+        turn.response_model().model_validate(_need_payload(*(("A0",) * 9)))
 
 
 def test_unadvertised_packet_handles_and_paths_are_rejected_by_effective_model() -> None:
@@ -207,9 +205,7 @@ def test_unadvertised_packet_handles_and_paths_are_rejected_by_effective_model()
         ProofLanguageReviewRequest(document=_document("B1", "SHARED"))
     )
 
-    second.response_model().model_validate(
-        {"action": "need_source", "findings": [], "source_addresses": ["SHARED"]}
-    )
+    second.response_model().model_validate(_need_payload("SHARED"))
     for invalid in (
         "A1",
         "Z99",
@@ -221,13 +217,7 @@ def test_unadvertised_packet_handles_and_paths_are_rejected_by_effective_model()
         "src/paper.tex",
     ):
         with pytest.raises(ValidationError):
-            second.response_model().model_validate(
-                {
-                    "action": "need_source",
-                    "findings": [],
-                    "source_addresses": [invalid],
-                }
-            )
+            second.response_model().model_validate(_need_payload(invalid))
 
     assert "A1" in _schema_source_values(first)
     assert "A1" not in _schema_source_values(second)
