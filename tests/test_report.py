@@ -263,12 +263,12 @@ def test_proof_review_adapter_preserves_need_source_and_replay_metadata(tmp_path
         source_addresses=("S1",),
         review_items=(
             ProofReviewItem(
-                id="R1",
+                id="RV1",
                 kind="question",
                 summary="Does the missing lemma establish the cited premise?",
             ),
         ),
-        source_review_item_ids=("R1",),
+        source_review_item_ids=("RV1",),
     )
     rescue = ProofReviewTurnRequest(
         representation="thorn-proof/1",
