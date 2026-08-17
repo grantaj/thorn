@@ -442,6 +442,15 @@ class ProofReviewTransport(Protocol):
     def review_proof_turn(self, request: ProofReviewTurnRequest) -> ProofReviewModelResponse: ...
 
 
+def _canonical_finding_payload(finding: CandidateFinding) -> str:
+    return json.dumps(
+        finding.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
 def _validate_rescue_accountability(
     request: ProofReviewTurnRequest,
     response: ProofReviewModelResponse,
@@ -474,25 +483,54 @@ def _validate_rescue_accountability(
             "new finding reuses a carried review identity: " + ", ".join(reused)
         )
 
-    final_finding_ids = [
-        *(
-            disposition.finding.id
-            for disposition in response.dispositions
-            if disposition.finding is not None
-        ),
-        *(finding.id for finding in response.findings),
-    ]
-    seen_finding_ids: set[str] = set()
+    carried_by_id: dict[str, CandidateFinding] = {}
     duplicate_finding_ids: list[str] = []
-    for finding_id in final_finding_ids:
-        if finding_id in seen_finding_ids and finding_id not in duplicate_finding_ids:
-            duplicate_finding_ids.append(finding_id)
-        seen_finding_ids.add(finding_id)
+    for disposition in response.dispositions:
+        finding = disposition.finding
+        if finding is None:
+            continue
+        if finding.id in carried_by_id and finding.id not in duplicate_finding_ids:
+            duplicate_finding_ids.append(finding.id)
+        else:
+            carried_by_id[finding.id] = finding
+
+    seen_top_level_ids: set[str] = set()
+    for finding in response.findings:
+        if finding.id in seen_top_level_ids and finding.id not in duplicate_finding_ids:
+            duplicate_finding_ids.append(finding.id)
+        seen_top_level_ids.add(finding.id)
+
+        carried = carried_by_id.get(finding.id)
+        if (
+            carried is not None
+            and _canonical_finding_payload(finding) != _canonical_finding_payload(carried)
+            and finding.id not in duplicate_finding_ids
+        ):
+            duplicate_finding_ids.append(finding.id)
+
     if duplicate_finding_ids:
         raise ProofReviewProtocolError(
             "final response reuses finding identity across rescue accounting: "
             + ", ".join(duplicate_finding_ids)
         )
+
+
+def _normalize_exact_duplicate_carried_findings(
+    request: ProofReviewTurnRequest,
+    response: ProofReviewModelResponse,
+) -> ProofReviewModelResponse:
+    if request.stage != "rescue" or not response.findings:
+        return response
+
+    carried_ids = {
+        disposition.finding.id
+        for disposition in response.dispositions
+        if disposition.finding is not None
+    }
+    findings = tuple(finding for finding in response.findings if finding.id not in carried_ids)
+    if len(findings) == len(response.findings):
+        return response
+    return response.model_copy(update={"findings": findings})
 
 
 def validate_proof_review_response(
@@ -531,6 +569,8 @@ def validate_proof_review_response(
             f"model response violates the {request.stage} proof-review contract: {exc}"
         ) from exc
     normalized = ProofReviewModelResponse.model_validate(effective.model_dump(mode="python"))
+    _validate_rescue_accountability(request, normalized)
+    normalized = _normalize_exact_duplicate_carried_findings(request, normalized)
     _validate_rescue_accountability(request, normalized)
     return normalized
 
