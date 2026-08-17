@@ -104,7 +104,7 @@ def _build_review_state(
 
 
 def _target_content_fingerprint(unit: TheoremUnit) -> str:
-    """Track source-local edits for explanations without making them a reuse gate."""
+    """Track all result-local source edits so reuse decisions can explain ignored prose changes."""
 
     return canonical_fingerprint(
         {
@@ -114,6 +114,19 @@ def _target_content_fingerprint(unit: TheoremUnit) -> str:
             "statement": unit.statement,
             "proof": unit.proof,
             "local_context": unit.local_context,
+            "referenced_results": unit.referenced_results,
+        }
+    )
+
+
+def _target_semantic_fingerprint(unit: TheoremUnit) -> str:
+    """Conservative target gate for source mathematics that recovery must never normalize away."""
+
+    return canonical_fingerprint(
+        {
+            "environment": unit.environment,
+            "statement": unit.statement,
+            "proof": unit.proof,
             "referenced_results": unit.referenced_results,
         }
     )
@@ -200,6 +213,7 @@ def prepare_proof_review(project: ExtractedProject, unit: TheoremUnit) -> Prepar
     provenance = ReviewCacheProvenance(
         result_identifier=unit.identifier,
         target_content_fingerprint=_target_content_fingerprint(unit),
+        target_semantic_fingerprint=_target_semantic_fingerprint(unit),
         packet_fingerprint=document.fingerprint(),
         dependency_snapshot=_dependency_snapshot(project, unit.identifier),
     )
@@ -254,7 +268,11 @@ def _miss_reason(
         return ReviewCacheReason.RECHECK_DEPENDENCY_EDGE_CHANGED
     if old_dependencies.content_by_identifier() != new_dependencies.content_by_identifier():
         return ReviewCacheReason.RECHECK_UPSTREAM_DEPENDENCY_CHANGED
-    if prior.provenance.packet_fingerprint != provenance.packet_fingerprint:
+    if (
+        prior.provenance.target_semantic_fingerprint
+        != provenance.target_semantic_fingerprint
+        or prior.provenance.packet_fingerprint != provenance.packet_fingerprint
+    ):
         return ReviewCacheReason.RECHECK_LOCAL_IR_CHANGED
     if contract_changed:
         return ReviewCacheReason.RECHECK_REVIEW_CONTRACT_CHANGED
