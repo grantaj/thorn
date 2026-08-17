@@ -83,12 +83,12 @@ def test_clean_unusual_notation_definition_reaches_rescue() -> None:
         source_addresses=("P1", "P2"),
         review_items=(
             ProofReviewItem(
-                id="R1",
+                id="RV1",
                 kind="question",
                 summary="Does the authoritative definition settle the notation use?",
             ),
         ),
-        source_review_item_ids=("R1",),
+        source_review_item_ids=("RV1",),
     )
     rescue = build_rescue_turn(request, initial, source_request)
     assert rescue.requested_source_addresses[0] == "D1"
