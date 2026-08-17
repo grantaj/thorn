@@ -383,6 +383,7 @@ def build_proof_review_turn(
     allowed_source_addresses = (
         advertised_source_addresses(document) if request.allow_source_rescue else ()
     )
+    source_rescue_allowed = request.allow_source_rescue and bool(allowed_source_addresses)
     return ProofReviewTurnRequest(
         representation="thorn-proof/1",
         stage="initial",
@@ -391,11 +392,11 @@ def build_proof_review_turn(
             representation="thorn-proof/1",
             packet_fingerprint=document.fingerprint(),
             content=document.render_initial(),
-            source_rescue_allowed=request.allow_source_rescue,
+            source_rescue_allowed=source_rescue_allowed,
         ),
-        source_rescue_allowed=request.allow_source_rescue,
-        allowed_source_addresses=allowed_source_addresses,
-        max_source_addresses=(request.max_source_addresses if request.allow_source_rescue else 0),
+        source_rescue_allowed=source_rescue_allowed,
+        allowed_source_addresses=allowed_source_addresses if source_rescue_allowed else (),
+        max_source_addresses=(request.max_source_addresses if source_rescue_allowed else 0),
     )
 
 
@@ -416,6 +417,11 @@ def build_rescue_turn(
         raise ProofReviewProtocolError("rescue turn requires a structured source request")
     if initial_turn.initial_packet_fingerprint != request.document.fingerprint():
         raise ProofReviewProtocolError("initial turn does not match the proof-language packet")
+    advertised = advertised_source_addresses(request.document)
+    if initial_turn.allowed_source_addresses != advertised:
+        raise ProofReviewProtocolError(
+            "initial turn source-selection contract does not match proof-language packet"
+        )
     if initial_turn.max_source_addresses != request.max_source_addresses:
         raise ProofReviewProtocolError("initial turn does not match the review source-address cap")
 
