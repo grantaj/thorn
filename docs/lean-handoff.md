@@ -1,5 +1,7 @@
 # Lean handoff
 
+> **Implementation contract.** This document describes Thorn's currently implemented Lean backend and supported subset. For the broader product/design thesis — selective local formal replay as proof-quality evidence rather than arbitrary LaTeX-to-Lean translation — see [`lean-bridge.md`](lean-bridge.md). Issue #115 is evaluating that thesis on ordinary mathematical proofs before broader Lean capability work is justified.
+
 Thorn's Lean backend is a deliberately small proof-of-life over canonical Proof IR. It does not parse LaTeX, source prose, or `thorn-proof/1` itself. The public path is:
 
 ```text
@@ -59,3 +61,11 @@ Source text is not an input to Lean rendering. Source addresses are carried only
 The acceptance toolchain is pinned by the repository's `lean-toolchain` file to Lean 4.30.0. The dedicated keyless `Lean contract` workflow installs that toolchain, keeps `OPENAI_API_KEY` blank, regenerates Lean through Thorn's real frontend/canonical pipeline, and invokes the actual `lean` executable on complete positive cases, including the onboarding example.
 
 The original paired negative fixture differs only in the available premise. Its missing precondition remains a formalisation obligation and its export status remains `partial`.
+
+## Current boundary versus future product shape
+
+The current exporter and `thorn lean` command are intentionally result-oriented proofs of life. Their existence should not be read as a commitment to whole-theorem automatic translation as Thorn's long-term formalisation unit.
+
+The hypothesis in [`lean-bridge.md`](lean-bridge.md) and issue #115 is that a more useful boundary may be a mechanically closed local proof operation inside an otherwise informal theorem. If the evaluation supports that hypothesis, future implementation should derive such checks from existing canonical proof/transformation semantics while preserving the same no-confidence-laundering and source-provenance rules documented here.
+
+Unsupported neighbouring mathematics must not be silently reconstructed to make a local check possible, and a successful local replay must not be presented as proof of the surrounding theorem. The current CLI exposes only the bounded capability Thorn actually implements today; broader local replay remains an evidence-driven product direction rather than an implied certification claim.
