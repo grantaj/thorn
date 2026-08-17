@@ -1,0 +1,26 @@
+{
+  "name": "v2 sentinel clean: explicit existence witness",
+  "kind": "clean",
+  "source": "Post-#90 frozen v2 sentinel",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 4,
+  "capability": "keep a matched existence proof clean under project-level notation",
+  "target_identifier": "thm:lift",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "matched_existence_control",
+  "detection_methods": [
+    "proof-goal comparison"
+  ],
+  "reader_consequence": "not_applicable",
+  "deception_level": "plausible",
+  "downstream_impact": "isolated",
+  "scope_relation": "exact",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "exact",
+  "notes": "Matched clean control. The explicit positive square-root witness proves the stated existence claim."
+}

@@ -21,6 +21,8 @@ from thorn.proof_language_review import (
     ProofReviewTurnRequest,
     advertised_source_addresses,
     build_proof_review_turn,
+    build_raw_review_turn,
+    build_rescue_turn,
     review_proof_language,
 )
 from thorn.providers.replay import RecordingProvider, ReplayMissError, ReplayProvider
@@ -102,7 +104,20 @@ def _schema_source_values(turn: ProofReviewTurnRequest) -> tuple[str, ...]:
         return ()
     if "enum" in items:
         return tuple(items["enum"])
-    return (items["const"],)
+    if "const" in items:
+        return (items["const"],)
+    return ()
+
+
+def _assert_arrays_have_items(value: object) -> None:
+    if isinstance(value, dict):
+        if value.get("type") == "array":
+            assert "items" in value
+        for nested in value.values():
+            _assert_arrays_have_items(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            _assert_arrays_have_items(nested)
 
 
 class _Transport:
@@ -132,9 +147,25 @@ def test_zero_advertised_handles_make_need_source_unrepresentable() -> None:
     assert turn.allowed_source_addresses == ()
     assert schema["properties"]["action"]["const"] == "review"
     assert schema["properties"]["source_addresses"]["maxItems"] == 0
+    assert schema["properties"]["source_addresses"]["items"]
     assert _schema_source_values(turn) == ()
     with pytest.raises(ValidationError):
         turn.response_model().model_validate(_need_payload())
+
+
+def test_every_review_response_array_declares_transport_items() -> None:
+    no_rescue = build_raw_review_turn("raw theorem and proof")
+    initial = build_proof_review_turn(
+        ProofLanguageReviewRequest(document=_document("E1"))
+    )
+    rescue = build_rescue_turn(
+        ProofLanguageReviewRequest(document=_document("E1")),
+        initial,
+        _need("E1"),
+    )
+
+    for turn in (no_rescue, initial, rescue):
+        _assert_arrays_have_items(turn.response_schema())
 
 
 def test_one_and_many_advertised_handles_are_exact_schema_values() -> None:

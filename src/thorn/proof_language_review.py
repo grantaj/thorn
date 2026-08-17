@@ -268,10 +268,33 @@ def _closed_world_response_model(
 ) -> type[ProofReviewModelResponse]:
     """Build the existing response shape with request-specific protocol typing.
 
+    Every array retains an explicit JSON-Schema ``items`` type, including arrays
+    that are mechanically constrained to length zero. Structured-output transports
+    require array schemas to declare ``items``; ``maxItems: 0`` still makes the
+    empty tuple the only representable value and therefore preserves #88's
+    closed-world source-selection contract.
+
     The generated class deliberately keeps the stable ``ProofReviewModelResponse``
     schema title. The fingerprint therefore records protocol content, not an
     incidental generated Python name.
     """
+
+    empty_source_addresses = (
+        tuple[SourceAddress, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_review_items = (
+        tuple[ProofReviewItem, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_source_review_item_ids = (
+        tuple[ReviewItemId, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_dispositions = (
+        tuple[ProofReviewDisposition, ...],
+        Field(default=(), max_length=0),
+    )
 
     if stage == "rescue":
         disposition_model: Any = _carried_disposition_model(carried_review_item_ids)
@@ -280,9 +303,9 @@ def _closed_world_response_model(
             "ProofReviewModelResponse",
             __base__=ProofReviewModelResponse,
             action=(Literal["review"], ...),
-            source_addresses=(tuple[()], ()),
-            review_items=(tuple[()], ()),
-            source_review_item_ids=(tuple[()], ()),
+            source_addresses=empty_source_addresses,
+            review_items=empty_review_items,
+            source_review_item_ids=empty_source_review_item_ids,
             dispositions=(
                 dispositions_type,
                 Field(
@@ -298,10 +321,10 @@ def _closed_world_response_model(
             "ProofReviewModelResponse",
             __base__=ProofReviewModelResponse,
             action=(Literal["review"], ...),
-            source_addresses=(tuple[()], ()),
-            review_items=(tuple[()], ()),
-            source_review_item_ids=(tuple[()], ()),
-            dispositions=(tuple[()], ()),
+            source_addresses=empty_source_addresses,
+            review_items=empty_review_items,
+            source_review_item_ids=empty_source_review_item_ids,
+            dispositions=empty_dispositions,
         )
 
     address_literal: Any = cast(Any, Literal)[allowed_source_addresses]
@@ -313,7 +336,7 @@ def _closed_world_response_model(
             source_addresses_type,
             Field(default=(), max_length=max_source_addresses),
         ),
-        dispositions=(tuple[()], ()),
+        dispositions=empty_dispositions,
     )
 
 
