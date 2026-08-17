@@ -10,6 +10,7 @@ from thorn.latex import extract_project
 from thorn.llm_proof_language import project_llm_proof_language
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
+    ProofReviewItem,
     ProofReviewModelResponse,
     advertised_source_addresses,
     build_proof_review_turn,
@@ -80,6 +81,14 @@ def test_clean_unusual_notation_definition_reaches_rescue() -> None:
     source_request = ProofReviewModelResponse(
         action="need_source",
         source_addresses=("P1", "P2"),
+        review_items=(
+            ProofReviewItem(
+                id="RV1",
+                kind="question",
+                summary="Does the authoritative definition settle the notation use?",
+            ),
+        ),
+        source_review_item_ids=("RV1",),
     )
     rescue = build_rescue_turn(request, initial, source_request)
     assert rescue.requested_source_addresses[0] == "D1"

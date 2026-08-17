@@ -5,6 +5,7 @@ import pytest
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
+    ProofReviewItem,
     ProofReviewModelResponse,
     ProofReviewProtocolError,
     build_proof_review_turn,
@@ -13,7 +14,18 @@ from thorn.proof_language_review import (
 
 
 def _need(*addresses: str) -> ProofReviewModelResponse:
-    return ProofReviewModelResponse(action="need_source", source_addresses=addresses)
+    return ProofReviewModelResponse(
+        action="need_source",
+        source_addresses=addresses,
+        review_items=(
+            ProofReviewItem(
+                id="RV1",
+                kind="question",
+                summary="Does exact prerequisite source settle this review question?",
+            ),
+        ),
+        source_review_item_ids=("RV1",),
+    )
 
 
 def _chain_document() -> LLMProofLanguage:
@@ -137,3 +149,7 @@ def test_review_contract_forbids_converting_recovery_uncertainty_to_defect() -> 
     assert "Never report a defect solely because" in initial.user_content
     assert "FINAL_RESCUE_POLICY" in rescue.user_content
     assert "do not convert that uncertainty into a mathematical finding" in rescue.user_content
+    assert (
+        "Use unresolved when the bounded evidence still does not settle an item"
+        in rescue.user_content
+    )

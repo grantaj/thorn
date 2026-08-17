@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from importlib.resources import files
 from pathlib import Path
 
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
@@ -9,6 +10,7 @@ from thorn.proof_language_experiment import (
     PROOF_REVIEW_EXPERIMENT_ARMS,
     proof_review_experiment_envelope,
 )
+from thorn.proof_language_review import PROMPT_VERSION, PROTOCOL_VERSION
 from thorn.proof_review_eval import build_proof_review_inventory
 
 
@@ -63,6 +65,7 @@ def test_abc_arms_share_prompt_model_and_provider_contract_without_source_handle
     assert {item.system_prompt for item in envelopes.values()} == {
         envelopes["raw"].system_prompt
     }
+    assert {item.protocol_version for item in envelopes.values()} == {PROTOCOL_VERSION}
     assert {json.dumps(item.response_schema, sort_keys=True) for item in envelopes.values()} == {
         json.dumps(envelopes["raw"].response_schema, sort_keys=True)
     }
@@ -77,6 +80,20 @@ def test_abc_arms_share_prompt_model_and_provider_contract_without_source_handle
     assert envelopes["proof_ir"].user_content.split("\n\n", 1)[1] == document.render_initial()
     rescue_payload = envelopes["proof_ir_rescue"].user_content.split("\n\n", 1)[1]
     assert rescue_payload == document.render_initial()
+
+
+def test_current_prompt_and_protocol_are_versioned_separately_from_frozen_v1() -> None:
+    assert PROMPT_VERSION == "proof_language_reviewer_v2"
+    assert PROTOCOL_VERSION == "thorn-proof-review/2"
+    v1 = files("thorn.prompts").joinpath("proof_language_reviewer_v1.md").read_text(
+        encoding="utf-8"
+    )
+    v2 = files("thorn.prompts").joinpath("proof_language_reviewer_v2.md").read_text(
+        encoding="utf-8"
+    )
+    assert "identified locally as `RV1`, `RV2`" not in v1
+    assert "identified locally as `RV1`, `RV2`" in v2
+    assert "`unresolved`" in v2
 
 
 def test_rescue_arm_schema_is_request_specific_when_source_is_advertised() -> None:
@@ -115,8 +132,14 @@ def test_keyless_inventory_builds_packets_without_provider_calls(tmp_path: Path)
     assert inventory["provider_requests"] == 0
     assert inventory["live_requests"] == 0
     assert set(inventory["experiment_arms"]) == set(PROOF_REVIEW_EXPERIMENT_ARMS)
+    assert inventory["manifest_prompt_version"] == "proof_language_reviewer_v1"
+    assert inventory["manifest_protocol_version"] == "thorn-proof-review/1"
+    assert inventory["prompt_version"] == PROMPT_VERSION
+    assert inventory["protocol_version"] == PROTOCOL_VERSION
+    assert inventory["historical_frozen_manifest"] is True
+    assert inventory["comparable_to_frozen_paid_run"] is False
     assert inventory["response_schema_policy"] == (
-        "request-specific closed-world source selection over each turn's advertised handles"
+        "request-specific closed-world source selection plus rescue review-state accountability"
     )
     record = inventory["records"][0]
     fingerprints = {record["arms"][arm]["fingerprint"] for arm in PROOF_REVIEW_EXPERIMENT_ARMS}

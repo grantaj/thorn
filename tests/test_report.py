@@ -9,7 +9,11 @@ from thorn.latex import extract_project
 from thorn.lean_export import LeanExport, LeanExportStatus, LeanFormalizationObligation
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.models import CandidateFinding, FindingCategory, Severity
-from thorn.proof_language_review import ProofReviewModelResponse, ProofReviewTurnRequest
+from thorn.proof_language_review import (
+    ProofReviewItem,
+    ProofReviewModelResponse,
+    ProofReviewTurnRequest,
+)
 from thorn.report import (
     AssuranceRegime,
     FormalStatus,
@@ -254,7 +258,18 @@ def test_proof_review_adapter_preserves_need_source_and_replay_metadata(tmp_path
         user_content="initial",
         source_rescue_allowed=True,
     )
-    prior = ProofReviewModelResponse(action="need_source", source_addresses=("S1",))
+    prior = ProofReviewModelResponse(
+        action="need_source",
+        source_addresses=("S1",),
+        review_items=(
+            ProofReviewItem(
+                id="RV1",
+                kind="question",
+                summary="Does the missing lemma establish the cited premise?",
+            ),
+        ),
+        source_review_item_ids=("RV1",),
+    )
     rescue = ProofReviewTurnRequest(
         representation="thorn-proof/1",
         stage="rescue",

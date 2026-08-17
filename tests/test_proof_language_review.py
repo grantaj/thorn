@@ -10,6 +10,8 @@ from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.models import AttackReport
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
+    ProofReviewDisposition,
+    ProofReviewItem,
     ProofReviewModelResponse,
     ProofReviewProtocolError,
     advertised_source_addresses,
@@ -98,7 +100,31 @@ def _review() -> ProofReviewModelResponse:
 
 
 def _need(*addresses: str) -> ProofReviewModelResponse:
-    return ProofReviewModelResponse(action="need_source", source_addresses=addresses)
+    return ProofReviewModelResponse(
+        action="need_source",
+        source_addresses=addresses,
+        review_items=(
+            ProofReviewItem(
+                id="RV1",
+                kind="question",
+                summary="Does the exact source settle the unresolved proof step?",
+            ),
+        ),
+        source_review_item_ids=("RV1",),
+    )
+
+
+def _rescue_review() -> ProofReviewModelResponse:
+    return ProofReviewModelResponse(
+        action="review",
+        dispositions=(
+            ProofReviewDisposition(
+                item_id="RV1",
+                status="discharged",
+                explanation="The exact source settles the review question.",
+            ),
+        ),
+    )
 
 
 def test_deterministic_proof_review_request_and_envelope_contains_packet() -> None:
@@ -159,6 +185,7 @@ def test_valid_need_source_returns_only_exact_advertised_addresses() -> None:
     assert "SOURCE @C1" not in rescue.user_content
     assert "R1" not in rescue.user_content
     assert rescue.initial_packet_fingerprint == request.document.fingerprint()
+    assert rescue.prior_response == _need("E1")
 
 
 @pytest.mark.parametrize(
@@ -198,6 +225,14 @@ def test_structured_source_request_rejects_malformed_addresses() -> None:
         ProofReviewModelResponse(
             action="need_source",
             source_addresses=("../paper.tex",),
+            review_items=(
+                ProofReviewItem(
+                    id="RV1",
+                    kind="question",
+                    summary="Question requiring exact source.",
+                ),
+            ),
+            source_review_item_ids=("RV1",),
         )
     with pytest.raises(ValidationError):
         ProofReviewModelResponse(action="need_source")
@@ -246,7 +281,7 @@ def test_rescue_is_tied_to_exact_initial_packet_fingerprint() -> None:
 
 def test_proof_review_record_replay_covers_initial_and_rescue(tmp_path: Path) -> None:
     request = ProofLanguageReviewRequest(document=_document())
-    delegate = _Transport([_need("E1"), _review()])
+    delegate = _Transport([_need("E1"), _rescue_review()])
     recorder = RecordingProvider(delegate, tmp_path)
 
     assert review_proof_language(request, recorder) == AttackReport()

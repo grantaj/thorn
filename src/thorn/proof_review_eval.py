@@ -20,11 +20,18 @@ from thorn.proof_language_experiment import (
     ProofReviewExperimentArm,
     proof_review_experiment_envelope,
 )
-from thorn.proof_language_review import PROTOCOL_VERSION, advertised_source_addresses
+from thorn.proof_language_review import (
+    PROMPT_VERSION,
+    PROTOCOL_VERSION,
+    advertised_source_addresses,
+)
 from thorn.providers.request_envelope import render_theorem_unit
 from thorn.semantic_review_render import build_semantic_review_request
 from thorn.semantic_transformations import build_semantic_transformation_ir
 from thorn.spacy_linguistic import SpacyLinguisticFrontend
+
+_FROZEN_PROMPT_VERSION = "proof_language_reviewer_v1"
+_FROZEN_PROTOCOL_VERSION = "thorn-proof-review/1"
 
 
 class ProofReviewChallengeEntry(BaseModel):
@@ -52,6 +59,8 @@ class ProofReviewChallengeManifest(BaseModel):
 
 
 def load_proof_review_manifest(path: Path) -> ProofReviewChallengeManifest:
+    """Load the immutable #83-era challenge manifest as a historical case set."""
+
     manifest = ProofReviewChallengeManifest.model_validate_json(
         path.read_text(encoding="utf-8")
     )
@@ -59,9 +68,13 @@ def load_proof_review_manifest(path: Path) -> ProofReviewChallengeManifest:
         raise ValueError("experiment manifest must contain a non-empty cases list")
     if manifest.issue != 78 or not manifest.frozen:
         raise ValueError("proof-review challenge must be the frozen issue-78 manifest")
-    if manifest.protocol_version != PROTOCOL_VERSION:
+    if manifest.prompt_version != _FROZEN_PROMPT_VERSION:
         raise ValueError(
-            "manifest protocol version does not match the implemented review protocol"
+            "proof-review challenge prompt freeze does not match the archived v1 contract"
+        )
+    if manifest.protocol_version != _FROZEN_PROTOCOL_VERSION:
+        raise ValueError(
+            "proof-review challenge protocol freeze does not match the archived v1 contract"
         )
     if manifest.representation_arms != PROOF_REVIEW_EXPERIMENT_ARMS:
         raise ValueError("manifest representation arms do not match the frozen A/B/C arms")
@@ -123,7 +136,12 @@ def build_proof_review_inventory(
     model: str,
     structural_only: bool,
 ) -> dict[str, object]:
-    """Construct every frozen initial packet without instantiating a provider."""
+    """Apply the current keyless protocol to the immutable historical case set.
+
+    The archived manifest still records the exact v1 paid experiment contract. Once
+    the review prompt/protocol changes, this inventory is a structural regression
+    inventory over the same cases, not a continuation of that frozen paid condition.
+    """
 
     manifest = load_proof_review_manifest(manifest_path)
     linguistic_frontend = select_linguistic_frontend(
@@ -212,6 +230,10 @@ def build_proof_review_inventory(
         )
 
     schema_hashes = sorted(response_schema_sha256s)
+    comparable_to_frozen_paid_run = (
+        manifest.prompt_version == PROMPT_VERSION
+        and manifest.protocol_version == PROTOCOL_VERSION
+    )
     return {
         "manifest": str(manifest_path),
         "manifest_version": manifest.version,
@@ -219,8 +241,12 @@ def build_proof_review_inventory(
         "frozen": manifest.frozen,
         "thorn_base_revision": manifest.thorn_base_revision,
         "thorn_revision": current_thorn_revision(),
-        "prompt_version": manifest.prompt_version,
-        "protocol_version": manifest.protocol_version,
+        "manifest_prompt_version": manifest.prompt_version,
+        "manifest_protocol_version": manifest.protocol_version,
+        "prompt_version": PROMPT_VERSION,
+        "protocol_version": PROTOCOL_VERSION,
+        "historical_frozen_manifest": True,
+        "comparable_to_frozen_paid_run": comparable_to_frozen_paid_run,
         "model": model,
         "cases": len(records),
         "initial_packets": len(records) * len(PROOF_REVIEW_EXPERIMENT_ARMS),
@@ -229,7 +255,7 @@ def build_proof_review_inventory(
         "response_schema_sha256": schema_hashes[0] if len(schema_hashes) == 1 else None,
         "response_schema_sha256s": schema_hashes,
         "response_schema_policy": (
-            "request-specific closed-world source selection over each turn's advertised handles"
+            "request-specific closed-world source selection plus rescue review-state accountability"
         ),
         "payload_totals": payload_totals,
         "request_totals": totals,

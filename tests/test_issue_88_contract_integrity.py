@@ -5,6 +5,7 @@ import pytest
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
+    ProofReviewItem,
     ProofReviewModelResponse,
     ProofReviewProtocolError,
     advertised_source_addresses,
@@ -67,6 +68,14 @@ def test_source_disclosure_rebinds_stored_contract_to_exact_advertised_packet() 
     source_request = ProofReviewModelResponse(
         action="need_source",
         source_addresses=("H1",),
+        review_items=(
+            ProofReviewItem(
+                id="RV1",
+                kind="question",
+                summary="Does the held source settle this review question?",
+            ),
+        ),
+        source_review_item_ids=("RV1",),
     )
 
     with pytest.raises(
