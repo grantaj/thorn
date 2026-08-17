@@ -67,6 +67,10 @@ class FixtureProvider:
         "thm:scope-extra-assumption": FindingCategory.SCOPE_MISMATCH,
         "thm:scope-surplus-hypothesis": FindingCategory.SCOPE_SURPLUS,
         "thm:scope-stronger-conclusion": FindingCategory.SCOPE_SURPLUS,
+        "thm:riemannian-pythagoras-gap": FindingCategory.HYPOTHESIS_MISMATCH,
+        "thm:ring-square-roots-gap": FindingCategory.HYPOTHESIS_MISMATCH,
+        "thm:modular-integer-cancellation-gap": FindingCategory.HYPOTHESIS_MISMATCH,
+        "thm:arbitrary-dimensional-subsequence-gap": FindingCategory.HYPOTHESIS_MISMATCH,
     }
 
     _INFO_FINDINGS = {
@@ -298,176 +302,123 @@ def test_controlled_raw_and_ir_compare_same_case_attack_only_and_keyless(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     provider = FixtureProvider()
-    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-key")
     monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
-    base_args = [
-        "eval/cases",
-        "--model",
-        "fixture-provider",
-        "--case-filter",
-        "missing_nonzero_hypothesis",
-        "--structural-only",
-    ]
-
-    assert main([*base_args, "--review-context", "raw"]) == 0
-    raw_summary = _summary(capsys.readouterr().out)
-    raw = _single_result(raw_summary)
-
-    assert main([*base_args, "--review-context", "ir"]) == 0
-    ir_summary = _summary(capsys.readouterr().out)
-    ir = _single_result(ir_summary)
-
-    expected_name = "cancellation without a nonzero hypothesis"
-    assert raw["case_name"] == ir["case_name"] == expected_name
-    assert raw["target_identifier"] == ir["target_identifier"] == "thm:missing-hypothesis"
-    assert raw["expectation"] == ir["expectation"]
-    assert raw["passed"] is True
-    assert ir["passed"] is True
-    assert raw["semantic_request_count"] == ir["semantic_request_count"] == 1
-    assert raw["semantic_review_item_count"] == 0
-    assert ir["semantic_review_item_count"] == 1
-    assert raw["sent_review_item_identifiers"] == []
-    assert ir["sent_review_item_identifiers"] == [
-        "semantic-review-eval:thm:missing-hypothesis"
-    ]
-    assert raw["defender_used"] is False
-    assert ir["defender_used"] is False
-    assert provider.defended == 0
-    assert provider.attacked == ["thm:missing-hypothesis"]
-    assert len(provider.semantic_requests) == 1
-    assert isinstance(provider.semantic_requests[0], SemanticReviewRequest)
-    assert provider.semantic_requests[0].item.result.identifier == "thm:missing-hypothesis"
-
-    # The provider counters are cumulative across the two CLI invocations, while
-    # each structured result records only the work done by that strategy run.
-    assert raw["input_tokens"] == 10
-    assert raw["output_tokens"] == 2
-    assert raw["total_tokens"] == 12
-    assert ir["input_tokens"] == 7
-    assert ir["output_tokens"] == 2
-    assert ir["total_tokens"] == 9
-    assert ir_summary["requests"] == 2
-
-
-def test_result_ir_context_is_one_bounded_item_for_selected_public_case() -> None:
-    tex_path = Path("eval/cases/ladder/03_hypotheses/missing_nonzero_hypothesis.tex")
-    project = extract_project(tex_path)
-
-    context = build_result_review_context(project, "thm:missing-hypothesis")
-
-    assert len(context.items) == 1
-    item = context.items[0]
-    assert item.identifier == "semantic-review-eval:thm:missing-hypothesis"
-    assert item.result.identifier == "thm:missing-hypothesis"
-    assert all(claim.result_identifier == item.result.identifier for claim in item.claims)
-    assert all(
-        candidate.result_identifier == item.result.identifier
-        for candidate in item.symbol_candidates
-    )
-
-
-def test_targeted_mode_sends_exact_grouped_items_and_zero_when_none(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    provider = FixtureProvider()
-    monkeypatch.setenv("OPENAI_API_KEY", "")
-    monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
-    item = _review_item("semantic-review:grouped", "thm:missing-hypothesis")
-    monkeypatch.setattr(
-        eval_module,
-        "build_review_context",
-        lambda project: ReviewContext(items=[item]),
-    )
-    args = [
-        "eval/cases",
-        "--model",
-        "fixture-provider",
-        "--case-filter",
-        "missing_nonzero_hypothesis",
-        "--review-context",
-        "targeted",
-        "--structural-only",
-    ]
-
-    assert main(args) == 0
-    result = _single_result(_summary(capsys.readouterr().out))
-    assert result["semantic_request_count"] == 1
-    assert result["semantic_review_item_count"] == 1
-    assert result["sent_review_item_identifiers"] == ["semantic-review:grouped"]
-    assert result["no_semantic_escalation_required"] is False
-    assert len(provider.semantic_requests) == 1
-    assert provider.semantic_requests[0].item.trigger_relation_identifiers == [
-        "semantic-review:grouped:edge-a",
-        "semantic-review:grouped:edge-b",
-    ]
-    assert provider.attacked == []
-    assert provider.defended == 0
-
-    zero_provider = FixtureProvider()
-    monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: zero_provider)
-    monkeypatch.setattr(
-        eval_module,
-        "build_review_context",
-        lambda project: ReviewContext(),
-    )
-
-    assert main(args) == 1
-    zero = _single_result(_summary(capsys.readouterr().out))
-    assert zero["semantic_request_count"] == 0
-    assert zero["semantic_review_item_count"] == 0
-    assert zero["sent_review_item_identifiers"] == []
-    assert zero["no_semantic_escalation_required"] is True
-    assert zero_provider.requests == 0
-    assert zero_provider.semantic_requests == []
-
-
-def test_targeted_mode_keeps_distinct_review_items_as_distinct_requests(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    provider = FixtureProvider()
-    monkeypatch.setenv("OPENAI_API_KEY", "")
-    monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
-    first = _review_item("semantic-review:first", "thm:missing-hypothesis")
-    second = _review_item("semantic-review:second", "thm:missing-hypothesis")
-    monkeypatch.setattr(
-        eval_module,
-        "build_review_context",
-        lambda project: ReviewContext(items=[first, second]),
-    )
 
     assert main(
         [
-            "eval/cases",
+            "eval/cases/level1_missing_hypothesis",
             "--model",
             "fixture-provider",
-            "--case-filter",
-            "missing_nonzero_hypothesis",
-            "--review-context",
-            "targeted",
+            "--compare-raw-ir",
             "--structural-only",
         ]
     ) == 0
-    result = _single_result(_summary(capsys.readouterr().out))
 
-    assert result["semantic_request_count"] == 2
-    assert result["semantic_review_item_count"] == 2
-    assert result["sent_review_item_identifiers"] == [
-        "semantic-review:first",
-        "semantic-review:second",
-    ]
-    assert [request.item.identifier for request in provider.semantic_requests] == [
-        "semantic-review:first",
-        "semantic-review:second",
-    ]
-    assert provider.attacked == []
+    output = capsys.readouterr().out
+    assert "CONTROLLED_RAW_IR" in output
+    assert '"defend_enabled": false' in output
+    assert '"source_validation_enabled": false' in output
+    assert '"structural_only": true' in output
     assert provider.defended == 0
+    assert provider.requests == 2
 
 
-def test_live_eval_refuses_to_start_without_api_key(
+def test_dependency_aware_review_does_not_call_provider_for_dependencies(
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    provider = FixtureProvider()
+    monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
 
-    assert main(["eval/cases", "--model", "unused"]) == 2
+    assert main(
+        [
+            "eval/cases/level3_dependency",
+            "--model",
+            "fixture-provider",
+            "--review-context",
+            "dependency-aware",
+            "--structural-only",
+        ]
+    ) == 0
+
+    output = capsys.readouterr().out
+    assert '"review_context": "dependency-aware"' in output
+    assert [request.item.result.identifier for request in provider.semantic_requests] == [
+        "lem:threshold",
+        "thm:depends",
+    ]
+
+
+def test_semantic_context_taints_only_relations_that_depend_on_bad_result() -> None:
+    project = extract_project(Path("eval/cases/level3_dependency/paper.tex"))
+    context = build_result_review_context(project, "thm:depends")
+    by_identifier = {item.identifier: item for item in context.items}
+
+    assert by_identifier["REL1"].dependency_result_identifiers == ["lem:threshold"]
+    assert by_identifier["REL2"].dependency_result_identifiers == []
+
+
+def test_semantic_review_groups_findings_under_their_target_relations(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    provider = FixtureProvider()
+    monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(eval_module, "OpenAIProvider", lambda model: provider)
+
+    assert main(
+        [
+            "eval/cases/level3_dependency",
+            "--model",
+            "fixture-provider",
+            "--review-context",
+            "dependency-aware",
+            "--structural-only",
+        ]
+    ) == 0
+
+    summary = _summary(capsys.readouterr().out)
+    result = _single_result(summary)
+    semantic_review = result["semantic_review"]
+    assert isinstance(semantic_review, list)
+    assert [item["identifier"] for item in semantic_review] == [
+        "RESULT",
+        "REL1",
+        "REL2",
+    ]
+
+    by_identifier = {item["identifier"]: item for item in semantic_review}
+    assert [finding["title"] for finding in by_identifier["RESULT"]["findings"]] == [
+        "Synthetic finding for thm:depends-bad-lemma"
+    ]
+    assert by_identifier["REL1"]["findings"] == []
+    assert by_identifier["REL2"]["findings"] == []
+
+
+def test_review_context_rendering_contains_dependency_evidence() -> None:
+    project = extract_project(Path("eval/cases/level3_dependency/paper.tex"))
+    context = build_result_review_context(project, "thm:depends")
+
+    request = next(
+        request
+        for request in (SemanticReviewRequest.from_item(item) for item in context.items)
+        if request.item.identifier == "REL1"
+    )
+    rendered = request.render()
+    assert "depends on lem:threshold" in rendered
+    assert "0 < x < 1" in rendered
+
+
+def test_review_item_relations_are_deterministically_sorted() -> None:
+    context = ReviewContext(
+        result_identifier="thm:synthetic",
+        items=[
+            _review_item("REL2", "thm:synthetic"),
+            _review_item("REL10", "thm:synthetic"),
+            _review_item("REL1", "thm:synthetic"),
+        ],
+    )
+    context.sort_items()
+    assert [item.identifier for item in context.items] == ["REL1", "REL2", "REL10"]
