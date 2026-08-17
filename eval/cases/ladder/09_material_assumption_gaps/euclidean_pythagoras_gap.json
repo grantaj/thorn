@@ -1,0 +1,36 @@
+{
+  "name": "Euclidean Pythagoras used on an arbitrary Riemannian surface",
+  "kind": "finding",
+  "modes": [
+    "review"
+  ],
+  "source": "Synthetic material-assumption defect",
+  "accepted_categories": [
+    "hypothesis_mismatch",
+    "scope_mismatch",
+    "unsupported_claim",
+    "counterexample"
+  ],
+  "minimum_severity": "error",
+  "level": 9,
+  "capability": "surface an ambient geometric premise when plausible alternatives materially change the proof and the stated scope does not establish it",
+  "target_identifier": "thm:riemannian-pythagoras-gap",
+  "repairability": "statement",
+  "family": "correctness",
+  "statement_truth": "false",
+  "proof_status": "invalid",
+  "locality": "proof",
+  "fault_class": "material_assumption_gap_euclidean",
+  "detection_methods": [
+    "context and scope check",
+    "counterexample",
+    "counterfactual materiality"
+  ],
+  "reader_consequence": "fatal",
+  "deception_level": "plausible",
+  "downstream_impact": "one_result",
+  "scope_relation": "proof_narrower",
+  "hypothesis_relation": "proof_requires_more",
+  "conclusion_relation": "exact",
+  "notes": "Load-bearing premise: the proof uses the Euclidean Pythagorean identity. Curved Riemannian surfaces are plausible within the stated scope and change the identity, so silently selecting Euclidean geometry would materially strengthen the theorem."
+}
