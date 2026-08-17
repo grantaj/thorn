@@ -25,6 +25,7 @@ on:
       - "src/thorn/proof_skeleton.py"
       - "src/thorn/providers/**"
       - "src/thorn/prompts/proof_language_reviewer_v1.md"
+      - "src/thorn/prompts/proof_language_reviewer_v2.md"
       - "src/thorn/semantic_experiment.py"
       - "src/thorn/semantic_projection.py"
       - "src/thorn/semantic_review.py"
