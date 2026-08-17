@@ -1,5 +1,7 @@
 # Lean handoff
 
+> **Implementation contract.** This document describes Thorn's currently implemented Lean backend and supported subset. For the broader product/design thesis — selective local formal replay as proof-quality evidence rather than arbitrary LaTeX-to-Lean translation — see [`lean-bridge.md`](lean-bridge.md). Issue #115 is evaluating that thesis on ordinary mathematical proofs before broader Lean capability work is justified.
+
 Thorn's first Lean backend is a deliberately small proof-of-life over canonical Proof IR. It does not parse LaTeX, source prose, or `thorn-proof/1`. The public acceptance path is:
 
 ```text
@@ -42,6 +44,14 @@ The acceptance toolchain is pinned by the repository's `lean-toolchain` file to 
 
 The paired negative fixture differs only in the available premise. Its missing precondition remains a formalisation obligation and its export status remains `partial`.
 
+## Current boundary versus future product shape
+
+The current exporter is intentionally a result-oriented proof of life. Its existence should not be read as a commitment to whole-theorem automatic translation as Thorn's long-term formalisation unit.
+
+The hypothesis in [`lean-bridge.md`](lean-bridge.md) and issue #115 is that a more useful boundary may be a mechanically closed local proof operation inside an otherwise informal theorem. If the evaluation supports that hypothesis, future implementation should derive such checks from existing canonical proof/transformation semantics while preserving the same no-confidence-laundering and source-provenance rules documented here.
+
+Unsupported neighbouring mathematics must not be silently reconstructed to make a local check possible, and a successful local replay must not be presented as proof of the surrounding theorem.
+
 ## CLI seam
 
-This tranche intentionally exposes the lower-level `project_lean(...)` API rather than adding project generation or a broad CLI surface. A future `thorn lean <file>` command can wrap this backend once target selection and output conventions are settled without changing the canonical Proof IR or the confidence rules above.
+This tranche intentionally exposes the lower-level `project_lean(...)` API rather than adding project generation or a broad CLI surface. A future `thorn lean <file>` command can wrap the settled formalisation/check boundary once target selection and output conventions are justified without changing canonical Proof IR or the confidence rules above.
