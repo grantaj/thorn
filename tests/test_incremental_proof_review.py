@@ -169,6 +169,7 @@ def _synthetic(source_text: str, *, target_fingerprint: str = "target") -> Prepa
     provenance = ReviewCacheProvenance(
         result_identifier=document.result_identifier,
         target_content_fingerprint=target_fingerprint,
+        target_semantic_fingerprint="stable-target-semantics",
         packet_fingerprint=document.fingerprint(),
         dependency_snapshot=ReviewDependencySnapshot(
             edges_fingerprint=canonical_fingerprint([]),
