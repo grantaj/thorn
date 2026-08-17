@@ -75,14 +75,15 @@ class OpenAIProvider:
             max_output_tokens=envelope.max_output_tokens,
         )
         self._record_usage(response)
-        if response.output_parsed is None:
+        parsed = response.output_parsed
+        if parsed is None:
             raise RuntimeError("proof-language reviewer returned no structured result")
-        if not isinstance(response.output_parsed, ProofReviewModelResponse):
+        if not isinstance(parsed, ProofReviewModelResponse):
             raise RuntimeError("proof-language reviewer returned the wrong structured result")
         # Provider transport owns request-specific structured parsing. Thorn's
         # proof-review layer owns the higher-level protocol validator so a
         # recording wrapper can retain schema-valid responses that fail it.
-        return response.output_parsed
+        return parsed
 
     def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
         envelope = defense_request_envelope(unit, findings, self.model)
