@@ -1,0 +1,30 @@
+{
+  "name": "Euclidean Pythagoras with settled ambient geometry",
+  "kind": "clean",
+  "modes": [
+    "review"
+  ],
+  "source": "Synthetic material-assumption control",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 9,
+  "capability": "accept ordinary implicit geometric background when the theorem context settles the load-bearing structure",
+  "target_identifier": "thm:euclidean-pythagoras-clean",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "material_assumption_control_euclidean",
+  "detection_methods": [
+    "context and scope check",
+    "counterfactual materiality"
+  ],
+  "reader_consequence": "not_applicable",
+  "deception_level": "plausible",
+  "downstream_impact": "isolated",
+  "scope_relation": "exact",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "exact",
+  "notes": "Load-bearing premise: the Pythagorean step uses Euclidean geometry. Plausible non-Euclidean alternatives would change validity, but the theorem statement itself fixes the Euclidean plane, so no assumption gap remains."
+}
