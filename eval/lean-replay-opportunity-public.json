@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "issue": 115,
+  "frozen": true,
+  "description": "Public, keyless issue-115 corpus for inspecting whether existing canonical Thorn state is precise enough to support meaningful local Lean replay. Human A/B/C/D/E classification is recorded separately; this manifest does not encode the desired outcome.",
+  "thorn_base_revision": "6c32edb510bf1da560304107e54d15b494b40ca1",
+  "cases": [
+    {
+      "id": "quickstart_even_two",
+      "lane": "public",
+      "role": "user_example",
+      "domain": "elementary arithmetic",
+      "file": "examples/quickstart/clean/paper.tex",
+      "result": "lem:even-two"
+    },
+    {
+      "id": "quickstart_even_square",
+      "lane": "public",
+      "role": "user_example",
+      "domain": "elementary arithmetic",
+      "file": "examples/quickstart/clean/paper.tex",
+      "result": "lem:even-square"
+    },
+    {
+      "id": "quickstart_transfer",
+      "lane": "public",
+      "role": "user_example",
+      "domain": "elementary arithmetic",
+      "file": "examples/quickstart/clean/paper.tex",
+      "result": "thm:main"
+    },
+    {
+      "id": "quickstart_bad_cancellation",
+      "lane": "public",
+      "role": "user_example",
+      "domain": "real algebra",
+      "file": "examples/quickstart/mathematical-problem/paper.tex",
+      "result": "thm:cancellation"
+    },
+    {
+      "id": "square_bound",
+      "lane": "public",
+      "role": "existing_regression",
+      "domain": "real algebra",
+      "file": "eval/cases/clean_square_bound.tex",
+      "result": "lem:square"
+    },
+    {
+      "id": "monotone_limit",
+      "lane": "public",
+      "role": "existing_regression",
+      "domain": "real analysis",
+      "file": "eval/cases/clean_monotone_limit.tex",
+      "result": "thm:monotone"
+    },
+    {
+      "id": "lean_application_control",
+      "lane": "public",
+      "role": "backend_calibration",
+      "domain": "abstract predicate logic",
+      "file": "tests/lean_cases/theorem_application.tex",
+      "result": "thm:main"
+    },
+    {
+      "id": "lean_missing_premise_control",
+      "lane": "public",
+      "role": "backend_calibration",
+      "domain": "abstract predicate logic",
+      "file": "tests/lean_cases/theorem_application_missing_premise.tex",
+      "result": "thm:main"
+    }
+  ]
+}
