@@ -202,7 +202,7 @@ def _closed_world_response_model(
         )
         return cast(type[ProofReviewModelResponse], model)
 
-    address_literal: Any = Literal.__getitem__(allowed_source_addresses)
+    address_literal: Any = cast(Any, Literal)[allowed_source_addresses]
     source_addresses_type: Any = tuple[address_literal, ...]
     model = create_model(
         "ProofReviewModelResponse",
@@ -228,7 +228,7 @@ class ProofReviewTurnRequest(BaseModel):
     source_rescue_allowed: bool
     allowed_source_addresses: tuple[SourceAddress, ...] = ()
     max_source_addresses: int = Field(
-        default=0,
+        default=DEFAULT_MAX_SOURCE_REQUESTS,
         ge=0,
         le=DEFAULT_MAX_SOURCE_REQUESTS,
     )
@@ -238,7 +238,7 @@ class ProofReviewTurnRequest(BaseModel):
 
     @field_validator("allowed_source_addresses", mode="before")
     @classmethod
-    def _canonicalize_allowed_source_addresses(cls, value: object) -> object:
+    def _canonicalize_allowed_source_addresses(cls, value: Any) -> Any:
         if isinstance(value, (list, tuple, set, frozenset)):
             return tuple(sorted(set(value)))
         return value
@@ -267,8 +267,6 @@ class ProofReviewTurnRequest(BaseModel):
             raise ValueError("disabled source rescue cannot expose selectable source addresses")
         if self.source_rescue_allowed and self.max_source_addresses < 1:
             raise ValueError("enabled source rescue requires a positive source-address cap")
-        if not self.source_rescue_allowed and self.max_source_addresses != 0:
-            raise ValueError("disabled source rescue must have a zero source-address cap")
         return self
 
     def response_model(self) -> type[ProofReviewModelResponse]:
@@ -311,31 +309,30 @@ def validate_proof_review_response(
     request: ProofReviewTurnRequest,
     response: ProofReviewModelResponse,
 ) -> ProofReviewModelResponse:
-    """Validate a parsed response against the same request-specific source contract."""
+    """Validate and normalize a response against the request-specific source contract."""
 
-    if response.action != "need_source":
-        return response
-    if not request.source_rescue_allowed:
-        raise ProofReviewProtocolError("model requested source but source rescue is disabled")
-    if not request.allowed_source_addresses:
-        raise ProofReviewProtocolError(
-            "model requested source but the initial packet advertised no source addresses"
-        )
-    if len(response.source_addresses) > request.max_source_addresses:
-        raise ProofReviewProtocolError(
-            "source rescue requests at most "
-            f"{request.max_source_addresses} addresses, got {len(response.source_addresses)}"
-        )
-    allowed = set(request.allowed_source_addresses)
-    unadvertised = [
-        address for address in response.source_addresses if address not in allowed
-    ]
-    if unadvertised:
-        raise ProofReviewProtocolError(
-            "source address was not advertised in the initial packet: "
-            + ", ".join(unadvertised)
-        )
-    return response
+    if response.action == "need_source":
+        if not request.source_rescue_allowed:
+            raise ProofReviewProtocolError("model requested source but source rescue is disabled")
+        if not request.allowed_source_addresses:
+            raise ProofReviewProtocolError(
+                "model requested source but the initial packet advertised no source addresses"
+            )
+        if len(response.source_addresses) > request.max_source_addresses:
+            raise ProofReviewProtocolError(
+                "source rescue requests at most "
+                f"{request.max_source_addresses} addresses, got {len(response.source_addresses)}"
+            )
+        allowed = set(request.allowed_source_addresses)
+        unadvertised = [
+            address for address in response.source_addresses if address not in allowed
+        ]
+        if unadvertised:
+            raise ProofReviewProtocolError(
+                "source address was not advertised in the initial packet: "
+                + ", ".join(unadvertised)
+            )
+    return ProofReviewModelResponse.model_validate(response.model_dump(mode="python"))
 
 
 def _content_fingerprint(representation: Representation, content: str) -> str:
@@ -422,7 +419,7 @@ def build_rescue_turn(
     if initial_turn.max_source_addresses != request.max_source_addresses:
         raise ProofReviewProtocolError("initial turn does not match the review source-address cap")
 
-    validate_proof_review_response(initial_turn, source_request)
+    source_request = validate_proof_review_response(initial_turn, source_request)
     expanded_addresses = _expanded_source_addresses(
         request.document,
         source_request.source_addresses,
