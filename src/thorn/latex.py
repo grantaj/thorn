@@ -23,6 +23,7 @@ from thorn.frontends import RegexLatexFrontend
 from thorn.linguistic import LinguisticFrontend
 from thorn.linguistic_support import apply_linguistic_uncertainty
 from thorn.models import SourceRange, TheoremUnit
+from thorn.support_corroboration import corroborate_explicit_result_support
 from thorn.support_extract import extract_proof_support_graph
 from thorn.symbols import ResultRegion, extract_symbol_table
 
@@ -291,6 +292,11 @@ def extract_project(
             support_graph,
             linguistic_frontend,
         )
+    support_graph = corroborate_explicit_result_support(
+        support_graph,
+        dependencies=graph,
+        units=enriched,
+    )
 
     return ExtractedProject(
         main_file=parsed.main_file,
