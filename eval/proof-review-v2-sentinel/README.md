@@ -45,7 +45,23 @@ OPENAI_API_KEY="" python scripts/prepare_proof_review_sentinel.py \
 A frozen manifest must verify all six request contracts keylessly before
 `scripts/run_proof_review_sentinel.py --live` will construct the provider.
 
-Do not tune fixtures, prompt, schema, scoring, model, output cap, retry policy,
-or request contracts after the first live request. Diagnose any failure from the
-exact recording/replay and create a separately frozen experiment if another run
-is justified.
+Do not tune fixtures, prompt, scoring, model, output cap or retry policy after the
+first successful semantic review response. A request rejected by the API before
+semantic review because the structured-output contract itself is invalid is a
+transport/preflight defect, not a mathematical outcome. Such a defect may be
+repaired only through a general protocol fix, followed by a complete keyless
+refreeze of every changed request contract before another live attempt.
+
+## Pre-semantic transport repair
+
+The first live transport attempt never produced a model response. OpenAI rejected
+the no-rescue response schema with HTTP 400 because Pydantic encoded mechanically
+empty `tuple[()]` fields as arrays with `maxItems: 0` but no `items` schema.
+
+The repair is provider-independent and preserves the existing closed-world
+semantics: every mechanically empty response array now retains its actual item
+type plus `maxItems: 0`. The only representable value is still the empty array,
+but the generated JSON Schema is valid for strict structured-output transport.
+The sentinel fixtures, prompt, model and scoring were not changed. Because the
+response schema participates in request fingerprinting, all six initial request
+contracts must be refrozen after this repair before any second live attempt.
