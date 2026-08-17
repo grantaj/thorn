@@ -1,0 +1,81 @@
+name: One-shot refrozen proof-review v2 sentinel
+
+on:
+  push:
+    branches:
+      - agent/proof-review-v2-sentinel
+
+permissions:
+  contents: read
+
+jobs:
+  live-sentinel:
+    if: github.event.head_commit.message == 'run refrozen v2 sentinel after schema repair'
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install Thorn and normal local NLP model
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+          python -m spacy download en_core_web_sm
+      - name: Require explicit API secret
+        run: test -n "$OPENAI_API_KEY"
+      - name: Reverify exact frozen request contracts keylessly
+        env:
+          OPENAI_API_KEY: ""
+        run: |
+          python scripts/prepare_proof_review_sentinel.py --output /tmp/preflight.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('/tmp/preflight.json').read_text())
+          assert data['frozen'] is True
+          assert data['frozen_request_contract_verified'] is True
+          assert data['provider_instantiated'] is False
+          assert data['provider_requests'] == 0
+          assert data['live_requests'] == 0
+          PY
+      - name: Run exact refrozen live sentinel
+        run: |
+          python scripts/run_proof_review_sentinel.py \
+            --live \
+            --record-dir /tmp/proof-review-v2-recordings \
+            --output /tmp/proof-review-v2-live.json
+      - name: Replay exact recordings keylessly
+        env:
+          OPENAI_API_KEY: ""
+        run: |
+          python scripts/run_proof_review_sentinel.py \
+            --replay-dir /tmp/proof-review-v2-recordings \
+            --output /tmp/proof-review-v2-replay.json
+      - name: Verify live ceiling and zero-live replay
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          live = json.loads(Path('/tmp/proof-review-v2-live.json').read_text())
+          replay = json.loads(Path('/tmp/proof-review-v2-replay.json').read_text())
+          assert live['frozen_request_contract_verified'] is True
+          assert live['live_requests'] <= live['max_live_requests'] == 8
+          assert replay['frozen_request_contract_verified'] is True
+          assert replay['live_requests'] == 0
+          assert live['arm_runs'] == replay['arm_runs'] == 6
+          PY
+      - name: Upload exact live and replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proof-review-v2-live-${{ github.sha }}
+          path: |
+            /tmp/preflight.json
+            /tmp/proof-review-v2-live.json
+            /tmp/proof-review-v2-replay.json
+            /tmp/proof-review-v2-recordings
+          if-no-files-found: warn
