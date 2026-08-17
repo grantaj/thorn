@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from itertools import combinations
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
+from thorn.eval_review import build_result_review_context
+from thorn.latex import extract_project
+from thorn.llm_proof_language import (
+    LLMProofLanguage,
+    ProofLanguageSourceHandle,
+    project_llm_proof_language,
+)
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
     ProofReviewModelResponse,
@@ -17,6 +24,8 @@ from thorn.proof_language_review import (
 )
 from thorn.providers.replay import RecordingProvider, ReplayMissError, ReplayProvider
 from thorn.providers.request_envelope import proof_review_request_envelope
+from thorn.semantic_review_render import build_semantic_review_request
+from thorn.semantic_transformations import build_semantic_transformation_ir
 
 
 def _document(*addresses: str, duplicate_mentions: bool = False) -> LLMProofLanguage:
@@ -38,6 +47,20 @@ def _document(*addresses: str, duplicate_mentions: bool = False) -> LLMProofLang
             for index, address in enumerate(addresses, start=1)
         ),
     )
+
+
+def _proof_document(path: Path, target: str) -> LLMProofLanguage:
+    project = extract_project(path)
+    unit = project.unit(target)
+    context = build_result_review_context(project, target)
+    semantic_request = build_semantic_review_request(context.items[0])
+    semantic = build_semantic_transformation_ir(
+        unit,
+        semantic_request,
+        symbol_table=project.symbol_table,
+        dependency_graph=project.dependency_graph,
+    )
+    return project_llm_proof_language(semantic)
 
 
 def _need(*addresses: str) -> ProofReviewModelResponse:
@@ -101,10 +124,45 @@ def test_one_and_many_advertised_handles_are_exact_schema_values() -> None:
     singleton.response_model().model_validate(
         {"action": "need_source", "findings": [], "source_addresses": ["E1"]}
     )
-    for subset in (("C1",), ("E1", "P2"), ("C1", "E1", "P2")):
-        many.response_model().model_validate(
-            {"action": "need_source", "findings": [], "source_addresses": subset}
-        )
+    addresses = many.allowed_source_addresses
+    for size in range(1, len(addresses) + 1):
+        for subset in combinations(addresses, size):
+            many.response_model().model_validate(
+                {"action": "need_source", "findings": [], "source_addresses": subset}
+            )
+
+
+@pytest.mark.parametrize(
+    ("fixture", "target", "authoritative_address"),
+    [
+        (
+            Path("eval/cases/ladder/02_readability/clean_unusual_notation.tex"),
+            "thm:unusual-notation",
+            "D1",
+        ),
+        (
+            Path("eval/cases/ladder/02_readability/notation_collision.tex"),
+            "thm:notation-collision",
+            "D1",
+        ),
+    ],
+)
+def test_issue_91_authoritative_context_handles_are_selectable_by_same_contract(
+    fixture: Path,
+    target: str,
+    authoritative_address: str,
+) -> None:
+    document = _proof_document(fixture, target)
+    turn = build_proof_review_turn(ProofLanguageReviewRequest(document=document))
+
+    assert authoritative_address in turn.allowed_source_addresses
+    turn.response_model().model_validate(
+        {
+            "action": "need_source",
+            "findings": [],
+            "source_addresses": [authoritative_address],
+        }
+    )
 
 
 def test_selectable_universe_may_exceed_eight_but_one_response_may_not() -> None:
