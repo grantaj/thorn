@@ -48,8 +48,10 @@ on:
       - "eval/SYMBOL_SCOPE_RESOLUTION.md"
       - "eval/TYPED_FORMULA_IR.md"
       - "eval/ir-value-challenge.json"
+      - "eval/lean-replay-opportunity-public.json"
       - "eval/proof-review-challenge.json"
       - "eval/proof-review-v2-sentinel/**"
+      - "scripts/measure_lean_replay_opportunity.py"
       - "scripts/measure_llm_proof_language.py"
       - "scripts/measure_skeleton_compression.py"
       - "scripts/measure_typed_formula_ir.py"
@@ -123,6 +125,17 @@ jobs:
       - name: Build keyless proof-review A/B/C inventory
         run: |
           python scripts/prepare_proof_review_experiment.py --output /tmp/proof-review-inventory.json
+      - name: Build keyless issue-115 Lean replay opportunity inventory
+        run: |
+          python scripts/measure_lean_replay_opportunity.py \
+            --thorn-revision "$GITHUB_SHA" \
+            --output /tmp/lean-replay-opportunity.json
+      - name: Upload issue-115 Lean replay opportunity inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-replay-opportunity-${{ github.sha }}
+          path: /tmp/lean-replay-opportunity.json
+          if-no-files-found: error
       - name: Build keyless post-#90 v2 sentinel inventory
         run: |
           python scripts/prepare_proof_review_sentinel.py --output /tmp/proof-review-v2-sentinel.json

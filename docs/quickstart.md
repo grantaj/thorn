@@ -101,7 +101,7 @@ LLM review is mathematical review assistance, not formal proof certification. A 
 
 ## 5. The current Lean handoff
 
-Thorn also has a deliberately small Lean export over the same canonical proof representation. The clean example's final theorem lies inside that supported subset.
+Thorn also has a deliberately small Lean export over the same canonical proof representation. Issue #115 found an important current boundary in this exact example: the backend can replay the final theorem application when its result-support edges are mechanically confident, but the **normal local-NLP path currently marks those explicit result-reference supports ambiguous**. Thorn therefore correctly refuses to promote them into a Lean proof term.
 
 The repository pins Lean in `lean-toolchain` (currently Lean 4.30.0). Install [Elan](https://github.com/leanprover/elan) if `lean` is not already available; from the repository root, Elan will honor the pinned toolchain. Check it with:
 
@@ -109,22 +109,29 @@ The repository pins Lean in `lean-toolchain` (currently Lean 4.30.0). Install [E
 lean --version
 ```
 
-Export the final theorem:
+The normal product command is:
 
 ```bash
 thorn lean examples/quickstart/clean/paper.tex \
   --result thm:main --output .thorn/quickstart-main.lean
 ```
 
-For this example Thorn reports `Status: complete`, meaning the exported subset has no Thorn formalisation holes. Now ask the independent Lean executable to check that generated file:
+At the current #115 boundary, do **not** expect this normal command to report `complete`: the explicit lemma applications are retained but uncertainty-marked before the Lean lowering boundary. This is a Thorn proof-recovery limitation, not a Lean error, and the evaluation deliberately does not teach the Lean renderer to ignore that uncertainty.
+
+For developers who want to reproduce the already-established #77 backend proof-of-life, the constrained structural-only path bypasses the local linguistic uncertainty layer:
 
 ```bash
+thorn lean examples/quickstart/clean/paper.tex \
+  --structural-only \
+  --result thm:main --output .thorn/quickstart-main.lean
 lean .thorn/quickstart-main.lean
 ```
 
-This is intentionally a bounded handoff. The generated theorem establishes that the recovered final theorem follows from the recovered lemma statements in the subset Thorn knows how to translate. It does **not** mean Thorn translated or Lean-verified the informal proofs of those lemmas, and it does not certify the whole manuscript. Unsupported mathematics remains unsupported or becomes an explicit source-linked formalisation obligation rather than being guessed into Lean.
+That structural-only run reports `Status: complete` and the pinned Lean executable accepts the generated theorem. It demonstrates that the bounded theorem-application backend works **when canonical input is sufficiently confident**. It is not the normal user-facing proof-recovery path and should not be interpreted as evidence that Thorn may simply discard linguistic uncertainty to gain formal coverage.
 
-See [`lean-handoff.md`](lean-handoff.md) for the exact supported subset.
+The generated theorem establishes only that the recovered final theorem follows from the recovered lemma statements in the subset Thorn knows how to translate. It does **not** mean Thorn translated or Lean-verified the informal proofs of those lemmas, and it does not certify the whole manuscript. Unsupported mathematics remains unsupported or becomes an explicit source-linked formalisation obligation rather than being guessed into Lean.
+
+See [`lean-handoff.md`](lean-handoff.md) for the exact supported subset and [`../eval/LEAN_REPLAY_OPPORTUNITY.md`](../eval/LEAN_REPLAY_OPPORTUNITY.md) for the #115 evaluation that exposed this boundary.
 
 ## What Thorn has and has not established
 
