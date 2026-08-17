@@ -19,9 +19,17 @@ jobs:
       - run: pytest -q
       - run: thorn-eval eval/cases --validate-only
       - run: thorn-eval eval/cases --analyze
+      - run: thorn --version
       - run: thorn analyze examples/demo.tex --structural-only
       - run: thorn ir examples/demo.tex --structural-only --format json > /tmp/thorn-ir.json
       - run: thorn report examples/demo.tex --structural-only --output /tmp/thorn-report.html
+      - name: Exercise keyless onboarding CLI
+        run: |
+          thorn analyze examples/quickstart/clean/paper.tex --structural-only
+          thorn analyze examples/quickstart/structural-problem/paper.tex --structural-only --fail-on never
+          thorn report examples/quickstart/clean/paper.tex --structural-only --output /tmp/quickstart-report.html
+          thorn graph examples/quickstart/clean/paper.tex --structural-only --output /tmp/quickstart-graph.html
+          thorn lean examples/quickstart/clean/paper.tex --structural-only --result thm:main --output /tmp/quickstart.lean
       - run: python scripts/generate_report_demo.py --output /tmp/thorn-report-demo.html
       - run: python scripts/measure_typed_formula_ir.py --output /tmp/typed-formula-ir.json
       - run: python scripts/prepare_proof_review_experiment.py --structural-only --output /tmp/proof-review-inventory.json
