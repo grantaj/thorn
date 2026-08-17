@@ -12,13 +12,11 @@ from thorn.formula_ir import (
     IdentifierExpr,
     LiteralExpr,
     LogicalExpr,
-    LogicalOperator,
     MathExpr,
     NotExpr,
     OpaqueExpr,
     OperatorExpr,
     QuantifiedExpr,
-    Quantifier,
     RelationExpr,
     RelationOperator,
     SetExpr,
@@ -33,6 +31,7 @@ from thorn.proof_obligations import (
     ProofStepEdge,
     PropositionRole,
 )
+from thorn.result_application import match_result_application
 from thorn.semantic_review_render import SemanticReviewRequest
 from thorn.symbol_resolution_ir import (
     ExpressionRef,
@@ -148,13 +147,6 @@ class SemanticTransformationIR(BaseModel):
             if item.address == address:
                 return item
         raise KeyError(f"unknown semantic application obligation {address!r}")
-
-
-class _TemplateBinding(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    argument: MathExpr
-    argument_path: tuple[str, ...]
 
 
 class _ReplacementMatch(BaseModel):
@@ -298,175 +290,6 @@ def _same_shape(left: MathExpr, right: MathExpr) -> bool:
     if isinstance(left, SetExpr) and isinstance(right, SetExpr):
         return len(left.items) == len(right.items)
     return False
-
-
-def _match_template(
-    pattern: MathExpr,
-    target: MathExpr,
-    *,
-    parameter_names: set[str],
-) -> dict[str, _TemplateBinding] | None:
-    bindings: dict[str, _TemplateBinding] = {}
-
-    def match(
-        left: MathExpr,
-        right: MathExpr,
-        left_path: tuple[str, ...],
-        right_path: tuple[str, ...],
-    ) -> bool:
-        if isinstance(left, IdentifierExpr) and left.name in parameter_names:
-            existing = bindings.get(left.name)
-            if existing is None:
-                bindings[left.name] = _TemplateBinding(
-                    argument=right,
-                    argument_path=right_path,
-                )
-                return True
-            return existing.argument == right
-        if isinstance(left, QuantifiedExpr) or isinstance(right, QuantifiedExpr):
-            return False
-        if not _same_shape(left, right):
-            return False
-
-        left_children = _child_items(left)
-        right_children = _child_items(right)
-        if len(left_children) != len(right_children):
-            return False
-        return all(
-            left_suffix == right_suffix
-            and match(
-                left_child,
-                right_child,
-                (*left_path, *left_suffix),
-                (*right_path, *right_suffix),
-            )
-            for (left_suffix, left_child), (right_suffix, right_child) in zip(
-                left_children,
-                right_children,
-                strict=True,
-            )
-        )
-
-    return bindings if match(pattern, target, (), ()) else None
-
-
-def _unwrap_universals(
-    expression: MathExpr,
-) -> tuple[list[tuple[str, tuple[str, ...]]], MathExpr, tuple[str, ...]]:
-    parameters: list[tuple[str, tuple[str, ...]]] = []
-    current = expression
-    path: tuple[str, ...] = ()
-    while isinstance(current, QuantifiedExpr) and current.quantifier == Quantifier.FOR_ALL:
-        parameters.append((current.binder.name.name, (*path, "binder", "name")))
-        current = current.body
-        path = (*path, "body")
-    return parameters, current, path
-
-
-def _free_names(expression: MathExpr) -> set[str]:
-    if isinstance(expression, IdentifierExpr):
-        return {expression.name}
-    if isinstance(expression, LiteralExpr | OpaqueExpr):
-        return set()
-    if isinstance(expression, QuantifiedExpr):
-        names = _free_names(expression.body)
-        names.discard(expression.binder.name.name)
-        if expression.binder.domain is not None:
-            names.update(_free_names(expression.binder.domain))
-        return names
-
-    free_names: set[str] = set()
-    for _suffix, child in _child_items(expression):
-        free_names.update(_free_names(child))
-    return free_names
-
-
-def _instantiate(
-    expression: MathExpr,
-    bindings: dict[str, _TemplateBinding],
-) -> MathExpr | None:
-    replacements = {name: item.argument for name, item in bindings.items()}
-
-    def visit(current: MathExpr, active: dict[str, MathExpr]) -> MathExpr | None:
-        if isinstance(current, IdentifierExpr):
-            return active.get(current.name, current)
-        if isinstance(current, LiteralExpr | OpaqueExpr):
-            return current
-        if isinstance(current, ApplyExpr):
-            function = visit(current.function, active)
-            arguments = [visit(item, active) for item in current.arguments]
-            if function is None or any(item is None for item in arguments):
-                return None
-            return ApplyExpr(
-                function=function,
-                arguments=tuple(item for item in arguments if item is not None),
-            )
-        if isinstance(current, OperatorExpr):
-            arguments = [visit(item, active) for item in current.arguments]
-            if any(item is None for item in arguments):
-                return None
-            return OperatorExpr(
-                operator=current.operator,
-                arguments=tuple(item for item in arguments if item is not None),
-            )
-        if isinstance(current, RelationExpr):
-            left = visit(current.left, active)
-            right = visit(current.right, active)
-            if left is None or right is None:
-                return None
-            return RelationExpr(operator=current.operator, left=left, right=right)
-        if isinstance(current, LogicalExpr):
-            arguments = [visit(item, active) for item in current.arguments]
-            if any(item is None for item in arguments):
-                return None
-            return LogicalExpr(
-                operator=current.operator,
-                arguments=tuple(item for item in arguments if item is not None),
-            )
-        if isinstance(current, NotExpr):
-            operand = visit(current.operand, active)
-            return NotExpr(operand=operand) if operand is not None else None
-        if isinstance(current, TupleExpr):
-            items = [visit(item, active) for item in current.items]
-            if any(item is None for item in items):
-                return None
-            return TupleExpr(items=tuple(item for item in items if item is not None))
-        if isinstance(current, SetExpr):
-            items = [visit(item, active) for item in current.items]
-            if any(item is None for item in items):
-                return None
-            return SetExpr(items=tuple(item for item in items if item is not None))
-        if isinstance(current, QuantifiedExpr):
-            binder_name = current.binder.name.name
-            remaining = {
-                name: replacement
-                for name, replacement in active.items()
-                if name != binder_name
-            }
-            if any(
-                binder_name in _free_names(replacement)
-                for replacement in remaining.values()
-            ):
-                return None
-            domain = (
-                visit(current.binder.domain, remaining)
-                if current.binder.domain is not None
-                else None
-            )
-            body = visit(current.body, remaining)
-            if body is None or (
-                current.binder.domain is not None and domain is None
-            ):
-                return None
-            return current.model_copy(
-                update={
-                    "binder": current.binder.model_copy(update={"domain": domain}),
-                    "body": body,
-                }
-            )
-        return None
-
-    return visit(expression, replacements)
 
 
 def _replacement(
@@ -635,108 +458,78 @@ def _result_applications(
             input_refs: tuple[ExpressionRef, ...] = ()
             source_expression = _expression(result)
 
-            if source_expression is not None and target_expression is not None:
-                parameters, body, body_path = _unwrap_universals(source_expression)
-                parameter_names = {name for name, _path in parameters}
-                direct_matches = _match_template(
-                    body,
-                    target_expression,
-                    parameter_names=parameter_names,
+            application = (
+                match_result_application(source_expression, target_expression)
+                if source_expression is not None and target_expression is not None
+                else None
+            )
+            if application is not None:
+                matched = True
+                if application.specialization:
+                    kind = SemanticTransformationKind.RESULT_SPECIALIZATION
+                bindings_out = tuple(
+                    SemanticParameterBinding(
+                        parameter_ref=ExpressionRef(
+                            owner_address=result.address,
+                            path=binding.parameter_path,
+                        ),
+                        argument_ref=ExpressionRef(
+                            owner_address=target.address,
+                            path=binding.argument_path,
+                        ),
+                        status=InferenceStatus.CONFIDENT,
+                    )
+                    for binding in application.bindings
                 )
-                antecedent: MathExpr | None = None
-                antecedent_path: tuple[str, ...] | None = None
-                matches = direct_matches
 
-                if direct_matches is not None:
-                    if parameters:
-                        kind = SemanticTransformationKind.RESULT_SPECIALIZATION
-                elif (
-                    isinstance(body, LogicalExpr)
-                    and body.operator == LogicalOperator.IMPLIES
-                    and len(body.arguments) == 2
-                ):
-                    antecedent, conclusion_template = body.arguments
-                    antecedent_path = (*body_path, "arguments", "0")
-                    matches = _match_template(
-                        conclusion_template,
-                        target_expression,
-                        parameter_names=parameter_names,
+                # Formula-shape matching stops at the precondition template. The
+                # semantic layer still owns proof-state validity: it searches only
+                # the canonical local context and leaves a missing premise unresolved.
+                if application.precondition is not None:
+                    expected = application.precondition
+                    local_context = _context(resolved, target.address)
+                    satisfied_by = _context_matches(
+                        resolved,
+                        expected,
+                        local_context,
+                        exclude=(result.address,),
                     )
-
-                if matches is not None:
-                    matched = True
-                    bindings_out = tuple(
-                        SemanticParameterBinding(
-                            parameter_ref=ExpressionRef(
+                    obligation = SemanticApplicationObligation(
+                        address=f"A{obligation_start + len(obligations)}",
+                        transformation_address=transformation_address,
+                        template_ref=(
+                            ExpressionRef(
                                 owner_address=result.address,
-                                path=parameter_path,
-                            ),
-                            argument_ref=(
-                                ExpressionRef(
-                                    owner_address=target.address,
-                                    path=matches[name].argument_path,
-                                )
-                                if name in matches
-                                else None
-                            ),
-                            status=(
-                                InferenceStatus.CONFIDENT
-                                if name in matches
-                                else InferenceStatus.UNRESOLVED
-                            ),
-                        )
-                        for name, parameter_path in parameters
-                    )
-
-                    if antecedent is not None:
-                        expected = _instantiate(antecedent, matches)
-                        local_context = _context(resolved, target.address)
-                        satisfied_by = (
-                            _context_matches(
-                                resolved,
-                                expected,
-                                local_context,
-                                exclude=(result.address,),
+                                path=application.precondition_path,
                             )
-                            if expected is not None
-                            else ()
-                        )
-                        obligation = SemanticApplicationObligation(
-                            address=f"A{obligation_start + len(obligations)}",
-                            transformation_address=transformation_address,
-                            template_ref=(
-                                ExpressionRef(
-                                    owner_address=result.address,
-                                    path=antecedent_path,
-                                )
-                                if antecedent_path is not None
-                                else None
-                            ),
-                            expected=expected,
-                            local_context=local_context,
-                            satisfied_by=satisfied_by,
-                            status=(
-                                ObligationStatus.DISCHARGED
-                                if expected is not None and satisfied_by
-                                else ObligationStatus.UNRESOLVED
-                            ),
-                            source_addresses=_dedupe(
-                                [
-                                    result.source_address,
-                                    target.source_address,
-                                    *[
-                                        propositions[address].source_address
-                                        for address in satisfied_by
-                                    ],
-                                ]
-                            ),
-                        )
-                        obligations.append(obligation)
-                        operation_obligations = (obligation,)
-                        input_refs = tuple(
-                            ExpressionRef(owner_address=address)
-                            for address in satisfied_by
-                        )
+                            if application.precondition_path is not None
+                            else None
+                        ),
+                        expected=expected,
+                        local_context=local_context,
+                        satisfied_by=satisfied_by,
+                        status=(
+                            ObligationStatus.DISCHARGED
+                            if satisfied_by
+                            else ObligationStatus.UNRESOLVED
+                        ),
+                        source_addresses=_dedupe(
+                            [
+                                result.source_address,
+                                target.source_address,
+                                *[
+                                    propositions[address].source_address
+                                    for address in satisfied_by
+                                ],
+                            ]
+                        ),
+                    )
+                    obligations.append(obligation)
+                    operation_obligations = (obligation,)
+                    input_refs = tuple(
+                        ExpressionRef(owner_address=address)
+                        for address in satisfied_by
+                    )
 
             status = _operation_status(
                 reference_status=step.status,
