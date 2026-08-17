@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
 from thorn.models import AttackReport, CandidateFinding, DefenseReport, TheoremUnit
 from thorn.proof_language_review import (
     ProofReviewModelResponse,
+    ProofReviewProtocolError,
     ProofReviewTurnRequest,
     validate_proof_review_response,
 )
@@ -32,6 +35,10 @@ class ReplayMissError(ReplayError):
 
 class ReplayStaleError(ReplayError):
     """Raised when a recording file does not match its current request fingerprint."""
+
+
+class ReplayAmbiguousError(ReplayError):
+    """Raised when forensic replay has multiple rejected responses and no selection."""
 
 
 class RecordedUsage(BaseModel):
@@ -66,8 +73,50 @@ class RecordedExchange(BaseModel):
     usage: RecordedUsage
 
 
+RejectedRecordingKind = Literal["proof_review_protocol", "provider_failure"]
+
+
+class RecordedRejection(BaseModel):
+    kind: RejectedRecordingKind
+    message: str
+    exception_type: str
+    validator_replayable: bool
+
+
+class RecordedRejectedExchange(BaseModel):
+    """Quarantined evidence that can never satisfy ordinary replay lookup."""
+
+    format_version: int = 1
+    fingerprint: str
+    request: ProviderRequestEnvelope
+    response: dict[str, object] | None = None
+    usage: RecordedUsage
+    rejection: RecordedRejection
+    response_fingerprint: str
+
+
+def _canonical_json(payload: object) -> str:
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def _rejected_response_fingerprint(
+    response: dict[str, object] | None,
+    rejection: RecordedRejection,
+) -> str:
+    payload = {
+        "response": response,
+        "rejection": rejection.model_dump(mode="json"),
+    }
+    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+
+
 class RecordingProvider:
-    """Record successful responses from another evaluation provider."""
+    """Record successful responses and quarantine rejected proof-review evidence."""
 
     def __init__(self, delegate: EvaluationProvider, directory: Path) -> None:
         self._delegate = delegate
@@ -117,6 +166,33 @@ class RecordingProvider:
         temporary.write_text(exchange.model_dump_json(indent=2) + "\n", encoding="utf-8")
         temporary.replace(destination)
 
+    def _write_rejected(
+        self,
+        envelope: ProviderRequestEnvelope,
+        response: BaseModel | None,
+        usage: RecordedUsage,
+        rejection: RecordedRejection,
+    ) -> None:
+        fingerprint = envelope.fingerprint()
+        response_payload = response.model_dump(mode="json") if response is not None else None
+        response_fingerprint = _rejected_response_fingerprint(response_payload, rejection)
+        exchange = RecordedRejectedExchange(
+            fingerprint=fingerprint,
+            request=envelope,
+            response=response_payload,
+            usage=usage,
+            rejection=rejection,
+            response_fingerprint=response_fingerprint,
+        )
+        directory = self.directory / "rejected" / fingerprint
+        directory.mkdir(parents=True, exist_ok=True)
+        destination = directory / f"{response_fingerprint}.json"
+        if destination.exists():
+            return
+        temporary = destination.with_suffix(".json.tmp")
+        temporary.write_text(exchange.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        temporary.replace(destination)
+
     def attack(self, unit: TheoremUnit) -> AttackReport:
         envelope = attack_request_envelope(unit, self.model)
         before = RecordedUsage.snapshot(self._delegate)
@@ -139,13 +215,42 @@ class RecordingProvider:
     ) -> ProofReviewModelResponse:
         envelope = proof_review_request_envelope(request, self.model)
         before = RecordedUsage.snapshot(self._delegate)
-        response = validate_proof_review_response(
-            request,
-            self._delegate.review_proof_turn(request),
-        )
+        try:
+            response = self._delegate.review_proof_turn(request)
+        except Exception as exc:
+            usage = RecordedUsage.snapshot(self._delegate).minus(before)
+            self._write_rejected(
+                envelope,
+                None,
+                usage,
+                RecordedRejection(
+                    kind="provider_failure",
+                    message="provider did not return a structured proof-review response",
+                    exception_type=type(exc).__name__,
+                    validator_replayable=False,
+                ),
+            )
+            raise
+
         usage = RecordedUsage.snapshot(self._delegate).minus(before)
-        self._write(envelope, response, usage)
-        return response
+        try:
+            normalized = validate_proof_review_response(request, response)
+        except ProofReviewProtocolError as exc:
+            self._write_rejected(
+                envelope,
+                response,
+                usage,
+                RecordedRejection(
+                    kind="proof_review_protocol",
+                    message=str(exc),
+                    exception_type="ProofReviewProtocolError",
+                    validator_replayable=True,
+                ),
+            )
+            raise
+
+        self._write(envelope, normalized, usage)
+        return normalized
 
     def defend(
         self,
@@ -161,7 +266,7 @@ class RecordingProvider:
 
 
 class ReplayProvider:
-    """Replay exact recorded provider exchanges without constructing a live client."""
+    """Replay exact accepted provider exchanges without constructing a live client."""
 
     def __init__(self, model: str, directory: Path) -> None:
         self.model = model
@@ -238,3 +343,125 @@ class ReplayProvider:
         response = DefenseReport.model_validate(exchange.response)
         self._record_hit(exchange)
         return response
+
+
+class ForensicReplayProvider(ReplayProvider):
+    """Replay accepted turns normally or explicitly selected quarantined failures."""
+
+    def __init__(
+        self,
+        model: str,
+        directory: Path,
+        *,
+        rejected_response_fingerprints: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(model=model, directory=directory)
+        self.rejected_response_fingerprints = dict(rejected_response_fingerprints or {})
+        self.forensic_hits = 0
+
+    def _load_rejected(
+        self,
+        envelope: ProviderRequestEnvelope,
+    ) -> RecordedRejectedExchange:
+        fingerprint = envelope.fingerprint()
+        directory = self.directory / "rejected" / fingerprint
+        candidates = sorted(directory.glob("*.json")) if directory.exists() else []
+        if not candidates:
+            raise ReplayMissError(
+                "no quarantined recording for "
+                f"{envelope.kind} fingerprint {fingerprint}; the exact request has no "
+                "captured rejected response"
+            )
+
+        by_fingerprint = {path.stem: path for path in candidates}
+        selected = self.rejected_response_fingerprints.get(fingerprint)
+        if selected is None:
+            if len(candidates) != 1:
+                raise ReplayAmbiguousError(
+                    "multiple quarantined responses exist for "
+                    f"{envelope.kind} fingerprint {fingerprint}; select one response fingerprint"
+                )
+            path = candidates[0]
+        else:
+            selected_path = by_fingerprint.get(selected)
+            if selected_path is None:
+                raise ReplayMissError(
+                    "no quarantined response "
+                    f"{selected} for {envelope.kind} fingerprint {fingerprint}"
+                )
+            path = selected_path
+
+        try:
+            exchange = RecordedRejectedExchange.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError, ValidationError, json.JSONDecodeError) as exc:
+            raise ReplayError(f"invalid quarantined recording {path}: {exc}") from exc
+
+        if exchange.fingerprint != fingerprint:
+            raise ReplayStaleError(
+                f"quarantined recording {path} declares fingerprint {exchange.fingerprint}, "
+                f"expected {fingerprint}"
+            )
+        if exchange.request.canonical_json() != envelope.canonical_json():
+            raise ReplayStaleError(
+                "quarantined recording "
+                f"{path} request payload does not match fingerprint {fingerprint}"
+            )
+        expected_response_fingerprint = _rejected_response_fingerprint(
+            exchange.response,
+            exchange.rejection,
+        )
+        if exchange.response_fingerprint != expected_response_fingerprint:
+            raise ReplayStaleError(
+                f"quarantined recording {path} content fingerprint does not match its payload"
+            )
+        if path.stem != exchange.response_fingerprint:
+            raise ReplayStaleError(
+                f"quarantined recording {path} filename does not match its content fingerprint"
+            )
+        return exchange
+
+    def review_proof_turn(
+        self,
+        request: ProofReviewTurnRequest,
+    ) -> ProofReviewModelResponse:
+        envelope = proof_review_request_envelope(request, self.model)
+        fingerprint = envelope.fingerprint()
+        if fingerprint not in self.rejected_response_fingerprints:
+            try:
+                return super().review_proof_turn(request)
+            except ReplayMissError:
+                pass
+
+        exchange = self._load_rejected(envelope)
+        if (
+            exchange.rejection.kind != "proof_review_protocol"
+            or not exchange.rejection.validator_replayable
+            or exchange.response is None
+        ):
+            raise ReplayError(
+                "quarantined provider failure has no structured response and is not "
+                "validator-replayable"
+            )
+
+        try:
+            response = request.response_model().model_validate(exchange.response)
+        except ValidationError as exc:
+            raise ReplayStaleError(
+                "quarantined structured response no longer satisfies the request-specific schema"
+            ) from exc
+
+        try:
+            validate_proof_review_response(request, response)
+        except ProofReviewProtocolError as exc:
+            if str(exc) != exchange.rejection.message:
+                raise ReplayStaleError(
+                    "quarantined response now fails with a different proof-review protocol error"
+                ) from exc
+            self.forensic_hits += 1
+            raise
+
+        raise ReplayStaleError(
+            "quarantined response no longer reproduces its proof-review protocol rejection"
+        )
