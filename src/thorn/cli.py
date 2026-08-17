@@ -32,7 +32,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="thorn",
         usage="thorn [analyze|ir|review|report|graph|lean] FILE [options]",
-        description="Source-linked structural analysis and mathematical review for LaTeX manuscripts.",
+        description=(
+            "Source-linked structural analysis and mathematical review for LaTeX manuscripts."
+        ),
         epilog=(
             "Modes: 'analyze' runs deterministic structural analysis; 'report' writes a "
             "self-contained local review report; 'graph' visualises the recovered proof argument; "
@@ -540,7 +542,11 @@ def main(argv: list[str] | None = None) -> int:
         proof_reviews.append(
             ProofReviewReportInput(
                 result_identifier=unit.identifier,
-                findings=tuple(completed.report.findings),
+                findings=tuple(
+                    finding
+                    for finding in completed.report.findings
+                    if finding.confidence >= args.min_confidence
+                ),
                 initial_turn=completed.initial_turn,
                 rescue_turn=completed.rescue_turn,
                 document=prepared.document,
