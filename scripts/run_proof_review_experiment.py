@@ -343,7 +343,9 @@ def main() -> int:
         "seed": args.seed,
         "arms": list(PROOF_REVIEW_EXPERIMENT_ARMS),
         "system_prompt_policy": "identical across all arms",
-        "response_schema_policy": "identical across all arms",
+        "response_schema_policy": (
+            "same base review response, with request-specific closed-world source-selection values"
+        ),
         "defender": False,
         "recording_directory": recording_directory,
         "cases": len(case_data),
