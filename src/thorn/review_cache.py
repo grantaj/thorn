@@ -57,6 +57,7 @@ class ReviewCacheProvenance(BaseModel):
 
     result_identifier: str
     target_content_fingerprint: str
+    target_semantic_fingerprint: str
     packet_fingerprint: str
     dependency_snapshot: ReviewDependencySnapshot
 
@@ -178,6 +179,7 @@ def proof_review_cache_key(
         {
             "cache_semantics_version": CACHE_SEMANTICS_VERSION,
             "result_identifier": provenance.result_identifier,
+            "target_semantic_fingerprint": provenance.target_semantic_fingerprint,
             "packet_fingerprint": provenance.packet_fingerprint,
             "dependency_snapshot": provenance.dependency_snapshot.model_dump(mode="json"),
             "contract": contract.model_dump(mode="json"),
