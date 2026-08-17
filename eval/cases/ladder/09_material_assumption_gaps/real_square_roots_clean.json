@@ -1,0 +1,30 @@
+{
+  "name": "Square roots of one over the reals",
+  "kind": "clean",
+  "modes": [
+    "review"
+  ],
+  "source": "Synthetic material-assumption control",
+  "accepted_categories": [],
+  "minimum_severity": "warning",
+  "level": 9,
+  "capability": "respect an ordinary domain-sensitive fact when the scalar setting is contextually settled",
+  "target_identifier": "thm:real-square-roots-clean",
+  "repairability": "none",
+  "family": "correctness",
+  "statement_truth": "true",
+  "proof_status": "valid",
+  "locality": "proof",
+  "fault_class": "material_assumption_control_domain",
+  "detection_methods": [
+    "type/domain check",
+    "counterfactual materiality"
+  ],
+  "reader_consequence": "not_applicable",
+  "deception_level": "plausible",
+  "downstream_impact": "isolated",
+  "scope_relation": "exact",
+  "hypothesis_relation": "exact",
+  "conclusion_relation": "exact",
+  "notes": "Load-bearing premise: zero-product reasoning needs an appropriate scalar domain. The theorem explicitly places x in the reals, so the intended premise is settled without demanding a foundational account of the real numbers."
+}
