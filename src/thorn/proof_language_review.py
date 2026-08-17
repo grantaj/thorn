@@ -474,6 +474,26 @@ def _validate_rescue_accountability(
             "new finding reuses a carried review identity: " + ", ".join(reused)
         )
 
+    final_finding_ids = [
+        *(
+            disposition.finding.id
+            for disposition in response.dispositions
+            if disposition.finding is not None
+        ),
+        *(finding.id for finding in response.findings),
+    ]
+    seen_finding_ids: set[str] = set()
+    duplicate_finding_ids: list[str] = []
+    for finding_id in final_finding_ids:
+        if finding_id in seen_finding_ids and finding_id not in duplicate_finding_ids:
+            duplicate_finding_ids.append(finding_id)
+        seen_finding_ids.add(finding_id)
+    if duplicate_finding_ids:
+        raise ProofReviewProtocolError(
+            "final response reuses finding identity across rescue accounting: "
+            + ", ".join(duplicate_finding_ids)
+        )
+
 
 def validate_proof_review_response(
     request: ProofReviewTurnRequest,
