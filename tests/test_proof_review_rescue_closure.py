@@ -19,12 +19,12 @@ def _need(*addresses: str) -> ProofReviewModelResponse:
         source_addresses=addresses,
         review_items=(
             ProofReviewItem(
-                id="R1",
+                id="RV1",
                 kind="question",
                 summary="Does exact prerequisite source settle this review question?",
             ),
         ),
-        source_review_item_ids=("R1",),
+        source_review_item_ids=("RV1",),
     )
 
 
@@ -149,3 +149,4 @@ def test_review_contract_forbids_converting_recovery_uncertainty_to_defect() -> 
     assert "Never report a defect solely because" in initial.user_content
     assert "FINAL_RESCUE_POLICY" in rescue.user_content
     assert "do not convert that uncertainty into a mathematical finding" in rescue.user_content
+    assert "Use unresolved when the bounded evidence still does not settle an item" in rescue.user_content
