@@ -25,19 +25,20 @@ from thorn.llm_proof_language import (
 )
 from thorn.models import AttackReport, CandidateFinding
 
-PROTOCOL_VERSION: Literal["thorn-proof-review/1"] = "thorn-proof-review/1"
+PROTOCOL_VERSION: Literal["thorn-proof-review/2"] = "thorn-proof-review/2"
+PROMPT_VERSION: Literal["proof_language_reviewer_v2"] = "proof_language_reviewer_v2"
 Representation = Literal["raw", "thorn-proof/1"]
 ReviewStage = Literal["initial", "rescue"]
 ReviewAction = Literal["review", "need_source"]
 ReviewItemKind = Literal["question", "concern"]
-ReviewDispositionStatus = Literal["confirmed", "revised", "discharged"]
+ReviewDispositionStatus = Literal["confirmed", "revised", "discharged", "unresolved"]
 SourceAddress = Annotated[
     str,
     StringConstraints(pattern=r"^[A-Za-z][A-Za-z0-9:._-]*$"),
 ]
 ReviewItemId = Annotated[
     str,
-    StringConstraints(pattern=r"^R[1-9][0-9]*$"),
+    StringConstraints(pattern=r"^RV[1-9][0-9]*$"),
 ]
 
 _SOURCE_HANDLE_RE = re.compile(
@@ -56,9 +57,11 @@ _PROOF_IR_REVIEW_POLICY = (
 _FINAL_RESCUE_POLICY = (
     "FINAL_RESCUE_POLICY source rescue is now exhausted. Treat supplied source as "
     "new evidence for the carried review state. Every carried review item must receive "
-    "exactly one disposition; new findings may also be reported. If deterministic "
-    "recovery remains unresolved, do not convert that uncertainty into a mathematical "
-    "finding unless the supplied mathematical content itself establishes the defect."
+    "exactly one disposition; new findings may also be reported. Use unresolved when "
+    "the bounded evidence still does not settle an item; unresolved is not a mathematical "
+    "finding. If deterministic recovery remains unresolved, do not convert that uncertainty "
+    "into a mathematical finding unless the supplied mathematical content itself establishes "
+    "the defect."
 )
 
 
@@ -181,8 +184,8 @@ class ProofReviewDisposition(BaseModel):
 
     @model_validator(mode="after")
     def _validate_finding(self) -> ProofReviewDisposition:
-        if self.status == "discharged" and self.finding is not None:
-            raise ValueError("discharged review items must not produce a finding")
+        if self.status in {"discharged", "unresolved"} and self.finding is not None:
+            raise ValueError(f"{self.status} review items must not produce a finding")
         if self.status in {"confirmed", "revised"} and self.finding is None:
             raise ValueError(f"{self.status} review items must produce a finding")
         return self
@@ -218,10 +221,10 @@ class ProofReviewModelResponse(BaseModel):
             raise ValueError("source requests must contain explicit review items")
 
         ids = tuple(item.id for item in self.review_items)
-        expected = tuple(f"R{index}" for index in range(1, len(ids) + 1))
+        expected = tuple(f"RV{index}" for index in range(1, len(ids) + 1))
         if ids != expected:
             raise ValueError(
-                "review item identities must be the canonical sequence R1, R2, ..."
+                "review item identities must be the canonical sequence RV1, RV2, ..."
             )
         if not self.source_review_item_ids:
             raise ValueError("source requests must identify which review items motivate rescue")
@@ -319,7 +322,7 @@ class ProofReviewTurnRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    protocol_version: Literal["thorn-proof-review/1"] = PROTOCOL_VERSION
+    protocol_version: Literal["thorn-proof-review/2"] = PROTOCOL_VERSION
     representation: Representation
     stage: ReviewStage
     initial_packet_fingerprint: str
@@ -400,7 +403,7 @@ class ProofLanguageReviewRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    protocol_version: Literal["thorn-proof-review/1"] = PROTOCOL_VERSION
+    protocol_version: Literal["thorn-proof-review/2"] = PROTOCOL_VERSION
     document: LLMProofLanguage
     allow_source_rescue: bool = True
     max_source_addresses: int = Field(
@@ -504,7 +507,7 @@ def _initial_user_content(
     rescue = "allowed-once" if source_rescue_allowed else "disabled"
     policy = f"{_PROOF_IR_REVIEW_POLICY}\n" if representation == "thorn-proof/1" else ""
     return (
-        "THORN-REVIEW 1\n"
+        "THORN-REVIEW 2\n"
         f"REPRESENTATION {representation}\n"
         f"INITIAL_PACKET_FINGERPRINT {packet_fingerprint}\n"
         f"SOURCE_RESCUE {rescue}\n"
@@ -602,7 +605,7 @@ def build_rescue_turn(
         stage="rescue",
         initial_packet_fingerprint=request.document.fingerprint(),
         user_content=(
-            "THORN-REVIEW SOURCE-RESCUE 1\n"
+            "THORN-REVIEW SOURCE-RESCUE 2\n"
             f"INITIAL_PACKET_FINGERPRINT {request.document.fingerprint()}\n"
             "SOURCE_RESCUE exhausted\n"
             f"{_FINAL_RESCUE_POLICY}\n\n"
