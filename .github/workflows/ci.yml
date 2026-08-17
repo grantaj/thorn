@@ -16,27 +16,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: python -m pip install -e '.[dev]'
-      - name: Run pytest -q
-        shell: bash
-        run: |
-          set +e
-          pytest -q > /tmp/pytest.log 2>&1
-          status=$?
-          cat /tmp/pytest.log
-          if [ "$status" -ne 0 ]; then
-            python - <<'PY'
-          from pathlib import Path
-
-          text = Path("/tmp/pytest.log").read_text(encoding="utf-8")[-50000:]
-          encoded = (
-              text.replace("%", "%25")
-              .replace("\r", "%0D")
-              .replace("\n", "%0A")
-          )
-          print(f"::error title=pytest failures::{encoded}")
-          PY
-          fi
-          exit "$status"
+      - run: pytest -q
       - run: thorn-eval eval/cases --validate-only
       - run: thorn-eval eval/cases --analyze
       - run: thorn analyze examples/demo.tex --structural-only
@@ -45,25 +25,5 @@ jobs:
       - run: python scripts/generate_report_demo.py --output /tmp/thorn-report-demo.html
       - run: python scripts/measure_typed_formula_ir.py --output /tmp/typed-formula-ir.json
       - run: python scripts/prepare_proof_review_experiment.py --structural-only --output /tmp/proof-review-inventory.json
-      - run: ruff check . --output-format=github
-      - name: Run mypy src
-        shell: bash
-        run: |
-          set +e
-          mypy src --show-error-codes --no-pretty > /tmp/mypy.log 2>&1
-          status=$?
-          cat /tmp/mypy.log
-          if [ "$status" -ne 0 ]; then
-            python - <<'PY'
-          from pathlib import Path
-
-          text = Path("/tmp/mypy.log").read_text(encoding="utf-8")[-50000:]
-          encoded = (
-              text.replace("%", "%25")
-              .replace("\r", "%0D")
-              .replace("\n", "%0A")
-          )
-          print(f"::error title=mypy failures::{encoded}")
-          PY
-          fi
-          exit "$status"
+      - run: ruff check .
+      - run: mypy src
