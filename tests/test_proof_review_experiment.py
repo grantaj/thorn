@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from thorn.llm_proof_language import LLMProofLanguage
+from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.models import SourceRange, TheoremUnit
 from thorn.proof_language_experiment import (
     PROOF_REVIEW_EXPERIMENT_ARMS,
@@ -22,14 +22,36 @@ def _unit() -> TheoremUnit:
     )
 
 
-def _document() -> LLMProofLanguage:
+def _document(*, with_source: bool = False) -> LLMProofLanguage:
+    if not with_source:
+        return LLMProofLanguage(
+            result_identifier="thm:test",
+            lines=("THORN-PROOF 1", "T0 ∀a.Q(a)", "GOAL G0 T0: ∀a.Q(a)"),
+        )
     return LLMProofLanguage(
         result_identifier="thm:test",
-        lines=("THORN-PROOF 1", "T0 ∀a.Q(a)", "GOAL G0 T0: ∀a.Q(a)"),
+        lines=(
+            "THORN-PROOF 1",
+            "P1 Q(a) <- ? @E1",
+            "T0 ∀a.Q(a)",
+            "GOAL G0 T0: ∀a.Q(a) | ctx P1 | open @P1",
+        ),
+        sources=(
+            ProofLanguageSourceHandle(
+                address="E1",
+                ir_identifier="edge:E1",
+                text="Exact source.",
+            ),
+            ProofLanguageSourceHandle(
+                address="P1",
+                ir_identifier="claim:P1",
+                text="Exact prerequisite source.",
+            ),
+        ),
     )
 
 
-def test_abc_arms_share_prompt_model_schema_and_provider_contract() -> None:
+def test_abc_arms_share_prompt_model_and_provider_contract_without_source_handles() -> None:
     unit = _unit()
     document = _document()
     envelopes = {
@@ -56,6 +78,23 @@ def test_abc_arms_share_prompt_model_schema_and_provider_contract() -> None:
     assert rescue_payload == document.render_initial()
 
 
+def test_rescue_arm_schema_is_request_specific_when_source_is_advertised() -> None:
+    unit = _unit()
+    document = _document(with_source=True)
+    envelopes = {
+        arm: proof_review_experiment_envelope(unit, document, "test-model", arm)
+        for arm in PROOF_REVIEW_EXPERIMENT_ARMS
+    }
+
+    assert envelopes["raw"].response_schema == envelopes["proof_ir"].response_schema
+    assert envelopes["proof_ir_rescue"].response_schema != envelopes["proof_ir"].response_schema
+    source_schema = envelopes["proof_ir_rescue"].response_schema["properties"][
+        "source_addresses"
+    ]
+    assert set(source_schema["items"]["enum"]) == {"E1", "P1"}
+    assert source_schema["maxItems"] == 8
+
+
 def test_keyless_inventory_builds_packets_without_provider_calls(tmp_path: Path) -> None:
     source = Path("eval/proof-review-challenge.json")
     manifest = json.loads(source.read_text(encoding="utf-8"))
@@ -75,6 +114,14 @@ def test_keyless_inventory_builds_packets_without_provider_calls(tmp_path: Path)
     assert inventory["provider_requests"] == 0
     assert inventory["live_requests"] == 0
     assert set(inventory["experiment_arms"]) == set(PROOF_REVIEW_EXPERIMENT_ARMS)
+    assert inventory["response_schema_policy"] == (
+        "request-specific closed-world source selection over each turn's advertised handles"
+    )
     record = inventory["records"][0]
     fingerprints = {record["arms"][arm]["fingerprint"] for arm in PROOF_REVIEW_EXPERIMENT_ARMS}
+    schema_hashes = {
+        record["arms"][arm]["response_schema_sha256"]
+        for arm in PROOF_REVIEW_EXPERIMENT_ARMS
+    }
     assert len(fingerprints) == 3
+    assert schema_hashes.issubset(set(inventory["response_schema_sha256s"]))
