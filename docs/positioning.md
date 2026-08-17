@@ -15,7 +15,7 @@ ordinary mathematical LaTeX
        /                    \
       v                      v
 systematic                Lean / formal
-LLM review                proof handoff
+LLM review                replay handoff
 ```
 
 Deterministic structural analysis is another consumer of recovered structure, but local checkability does not define what belongs in Proof IR.
@@ -41,29 +41,31 @@ The mathematical judgment may still come from an LLM, but Thorn supplies the mac
 - stable, fingerprintable review packets;
 - a basis for replay, caching, incremental review, regression testing and browsable reports.
 
-The stable `thorn-proof/1` projection already provides a compact deterministic rendering of canonical Proof IR together with a bounded `NEED_SOURCE` rescue contract. Issue #78 tracks the remaining production handoff and controlled evaluation: `thorn review` does **not yet** use `thorn-proof/1` as its normal provider input.
+The stable `thorn-proof/1` projection provides the real canonical Proof-IR semantic-review handoff, together with a bounded `NEED_SOURCE` rescue contract. Issue #78 / PR #82 established that provider path while preserving the older raw-source path as an experimental baseline.
 
 An LLM reviewer is not a trusted formal kernel. A clean model-backed review means only that no configured review diagnostic survived that review procedure.
 
-## Path 2: bridge toward Lean and formal proof
+## Path 2: selective formal replay with Lean
 
-The same Proof IR should progressively support formalisation without creating a second semantic system.
+The same Proof IR can support an independent formal checking path without creating a second semantic system or requiring authors to write formal proof language.
 
-The intended Lean handoff is deliberately bounded:
+Issue #77 established a deliberately small real end-to-end path from ordinary LaTeX through canonical Proof IR into generated Lean accepted by the pinned Lean toolchain for a mechanically complete theorem-application case. The backend fails closed when required semantics are ambiguous, missing or unsupported.
 
-- export theorem statements and mechanically recovered structure;
-- translate only operations Thorn genuinely understands;
-- emit useful proof skeletons with explicit holes for everything else;
-- retain exact source correspondence for those formalisation obligations;
-- use Lean as an independent checker of the subset that was actually exported.
+The broader product thesis is **not** "translate increasingly large fractions of arbitrary LaTeX into Lean". The hypothesis now being tested in #115 is that Thorn can identify **mechanically closed local proof operations** inside otherwise informal proofs, replay those exact operations independently in Lean, and return source-linked proof-quality evidence to the mathematician.
 
-Issue #77 tracks the first end-to-end Lean proof of life. Thorn does **not** currently claim arbitrary-paper Lean translation, and unsupported prose must never be reconstructed or invented merely to make generated Lean compile.
+For example, a deep informal argument may contain an exact theorem application, specialization, rewrite or witness step that is precise enough to replay even though neighboring mathematics remains outside automatic formalisation.
 
-Thorn is therefore not Lean-lite. Its useful role is to lower the activation energy between ordinary mathematical writing and formal proof while remaining useful long before a manuscript is fully formalised.
+The useful question is therefore not "what percentage of this paper is formalised?" but:
+
+> Which mathematical commitments already made by the manuscript can Thorn independently stress-test, and does the result give the author actionable information about the argument they actually wrote?
+
+The full design thesis, assurance semantics and anti-goals are documented in [`lean-bridge.md`](lean-bridge.md). The current implementation contract remains in [`lean-handoff.md`](lean-handoff.md).
+
+Thorn is therefore not Lean-lite and not an automatic arbitrary-LaTeX-to-Lean translator. Lean is potentially one independent proof-quality instrument over faithfully recovered local semantics. Complete theorem certification may emerge in unusually recoverable cases, but it is not the default workflow target and must not be achieved by pushing Lean-specific authoring requirements back into the manuscript.
 
 ## Proof IR is the shared contract
 
-LLM review and Lean export are consumers of the same canonical semantics, not separate interpretations of the manuscript.
+LLM review and Lean export/replay are consumers of the same canonical semantics, not separate interpretations of the manuscript.
 
 That implies several permanent constraints.
 
@@ -77,7 +79,7 @@ Lowering, rendering or exporting mathematics may never make it more certain than
 
 ### Source correspondence is permanent
 
-Every lowered, unresolved or opaque item must retain a stable route back to the manuscript. A compact LLM packet or a Lean hole may omit source text initially, but Thorn must be able to recover the exact relevant source on demand.
+Every lowered, unresolved or opaque item must retain a stable route back to the manuscript. A compact LLM packet or a Lean formalisation obligation may omit source text initially, but Thorn must be able to recover the exact relevant source on demand.
 
 ### Load-bearing mathematics must not disappear
 
@@ -85,7 +87,7 @@ If a proof edge depends on mathematical content, that content must either be rep
 
 ### Canonical semantics are consumer-independent
 
-`thorn-proof/1`, Lean code, JSON, reports and future interfaces are projections over canonical Proof IR. None of them should become a competing semantic representation or drive the IR toward one provider's prompt format.
+`thorn-proof/1`, Lean code, JSON, reports and future interfaces are projections over canonical Proof IR. None of them should become a competing semantic representation or drive the IR toward one provider's prompt format or one theorem prover's convenient encoding.
 
 ## What Thorn is not
 
@@ -94,6 +96,7 @@ Thorn is not:
 - a formal proof assistant or proof certificate;
 - an offline theorem prover disguised as a linter;
 - an automatic arbitrary-LaTeX-to-Lean translator;
+- a requirement to write Lean-flavoured LaTeX;
 - a claim that LLM review is formal verification;
 - a hidden LLM inside deterministic IR construction;
 - a general-purpose mathematical writing agent;
@@ -105,9 +108,11 @@ Thorn is not:
 
 The canonical Proof-IR construction sequence through issues #60-#65 is implemented, including typed formulas, proof obligations and typed edges, symbol/type/scope resolution, higher proof structure, semantic transformations, and the stable `thorn-proof/1` projection. The real-paper fidelity work in #75 / PR #76 repaired cases where load-bearing context or result-application information could otherwise be lost.
 
-The next work is consumer handoff rather than another semantic layer:
+Both initial downstream handoffs now exist:
 
-- #78 integrates `thorn-proof/1` into the actual semantic-review provider path and evaluates it against the existing raw-source baseline;
-- #77 builds the first bounded Proof-IR-to-Lean export and requires Lean to accept a mechanically recovered subset while preserving explicit holes elsewhere.
+- #78 / PR #82 made `thorn-proof/1` a real semantic-review provider input with bounded source rescue and exact record/replay;
+- #77 / PR #81 added the first bounded Proof-IR-to-Lean export and actual pinned-Lean acceptance regression for a mechanically recovered subset.
 
-That distinction matters in the public documentation: the representation exists, while the two handoffs are still being completed and tested.
+Those proof-of-life integrations do not settle how far either path should be pushed. Follow-up work is evidence-driven: semantic-review fidelity is evaluated against natural and adversarial cases, while #115 explicitly tests whether selective local Lean replay produces enough actionable proof-quality intelligence to justify expanding the formal bridge.
+
+That distinction matters in the public documentation: canonical Proof IR is the stable semantic centre; consumer capabilities should expand only where they preserve fidelity and demonstrably help humans review mathematics.
