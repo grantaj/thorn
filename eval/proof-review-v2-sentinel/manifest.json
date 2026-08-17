@@ -2,7 +2,7 @@
   "version": 1,
   "experiment": "post-90-v2-sentinel",
   "issue": 90,
-  "frozen": false,
+  "frozen": true,
   "description": "Matched two-case transfer sentinel for the post-#87/#88/#89/#90 thorn-proof-review/2 boundary. Freeze all mathematical fixtures, prompt bytes, model/safety settings, and six initial A/B/C request contracts before any live call; do not tune after outcomes.",
   "thorn_base_revision": "c88572645bca494c79922ee8d4b8faae13be3a4b",
   "prompt_version": "proof_language_reviewer_v2",
@@ -17,9 +17,49 @@
     "proof_ir",
     "proof_ir_rescue"
   ],
-  "semantic_prompt_sha256": null,
-  "file_sha256": {},
-  "initial_requests": {},
+  "semantic_prompt_sha256": "6e69e97744b8667c06eb936aec931289050c1bbc691aa39c82780d8cecf05258",
+  "file_sha256": {
+    "eval/proof-review-v2-sentinel/clean.json": "674465d1e1751390b77aa240f6ace07df0ee89dedfa9bcd8c31e147837822da4",
+    "eval/proof-review-v2-sentinel/clean.tex": "5d1b62c6c24eff84e6ef8683ecff439cc7b34ee8a6ecc0bfe9d96ba0057353c1",
+    "eval/proof-review-v2-sentinel/defect.json": "078122ba89fa5a05ac5f295a952ffdc862386916f5e57b23920171c50c7919c8",
+    "eval/proof-review-v2-sentinel/defect.tex": "75d734aab733bab23f363ea8b12a312c8149ea8f2cf25f18ab74ab343a15061a"
+  },
+  "initial_requests": {
+    "eval/proof-review-v2-sentinel/clean.json": {
+      "raw": {
+        "fingerprint": "9f8f500c0712853c8bd5fbb3dabcbdaff4fb1cea70da7bea3519295e38d63ee6",
+        "packet_fingerprint": "8dbb4cdab85b786a83c3b03c24cdfa37ab651265bd49f85e9d8a0b7d0cfc988f",
+        "response_schema_sha256": "51464a8eb4e7eabf14293e8c8a997cfeef34ab7251e2f41b9f41806e1eb7baa7"
+      },
+      "proof_ir": {
+        "fingerprint": "47f064f4d12e572981d83eda1ff9f7a613a5c24617f82f68f5da870b00195975",
+        "packet_fingerprint": "c95df8ac84687b9d724a44d42d72770d4420a3f47b810045eae75b6364892f2c",
+        "response_schema_sha256": "51464a8eb4e7eabf14293e8c8a997cfeef34ab7251e2f41b9f41806e1eb7baa7"
+      },
+      "proof_ir_rescue": {
+        "fingerprint": "214e5604bd30696169500c142ba5bdd9f451792fc1dde5dbfcfeefbe5540683d",
+        "packet_fingerprint": "c95df8ac84687b9d724a44d42d72770d4420a3f47b810045eae75b6364892f2c",
+        "response_schema_sha256": "d4dcd43f8f6b29e3212f67d674940cb906847bdf9643b860d27cfabb768de66f"
+      }
+    },
+    "eval/proof-review-v2-sentinel/defect.json": {
+      "raw": {
+        "fingerprint": "395d675a35045b5eeb7132b9e3713d95376a60177ded0e5378a1b42026f0c4a8",
+        "packet_fingerprint": "673e9aaadef565051df020a180dd1c342012476a1ee2714f6916a3072aa97648",
+        "response_schema_sha256": "51464a8eb4e7eabf14293e8c8a997cfeef34ab7251e2f41b9f41806e1eb7baa7"
+      },
+      "proof_ir": {
+        "fingerprint": "f81414c3326977c7497003aadfac623797b43db01f96ed5bc177fbd3057e35be",
+        "packet_fingerprint": "c308ce67bee61d5e9a9c618ef25cf895211d479b2343c9fd86ec64e086fe7af1",
+        "response_schema_sha256": "51464a8eb4e7eabf14293e8c8a997cfeef34ab7251e2f41b9f41806e1eb7baa7"
+      },
+      "proof_ir_rescue": {
+        "fingerprint": "f328bc8ac4b1200339b18af265e4f394b65ac746d5771b0ddee6b2f19143b9ee",
+        "packet_fingerprint": "c308ce67bee61d5e9a9c618ef25cf895211d479b2343c9fd86ec64e086fe7af1",
+        "response_schema_sha256": "d4dcd43f8f6b29e3212f67d674940cb906847bdf9643b860d27cfabb768de66f"
+      }
+    }
+  },
   "intended_scoring": {
     "primary": [
       "defect_explanation_correct",
