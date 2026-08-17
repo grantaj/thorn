@@ -1,0 +1,127 @@
+name: Restore main review code and patch schema
+
+on:
+  push:
+    branches:
+      - agent/proof-review-v2-sentinel
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'apply isolated review schema repair'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Restore current-main implementation and apply only array-schema repair
+        run: |
+          git fetch origin main --depth=1
+          git show FETCH_HEAD:src/thorn/proof_language_review.py > /tmp/proof_language_review.py
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('/tmp/proof_language_review.py')
+          text = path.read_text()
+          pattern = re.compile(
+              r'@lru_cache\(maxsize=256\)\ndef _closed_world_response_model\(.*?\n\nclass ProofReviewTurnRequest',
+              re.S,
+          )
+          replacement = '''@lru_cache(maxsize=256)
+def _closed_world_response_model(
+    allowed_source_addresses: tuple[str, ...],
+    max_source_addresses: int,
+    source_rescue_allowed: bool,
+    stage: ReviewStage,
+    carried_review_item_ids: tuple[str, ...],
+) -> type[ProofReviewModelResponse]:
+    """Build the existing response shape with request-specific protocol typing.
+
+    Every array retains an explicit JSON-Schema ``items`` type, including arrays
+    that are mechanically constrained to length zero. Structured-output transports
+    require array schemas to declare ``items``; ``maxItems: 0`` still makes the
+    empty tuple the only representable value and therefore preserves #88's
+    closed-world source-selection contract.
+
+    The generated class deliberately keeps the stable ``ProofReviewModelResponse``
+    schema title. The fingerprint therefore records protocol content, not an
+    incidental generated Python name.
+    """
+
+    empty_source_addresses = (
+        tuple[SourceAddress, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_review_items = (
+        tuple[ProofReviewItem, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_source_review_item_ids = (
+        tuple[ReviewItemId, ...],
+        Field(default=(), max_length=0),
+    )
+    empty_dispositions = (
+        tuple[ProofReviewDisposition, ...],
+        Field(default=(), max_length=0),
+    )
+
+    if stage == "rescue":
+        disposition_model: Any = _carried_disposition_model(carried_review_item_ids)
+        dispositions_type: Any = tuple[disposition_model, ...]
+        return create_model(
+            "ProofReviewModelResponse",
+            __base__=ProofReviewModelResponse,
+            action=(Literal["review"], ...),
+            source_addresses=empty_source_addresses,
+            review_items=empty_review_items,
+            source_review_item_ids=empty_source_review_item_ids,
+            dispositions=(
+                dispositions_type,
+                Field(
+                    ...,
+                    min_length=len(carried_review_item_ids),
+                    max_length=len(carried_review_item_ids),
+                ),
+            ),
+        )
+
+    if not source_rescue_allowed or not allowed_source_addresses:
+        return create_model(
+            "ProofReviewModelResponse",
+            __base__=ProofReviewModelResponse,
+            action=(Literal["review"], ...),
+            source_addresses=empty_source_addresses,
+            review_items=empty_review_items,
+            source_review_item_ids=empty_source_review_item_ids,
+            dispositions=empty_dispositions,
+        )
+
+    address_literal: Any = cast(Any, Literal)[allowed_source_addresses]
+    source_addresses_type: Any = tuple[address_literal, ...]
+    return create_model(
+        "ProofReviewModelResponse",
+        __base__=ProofReviewModelResponse,
+        source_addresses=(
+            source_addresses_type,
+            Field(default=(), max_length=max_source_addresses),
+        ),
+        dispositions=empty_dispositions,
+    )
+
+
+class ProofReviewTurnRequest'''
+          updated, count = pattern.subn(replacement, text)
+          assert count == 1, count
+          Path('src/thorn/proof_language_review.py').write_text(updated)
+          PY
+          rm .github/workflows/restore-main-and-patch-review-schema.yml
+      - name: Commit isolated repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/thorn/proof_language_review.py .github/workflows/restore-main-and-patch-review-schema.yml
+          git commit -m 'fix transport-valid review arrays'
+          git push origin HEAD:agent/proof-review-v2-sentinel
