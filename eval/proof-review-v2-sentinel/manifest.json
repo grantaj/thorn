@@ -2,7 +2,7 @@
   "version": 1,
   "experiment": "post-90-v2-sentinel",
   "issue": 90,
-  "frozen": true,
+  "frozen": false,
   "description": "Matched two-case transfer sentinel for the post-#87/#88/#89/#90 thorn-proof-review/2 boundary. Freeze all mathematical fixtures, prompt bytes, model/safety settings, and six initial A/B/C request contracts before any live call; do not tune after outcomes.",
   "thorn_base_revision": "c88572645bca494c79922ee8d4b8faae13be3a4b",
   "prompt_version": "proof_language_reviewer_v2",
@@ -17,49 +17,9 @@
     "proof_ir",
     "proof_ir_rescue"
   ],
-  "semantic_prompt_sha256": "6e69e97744b8667c06eb936aec931289050c1bbc691aa39c82780d8cecf05258",
-  "file_sha256": {
-    "eval/proof-review-v2-sentinel/clean.json": "674465d1e1751390b77aa240f6ace07df0ee89dedfa9bcd8c31e147837822da4",
-    "eval/proof-review-v2-sentinel/clean.tex": "5d1b62c6c24eff84e6ef8683ecff439cc7b34ee8a6ecc0bfe9d96ba0057353c1",
-    "eval/proof-review-v2-sentinel/defect.json": "078122ba89fa5a05ac5f295a952ffdc862386916f5e57b23920171c50c7919c8",
-    "eval/proof-review-v2-sentinel/defect.tex": "75d734aab733bab23f363ea8b12a312c8149ea8f2cf25f18ab74ab343a15061a"
-  },
-  "initial_requests": {
-    "eval/proof-review-v2-sentinel/clean.json": {
-      "raw": {
-        "fingerprint": "824e84c12b5e9478dff74866fbdc46888ac6918d55a40020c4ae5d6223b49d54",
-        "packet_fingerprint": "8dbb4cdab85b786a83c3b03c24cdfa37ab651265bd49f85e9d8a0b7d0cfc988f",
-        "response_schema_sha256": "adb624db05f2465d6853266888f826bcd5048188a98dbe4f5eec6c04b86f1af9"
-      },
-      "proof_ir": {
-        "fingerprint": "d368455c0692e22bb9637f76fb7cfd50b31b546e036a57c8e31db5cafaeb3090",
-        "packet_fingerprint": "c95df8ac84687b9d724a44d42d72770d4420a3f47b810045eae75b6364892f2c",
-        "response_schema_sha256": "adb624db05f2465d6853266888f826bcd5048188a98dbe4f5eec6c04b86f1af9"
-      },
-      "proof_ir_rescue": {
-        "fingerprint": "4d2c9d86d1e4337bdcaf44128284a1efd2d5c5d16fecb3b05962d33e3796a0ef",
-        "packet_fingerprint": "c95df8ac84687b9d724a44d42d72770d4420a3f47b810045eae75b6364892f2c",
-        "response_schema_sha256": "605d43db0ab56f2062d0ab63c4fc3ff40e93b52400d725cc86d53a0ea2e02eaf"
-      }
-    },
-    "eval/proof-review-v2-sentinel/defect.json": {
-      "raw": {
-        "fingerprint": "6c85cd263ea26cc364c7869fd61616e93ff4113879b164dee96351669eef66df",
-        "packet_fingerprint": "673e9aaadef565051df020a180dd1c342012476a1ee2714f6916a3072aa97648",
-        "response_schema_sha256": "adb624db05f2465d6853266888f826bcd5048188a98dbe4f5eec6c04b86f1af9"
-      },
-      "proof_ir": {
-        "fingerprint": "bcf606e3f76b024d8e77269c2b3d7580af764950d66eb1272efa587571c7e72e",
-        "packet_fingerprint": "c308ce67bee61d5e9a9c618ef25cf895211d479b2343c9fd86ec64e086fe7af1",
-        "response_schema_sha256": "adb624db05f2465d6853266888f826bcd5048188a98dbe4f5eec6c04b86f1af9"
-      },
-      "proof_ir_rescue": {
-        "fingerprint": "dd9e47d09a1a323a6a50eeec385282b0cb50cd631482eb8ebad526361fc2cc65",
-        "packet_fingerprint": "c308ce67bee61d5e9a9c618ef25cf895211d479b2343c9fd86ec64e086fe7af1",
-        "response_schema_sha256": "605d43db0ab56f2062d0ab63c4fc3ff40e93b52400d725cc86d53a0ea2e02eaf"
-      }
-    }
-  },
+  "semantic_prompt_sha256": null,
+  "file_sha256": {},
+  "initial_requests": {},
   "intended_scoring": {
     "primary": [
       "defect_explanation_correct",
@@ -74,7 +34,7 @@
       "yellow": "Raw A succeeds but C misses the defect, leaves the clean case unresolved, or otherwise cannot complete despite faithful bounded evidence.",
       "red": "C produces a mathematical false positive on the clean control, violates the closed-world/state protocol, or loses a previously explicit independent concern across rescue."
     },
-    "no_tuning_rule": "No fixture, prompt, schema, scoring rule, model, output cap, retry policy, or request contract may be changed after the first live request. Any failure is diagnosed from exact recording/replay before a new separately frozen experiment."
+    "no_tuning_rule": "No fixture, prompt, schema, scoring rule, model, output cap, retry policy, or request contract may be changed after the first successful semantic review response. A pre-semantic transport/schema rejection may be repaired only by a general contract fix, after which the exact request set must be separately refrozen before any retry."
   },
   "cases": [
     {
