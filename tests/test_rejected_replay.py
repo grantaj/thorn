@@ -100,7 +100,12 @@ def _conflicting_response(
     explanation: str = "Conflicting explanation.",
 ) -> ProofReviewModelResponse:
     carried = _finding("F1")
-    conflicting = carried.model_copy(update={"explanation": explanation})
+    conflicting = carried.model_copy(
+        update={
+            "category": FindingCategory.INVALID_IMPLICATION,
+            "explanation": explanation,
+        }
+    )
     return ProofReviewModelResponse(
         action="review",
         findings=(conflicting,),
@@ -180,7 +185,7 @@ def test_openai_proof_review_provider_returns_schema_valid_protocol_rejection_to
     assert provider.requests == provider.live_requests == 1
     with pytest.raises(
         ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
+        match="incompatible finding identity across rescue accounting: F1",
     ):
         validate_proof_review_response(rescue, returned)
 
@@ -194,7 +199,7 @@ def test_protocol_rejection_is_quarantined_and_forensic_replay_reproduces_it(
 
     with pytest.raises(
         ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
+        match="incompatible finding identity across rescue accounting: F1",
     ):
         review_proof_language(request, recorder)
 
@@ -213,7 +218,7 @@ def test_protocol_rejection_is_quarantined_and_forensic_replay_reproduces_it(
     assert exchange.rejection.kind == "proof_review_protocol"
     assert exchange.rejection.validator_replayable is True
     assert exchange.rejection.message == (
-        "final response reuses finding identity across rescue accounting: F1"
+        "incompatible finding identity across rescue accounting: F1"
     )
 
     normal = ReplayProvider("test-model", tmp_path)
@@ -225,7 +230,7 @@ def test_protocol_rejection_is_quarantined_and_forensic_replay_reproduces_it(
     forensic = ForensicReplayProvider("test-model", tmp_path)
     with pytest.raises(
         ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
+        match="incompatible finding identity across rescue accounting: F1",
     ):
         review_proof_language(request, forensic)
     assert forensic.live_requests == 0
@@ -261,7 +266,7 @@ def test_multiple_rejected_responses_coexist_and_require_explicit_selection(
         )
         with pytest.raises(
             ProofReviewProtocolError,
-            match="reuses finding identity across rescue accounting: F1",
+            match="incompatible finding identity across rescue accounting: F1",
         ):
             selected.review_proof_turn(rescue)
         assert selected.forensic_hits == 1
@@ -378,7 +383,7 @@ def test_explicit_forensic_selection_overrides_accepted_recording_for_same_reque
     )
     with pytest.raises(
         ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
+        match="incompatible finding identity across rescue accounting: F1",
     ):
         rejected_recorder.review_proof_turn(rescue)
 
@@ -397,7 +402,7 @@ def test_explicit_forensic_selection_overrides_accepted_recording_for_same_reque
     )
     with pytest.raises(
         ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
+        match="incompatible finding identity across rescue accounting: F1",
     ):
         forensic.review_proof_turn(rescue)
     assert forensic.replay_hits == 0
