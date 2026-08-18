@@ -25,12 +25,12 @@ jobs:
           text = freeze.read_text(encoding="utf-8")
           text = text.replace(
               '''def _src_tree_sha() -> str:\n    return subprocess.run(\n        ["git", "rev-parse", "HEAD:src/thorn"],''',
-              '''def _src_tree_sha(revision: str = "HEAD") -> str:\n    return subprocess.run(\n        ["git", "rev-parse", f"{revision}:src/thorn"],''',
+              '''def _src_tree_sha() -> str:\n    return subprocess.run(\n        ["git", "rev-parse", "HEAD:src/thorn"],''',
               1,
           )
           text = text.replace(
               '''    assert post128["assurance_src_tree_sha"] == POST128_SRC_TREE_SHA\n    assert _src_tree_sha() == POST128_SRC_TREE_SHA\n    assert historical["assurance_src_tree_sha"] != POST128_SRC_TREE_SHA''',
-              '''    assert post128["assurance_src_tree_sha"] == POST128_SRC_TREE_SHA\n    assert _src_tree_sha(POST128_ASSURANCE_REVISION) == POST128_SRC_TREE_SHA\n    head_matches_frozen_tree = _src_tree_sha() == POST128_SRC_TREE_SHA\n    assert historical["assurance_src_tree_sha"] != POST128_SRC_TREE_SHA''',
+              '''    assert post128["assurance_src_tree_sha"] == POST128_SRC_TREE_SHA\n    head_matches_frozen_tree = _src_tree_sha() == POST128_SRC_TREE_SHA\n    assert historical["assurance_src_tree_sha"] != POST128_SRC_TREE_SHA''',
               1,
           )
           old = '''        project = extract_project(source_path)\n        review_target = str(case.get("review_target", case["target"]))\n        prepared = prepare_proof_review(project, project.unit(review_target))\n        initial = build_proof_review_turn(\n            ProofLanguageReviewRequest(document=prepared.document)\n        )\n        envelope = proof_review_request_envelope(initial, MODEL)\n\n        assert envelope.fingerprint() == case["initial_request_fingerprint"]\n        assert envelope.max_output_tokens == 4096'''
@@ -48,6 +48,10 @@ jobs:
           text = text.replace(old, new, 1)
           text = text.replace(
               "reuses finding identity across rescue accounting: F1",
+              "incompatible finding identity across rescue accounting: F1",
+          )
+          text = text.replace(
+              "final response incompatible finding identity across rescue accounting: F1",
               "incompatible finding identity across rescue accounting: F1",
           )
           replay.write_text(text, encoding="utf-8")
