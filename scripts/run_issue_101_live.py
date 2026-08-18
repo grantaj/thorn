@@ -151,15 +151,11 @@ def _runner_revision() -> str:
     return _git("rev-parse", "HEAD")
 
 
-def _assert_assurance_code_unchanged(assurance_revision: str) -> None:
-    completed = subprocess.run(
-        ["git", "diff", "--quiet", assurance_revision, "HEAD", "--", "src/thorn"],
-        cwd=ROOT,
-        check=False,
-    )
-    if completed.returncode != 0:
+def _assert_assurance_code_unchanged(expected_src_tree_sha: str) -> None:
+    current_src_tree_sha = _git("rev-parse", "HEAD:src/thorn")
+    if current_src_tree_sha != expected_src_tree_sha:
         raise RuntimeError(
-            "production src/thorn differs from the frozen assurance revision; "
+            "production src/thorn tree differs from the frozen assurance tree; "
             "freeze a new experiment instead"
         )
 
@@ -190,7 +186,7 @@ def _conservative_input_token_bound(envelope: ProviderRequestEnvelope) -> int:
     )
 
 
-def _load_cases() -> tuple[str, list[_PreparedCase]]:
+def _load_cases() -> tuple[str, str, list[_PreparedCase]]:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     raw_cases = [manifest["control"], *manifest["variants"]]
     if len(raw_cases) != MAX_CASES:
@@ -222,7 +218,11 @@ def _load_cases() -> tuple[str, list[_PreparedCase]]:
                 initial_envelope=initial_envelope,
             )
         )
-    return str(manifest["assurance_revision"]), cases
+    return (
+        str(manifest["assurance_revision"]),
+        str(manifest["assurance_src_tree_sha"]),
+        cases,
+    )
 
 
 def _worst_case_case_input_bound(case: _PreparedCase) -> int:
@@ -242,8 +242,8 @@ def _worst_case_case_input_bound(case: _PreparedCase) -> int:
 
 
 def preflight() -> dict[str, object]:
-    assurance_revision, cases = _load_cases()
-    _assert_assurance_code_unchanged(assurance_revision)
+    assurance_revision, assurance_src_tree_sha, cases = _load_cases()
+    _assert_assurance_code_unchanged(assurance_src_tree_sha)
     worst_case_input = sum(_worst_case_case_input_bound(case) for case in cases)
     if worst_case_input > MAX_INPUT_TOKENS:
         raise RuntimeError(
@@ -255,6 +255,7 @@ def preflight() -> dict[str, object]:
         "issue": 101,
         "mode": "preflight",
         "assurance_revision": assurance_revision,
+        "assurance_src_tree_sha": assurance_src_tree_sha,
         "runner_revision": _runner_revision(),
         "model": MODEL,
         "cases": [
@@ -322,8 +323,8 @@ def _write_case_report(
 
 
 def _run(provider: Any, *, mode: str, report_dir: Path | None) -> dict[str, object]:
-    assurance_revision, cases = _load_cases()
-    _assert_assurance_code_unchanged(assurance_revision)
+    assurance_revision, assurance_src_tree_sha, cases = _load_cases()
+    _assert_assurance_code_unchanged(assurance_src_tree_sha)
     budget = _Budget()
     results: list[dict[str, object]] = []
     execution = ReviewExecution.LIVE if mode == "live" else ReviewExecution.REPLAY
@@ -388,6 +389,7 @@ def _run(provider: Any, *, mode: str, report_dir: Path | None) -> dict[str, obje
         "issue": 101,
         "mode": mode,
         "assurance_revision": assurance_revision,
+        "assurance_src_tree_sha": assurance_src_tree_sha,
         "runner_revision": _runner_revision(),
         "model": MODEL,
         "limits": preflight()["limits"],
