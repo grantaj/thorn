@@ -65,3 +65,21 @@ but the generated JSON Schema is valid for strict structured-output transport.
 The sentinel fixtures, prompt, model and scoring were not changed. Because the
 response schema participates in request fingerprinting, all six initial request
 contracts must be refrozen after this repair before any second live attempt.
+
+
+## Historical freeze after a successful run
+
+The successful GREEN run above makes this sentinel a historical experiment, not a
+moving production fixture. Later general changes to Thorn may intentionally alter
+the provider request contract. In that situation the keyless inventory reports
+`frozen_request_contract_verified=false`,
+`frozen_request_contract_matches_current=false`, and
+`comparable_to_frozen_paid_run=false`, together with the exact per-arm contract
+drift. It does **not** rewrite the frozen fingerprints or treat the old paid result
+as comparable to the new production contract.
+
+This informational drift reporting does not weaken the live gate:
+`run_proof_review_sentinel.py --live` still refuses to construct a provider unless
+the historical frozen requests verify exactly. Any future paid measurement under a
+changed contract requires a new experiment/freeze rather than mutating this
+completed sentinel.

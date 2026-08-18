@@ -4,6 +4,8 @@ from pathlib import Path
 
 from thorn.proof_review_sentinel import (
     SENTINEL_EXPERIMENT,
+    FrozenInitialRequest,
+    _initial_request_contract_drift,
     build_proof_review_sentinel_inventory,
     load_proof_review_sentinel_manifest,
 )
@@ -83,3 +85,29 @@ def test_v2_sentinel_freeze_candidate_covers_every_initial_request() -> None:
             assert len(request["fingerprint"]) == 64
             assert len(request["packet_fingerprint"]) == 64
             assert len(request["response_schema_sha256"]) == 64
+
+
+
+def test_v2_sentinel_reports_request_drift_without_rewriting_frozen_contract() -> None:
+    frozen = FrozenInitialRequest(
+        fingerprint="a" * 64,
+        packet_fingerprint="b" * 64,
+        response_schema_sha256="c" * 64,
+    )
+    changed = frozen.model_copy(update={"fingerprint": "d" * 64})
+
+    assert _initial_request_contract_drift(
+        {"case.json": {"proof_ir_rescue": frozen}},
+        {"case.json": {"proof_ir_rescue": frozen}},
+    ) == []
+
+    drift = _initial_request_contract_drift(
+        {"case.json": {"proof_ir_rescue": frozen}},
+        {"case.json": {"proof_ir_rescue": changed}},
+    )
+    assert len(drift) == 1
+    assert drift[0]["metadata"] == "case.json"
+    assert drift[0]["arm"] == "proof_ir_rescue"
+    assert drift[0]["changed_fields"] == ["fingerprint"]
+    assert drift[0]["frozen"] == frozen.model_dump(mode="json")
+    assert drift[0]["current"] == changed.model_dump(mode="json")

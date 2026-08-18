@@ -257,8 +257,9 @@ def _hypothetical_two_turn_input_bound(case: _PreparedCase) -> int:
 
 
 def preflight() -> dict[str, object]:
+    frozen = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    _assert_assurance_code_unchanged(str(frozen["assurance_src_tree_sha"]))
     assurance_revision, assurance_src_tree_sha, cases = _load_cases()
-    _assert_assurance_code_unchanged(assurance_src_tree_sha)
     initial_bounds = [_conservative_input_token_bound(case.initial_envelope) for case in cases]
     if any(bound > MAX_INPUT_TOKENS for bound in initial_bounds):
         raise RuntimeError("a frozen initial request cannot fit the issue #101 input-token ceiling")
@@ -344,8 +345,9 @@ def _write_case_report(
 
 
 def _run(provider: Any, *, mode: str, report_dir: Path | None) -> dict[str, object]:
+    frozen = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    _assert_assurance_code_unchanged(str(frozen["assurance_src_tree_sha"]))
     assurance_revision, assurance_src_tree_sha, cases = _load_cases()
-    _assert_assurance_code_unchanged(assurance_src_tree_sha)
     budget = _Budget()
     results: list[dict[str, object]] = []
     execution = ReviewExecution.LIVE if mode == "live" else ReviewExecution.REPLAY

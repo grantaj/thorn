@@ -7,6 +7,21 @@ from thorn.proof_language_review import ProofReviewTransport
 from thorn.semantic_review_render import SemanticReviewRequest
 
 
+class ProviderResponseValidationError(RuntimeError):
+    """A completed provider response that failed Thorn-local structured validation."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        response_payload: dict[str, object],
+        validation_exception_type: str,
+    ) -> None:
+        super().__init__(message)
+        self.response_payload = response_payload
+        self.validation_exception_type = validation_exception_type
+
+
 class AuditProvider(Protocol):
     model: str
 

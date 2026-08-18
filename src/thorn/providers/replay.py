@@ -14,7 +14,7 @@ from thorn.proof_language_review import (
     ProofReviewTurnRequest,
     validate_proof_review_response,
 )
-from thorn.providers.base import EvaluationProvider
+from thorn.providers.base import EvaluationProvider, ProviderResponseValidationError
 from thorn.providers.request_envelope import (
     ProviderRequestEnvelope,
     attack_request_envelope,
@@ -169,12 +169,16 @@ class RecordingProvider:
     def _write_rejected(
         self,
         envelope: ProviderRequestEnvelope,
-        response: BaseModel | None,
+        response: BaseModel | dict[str, object] | None,
         usage: RecordedUsage,
         rejection: RecordedRejection,
     ) -> None:
         fingerprint = envelope.fingerprint()
-        response_payload = response.model_dump(mode="json") if response is not None else None
+        response_payload = (
+            response.model_dump(mode="json")
+            if isinstance(response, BaseModel)
+            else response
+        )
         response_fingerprint = _rejected_response_fingerprint(response_payload, rejection)
         exchange = RecordedRejectedExchange(
             fingerprint=fingerprint,
@@ -217,6 +221,20 @@ class RecordingProvider:
         before = RecordedUsage.snapshot(self._delegate)
         try:
             response = self._delegate.review_proof_turn(request)
+        except ProviderResponseValidationError as exc:
+            usage = RecordedUsage.snapshot(self._delegate).minus(before)
+            self._write_rejected(
+                envelope,
+                exc.response_payload,
+                usage,
+                RecordedRejection(
+                    kind="provider_failure",
+                    message="provider returned structured content that failed local validation",
+                    exception_type=exc.validation_exception_type,
+                    validator_replayable=False,
+                ),
+            )
+            raise
         except Exception as exc:
             usage = RecordedUsage.snapshot(self._delegate).minus(before)
             self._write_rejected(

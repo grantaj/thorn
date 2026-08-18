@@ -157,6 +157,58 @@ def _schema_sha256(schema: dict[str, object]) -> str:
     return _sha256_bytes(rendered.encode("utf-8"))
 
 
+def _initial_request_contract_drift(
+    expected: dict[str, dict[str, FrozenInitialRequest]],
+    observed: dict[str, dict[str, FrozenInitialRequest]],
+) -> list[dict[str, object]]:
+    """Describe contract drift without mutating a completed historical freeze."""
+
+    drift: list[dict[str, object]] = []
+    metadata_paths = sorted(set(expected) | set(observed))
+    for metadata in metadata_paths:
+        expected_arms = expected.get(metadata, {})
+        observed_arms = observed.get(metadata, {})
+        arms = sorted(set(expected_arms) | set(observed_arms))
+        for arm in arms:
+            frozen = expected_arms.get(arm)
+            current = observed_arms.get(arm)
+            if frozen is None or current is None:
+                drift.append(
+                    {
+                        "metadata": metadata,
+                        "arm": arm,
+                        "changed_fields": ["request_presence"],
+                        "frozen": (
+                            frozen.model_dump(mode="json") if frozen is not None else None
+                        ),
+                        "current": (
+                            current.model_dump(mode="json") if current is not None else None
+                        ),
+                    }
+                )
+                continue
+            changed_fields = [
+                field
+                for field in (
+                    "fingerprint",
+                    "packet_fingerprint",
+                    "response_schema_sha256",
+                )
+                if getattr(frozen, field) != getattr(current, field)
+            ]
+            if changed_fields:
+                drift.append(
+                    {
+                        "metadata": metadata,
+                        "arm": arm,
+                        "changed_fields": changed_fields,
+                        "frozen": frozen.model_dump(mode="json"),
+                        "current": current.model_dump(mode="json"),
+                    }
+                )
+    return drift
+
+
 def build_sentinel_case_data(
     manifest: ProofReviewSentinelManifest,
     *,
@@ -264,21 +316,19 @@ def build_proof_review_sentinel_inventory(
     }
 
     request_freeze_verified = False
+    request_contract_matches_frozen: bool | None = None
+    request_contract_drift: list[dict[str, object]] = []
     if manifest.frozen and not structural_only:
-        expected_initial = {
-            metadata: {
-                arm: record.model_dump(mode="json")
-                for arm, record in arm_records.items()
-            }
-            for metadata, arm_records in manifest.initial_requests.items()
-        }
         if manifest.semantic_prompt_sha256 != freeze_candidate["semantic_prompt_sha256"]:
             raise ValueError("frozen sentinel prompt hash no longer matches initial requests")
         if manifest.file_sha256 != freeze_candidate["file_sha256"]:
             raise ValueError("frozen sentinel file hashes no longer match initial requests")
-        if expected_initial != freeze_candidate["initial_requests"]:
-            raise ValueError("frozen sentinel initial request contracts changed")
-        request_freeze_verified = True
+        request_contract_drift = _initial_request_contract_drift(
+            manifest.initial_requests,
+            observed_initial,
+        )
+        request_contract_matches_frozen = not request_contract_drift
+        request_freeze_verified = request_contract_matches_frozen
 
     return {
         "experiment": manifest.experiment,
@@ -303,6 +353,11 @@ def build_proof_review_sentinel_inventory(
         "provider_requests": 0,
         "live_requests": 0,
         "frozen_request_contract_verified": request_freeze_verified,
+        "frozen_request_contract_matches_current": request_contract_matches_frozen,
+        "comparable_to_frozen_paid_run": (
+            request_freeze_verified if manifest.frozen and not structural_only else None
+        ),
+        "request_contract_drift": request_contract_drift,
         "freeze_candidate": freeze_candidate,
         "records": records,
     }
