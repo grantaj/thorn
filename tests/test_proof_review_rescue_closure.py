@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import pytest
-
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
     ProofReviewItem,
     ProofReviewModelResponse,
-    ProofReviewProtocolError,
     build_proof_review_turn,
     build_rescue_turn,
 )
@@ -142,6 +139,7 @@ def test_bounded_rescue_preserves_requested_source_when_cap_is_full() -> None:
     assert rescue.requested_source_addresses == ("P2",)
     assert "SOURCE @P2" in rescue.user_content
     assert "SOURCE @P1" not in rescue.user_content
+
 
 def test_review_contract_forbids_converting_recovery_uncertainty_to_defect() -> None:
     request = ProofLanguageReviewRequest(document=_chain_document())
