@@ -105,9 +105,15 @@ class _GuardedTransport:
         self.expected_initial_fingerprint = expected_initial_fingerprint
         self.envelopes: list[ProviderRequestEnvelope] = []
 
-    def review_proof_turn(self, request: ProofReviewTurnRequest) -> ProofReviewModelResponse:
+    def review_proof_turn(
+        self,
+        request: ProofReviewTurnRequest,
+    ) -> ProofReviewModelResponse:
         envelope = proof_review_request_envelope(request, self.model)
-        if request.stage == "initial" and envelope.fingerprint() != self.expected_initial_fingerprint:
+        if (
+            request.stage == "initial"
+            and envelope.fingerprint() != self.expected_initial_fingerprint
+        ):
             raise RuntimeError("A3 frozen initial request fingerprint drifted")
         self.budget.reserve(envelope)
         before = _usage(self.delegate)
@@ -158,7 +164,10 @@ def _usage_delta(after: dict[str, int], before: dict[str, int]) -> dict[str, int
 
 
 def _conservative_input_token_bound(envelope: ProviderRequestEnvelope) -> int:
-    return len(envelope.canonical_json().encode("utf-8")) + SERIALIZATION_FRAMING_RESERVE_TOKENS
+    return (
+        len(envelope.canonical_json().encode("utf-8"))
+        + SERIALIZATION_FRAMING_RESERVE_TOKENS
+    )
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -224,11 +233,16 @@ def _prepare_case(manifest: dict[str, Any]) -> _PreparedCase:
         raise RuntimeError("A3 continuation must contain exactly A3")
 
     predecessor = _load_json(ROOT / str(manifest["predecessor_manifest"]))
-    predecessor_case = next(case for case in predecessor["cases"] if case["id"] == "A3")
+    predecessor_case = next(
+        case for case in predecessor["cases"] if case["id"] == "A3"
+    )
     for field in ("path", "source_sha256", "target", "variation_family"):
         if metadata[field] != predecessor_case[field]:
             raise RuntimeError(f"A3 {field} differs from preserved pre-#137 experiment")
-    if metadata["predecessor_initial_request_fingerprint"] != predecessor_case["initial_request_fingerprint"]:
+    if (
+        metadata["predecessor_initial_request_fingerprint"]
+        != predecessor_case["initial_request_fingerprint"]
+    ):
         raise RuntimeError("A3 predecessor fingerprint was not preserved exactly")
 
     path = ROOT / str(metadata["path"])
@@ -238,7 +252,9 @@ def _prepare_case(manifest: dict[str, Any]) -> _PreparedCase:
     prepared = prepare_proof_review(project, project.unit(str(metadata["target"])))
     if prepared.document.format_version != manifest["representation"]:
         raise RuntimeError("A3 prepared representation drifted")
-    initial_turn = build_proof_review_turn(ProofLanguageReviewRequest(document=prepared.document))
+    initial_turn = build_proof_review_turn(
+        ProofLanguageReviewRequest(document=prepared.document)
+    )
     if initial_turn.protocol_version != manifest["protocol"]:
         raise RuntimeError("A3 initial protocol drifted")
     if initial_turn.representation != manifest["representation"]:
@@ -248,7 +264,10 @@ def _prepare_case(manifest: dict[str, Any]) -> _PreparedCase:
     if initial_turn.max_source_addresses != manifest["source_rescue"]["max_addresses"]:
         raise RuntimeError("A3 source-rescue cap drifted")
     envelope = proof_review_request_envelope(initial_turn, manifest["model"])
-    if envelope.max_output_tokens != manifest["limits"]["max_output_tokens_per_request"]:
+    if (
+        envelope.max_output_tokens
+        != manifest["limits"]["max_output_tokens_per_request"]
+    ):
         raise RuntimeError("A3 production output-token cap drifted")
 
     frozen_fingerprint = metadata["initial_request_fingerprint"]
@@ -271,8 +290,15 @@ def _prepare_case(manifest: dict[str, Any]) -> _PreparedCase:
 
 def _hypothetical_two_turn_input_bound(case: _PreparedCase) -> int:
     initial = _conservative_input_token_bound(case.initial_envelope)
-    all_source_bytes = sum(len(source.text.encode("utf-8")) for source in case.prepared.document.sources)
-    rescue = initial + all_source_bytes + PROOF_REVIEW_MAX_OUTPUT_TOKENS + SERIALIZATION_FRAMING_RESERVE_TOKENS
+    all_source_bytes = sum(
+        len(source.text.encode("utf-8")) for source in case.prepared.document.sources
+    )
+    rescue = (
+        initial
+        + all_source_bytes
+        + PROOF_REVIEW_MAX_OUTPUT_TOKENS
+        + SERIALIZATION_FRAMING_RESERVE_TOKENS
+    )
     return initial + rescue
 
 
@@ -307,7 +333,9 @@ def preflight() -> dict[str, object]:
             "path": case.metadata["path"],
             "review_result_identifier": case.prepared.document.result_identifier,
             "source_sha256": case.metadata["source_sha256"],
-            "predecessor_initial_request_fingerprint": case.metadata["predecessor_initial_request_fingerprint"],
+            "predecessor_initial_request_fingerprint": case.metadata[
+                "predecessor_initial_request_fingerprint"
+            ],
             "initial_request_fingerprint": fingerprint,
             "fingerprint_changed_by_post137_contract": fingerprint
             != case.metadata["predecessor_initial_request_fingerprint"],
@@ -367,7 +395,9 @@ def _write_report(
 def _run(provider: Any, *, mode: str, report_path: Path | None) -> dict[str, object]:
     manifest = _load_manifest()
     if manifest["status"] != FROZEN_STATUS:
-        raise RuntimeError("A3 live/replay is forbidden until the new request contract is frozen")
+        raise RuntimeError(
+            "A3 live/replay is forbidden until the new request contract is frozen"
+        )
     case = _prepare_case(manifest)
     limits = manifest["limits"]
     budget = _Budget(
@@ -435,12 +465,22 @@ def _run(provider: Any, *, mode: str, report_path: Path | None) -> dict[str, obj
             "id": "A3",
             "path": case.metadata["path"],
             "review_result_identifier": case.prepared.document.result_identifier,
-            "request_fingerprints": [envelope.fingerprint() for envelope in guarded.envelopes],
+            "request_fingerprints": [
+                envelope.fingerprint() for envelope in guarded.envelopes
+            ],
             "request_stages": stages,
             "source_rescued": rescue is not None,
-            "source_addresses_requested": list(prior_response.source_addresses) if prior_response is not None else [],
-            "source_addresses_rescued": list(rescue.requested_source_addresses) if rescue is not None else [],
-            "findings": [finding.model_dump(mode="json") for finding in completed.report.findings],
+            "source_addresses_requested": (
+                list(prior_response.source_addresses)
+                if prior_response is not None
+                else []
+            ),
+            "source_addresses_rescued": (
+                list(rescue.requested_source_addresses) if rescue is not None else []
+            ),
+            "findings": [
+                finding.model_dump(mode="json") for finding in completed.report.findings
+            ],
             "usage": _usage_delta(after, before),
         },
     }
@@ -469,7 +509,9 @@ def main() -> int:
     elif args.live:
         manifest = _load_manifest()
         if manifest["status"] != FROZEN_STATUS:
-            raise SystemExit("paid A3 run is forbidden until the post-#137 freeze is complete")
+            raise SystemExit(
+                "paid A3 run is forbidden until the post-#137 freeze is complete"
+            )
         if args.record_dir is None:
             raise SystemExit("--record-dir is required with --live")
         if not os.getenv("OPENAI_API_KEY"):
