@@ -84,18 +84,18 @@ def _expanded_source_addresses(
     requested: tuple[str, ...],
     *,
     advertised: tuple[str, ...],
+    max_addresses: int,
 ) -> tuple[str, ...]:
-    """Expand requested source to unresolved Proof-IR prerequisite context.
+    """Bound deterministic prerequisite enrichment around the model request.
 
-    ``HOLE`` and ``GOAL`` lines already expose the deterministic local context of
-    unresolved propositions. When the model asks for a proposition's exact
-    source, include the exact source for unresolved context propositions first.
-    This is a bounded source-selection operation over the existing proof-language
-    packet; it does not infer any new mathematical edge.
+    The model-selected addresses are already closed-world validated and bounded by
+    ``max_addresses``. Thorn may enrich that set with exact source for unresolved
+    prerequisites, but automatic enrichment must never turn a valid model request
+    into a protocol failure merely because its transitive closure is larger.
 
-    ``advertised`` is the initial turn's stored closed-world contract. It is
-    deliberately passed in rather than recomputed so schema generation, runtime
-    validation, rescue expansion, fingerprinting, and replay share one set.
+    When the full closure does not fit, remaining slots prefer prerequisites nearest
+    to the requested propositions. The selected subset is then rendered in the
+    existing dependency-before-consumer order.
     """
 
     contexts: dict[str, tuple[str, ...]] = {}
@@ -121,12 +121,75 @@ def _expanded_source_addresses(
         source: proposition for proposition, source in proposition_source.items()
     }
     advertised_set = set(advertised)
+    requested_unique = tuple(dict.fromkeys(requested))
+    if len(requested_unique) > max_addresses:
+        raise ValueError(
+            "validated source request exceeds the configured source-address cap"
+        )
+
+    def proposition_for_source(address: str) -> str | None:
+        if address in contexts:
+            return address
+        return source_proposition.get(address)
+
+    candidate_rank: dict[str, tuple[int, int]] = {}
+    seen_distance: dict[str, int] = {}
+    queue: list[tuple[str, int]] = []
+    order = 0
+    for address in requested_unique:
+        proposition = proposition_for_source(address)
+        if proposition is None:
+            continue
+        queue.extend((dependency, 1) for dependency in contexts.get(proposition, ()))
+
+    cursor = 0
+    while cursor < len(queue):
+        proposition, distance = queue[cursor]
+        cursor += 1
+        previous_distance = seen_distance.get(proposition)
+        if previous_distance is not None and previous_distance <= distance:
+            continue
+        seen_distance[proposition] = distance
+
+        source = proposition_source.get(proposition)
+        if source is None and proposition in advertised_set:
+            source = proposition
+        if (
+            source is not None
+            and source not in requested_unique
+            and source in advertised_set
+        ):
+            previous_rank = candidate_rank.get(source)
+            rank = (distance, order)
+            if previous_rank is None or rank < previous_rank:
+                candidate_rank[source] = rank
+            order += 1
+
+        queue.extend(
+            (dependency, distance + 1)
+            for dependency in contexts.get(proposition, ())
+        )
+
+    remaining = max_addresses - len(requested_unique)
+    extras = tuple(
+        source
+        for source, _ in sorted(
+            candidate_rank.items(),
+            key=lambda item: item[1],
+        )[:remaining]
+    )
+    selected = set(requested_unique) | set(extras)
+
     expanded: list[str] = []
     visited: set[str] = set()
     visiting: set[str] = set()
 
     def add_source(address: str) -> None:
-        if address in advertised_set and address not in expanded:
+        if (
+            address in selected
+            and address in advertised_set
+            and address not in expanded
+        ):
             expanded.append(address)
 
     def visit(proposition: str) -> None:
@@ -141,22 +204,17 @@ def _expanded_source_addresses(
         if source is not None:
             add_source(source)
         else:
-            # Global hypotheses/definitions are proposition addresses in ``ctx``
-            # but do not have their own HOLE/GOAL line, so #86's original map
-            # could not discover their exact source. If the proposition itself
-            # is already an advertised source handle, it is a mechanically
-            # reachable prerequisite and belongs in the same bounded closure.
             add_source(proposition)
 
-    for address in requested:
-        proposition = address if address in contexts else source_proposition.get(address)
+    for address in requested_unique:
+        proposition = proposition_for_source(address)
         if proposition is None:
             add_source(address)
         else:
             visit(proposition)
+        add_source(address)
 
     return tuple(expanded)
-
 
 class ProofReviewProtocolError(RuntimeError):
     """Raised when a proof-language review violates Thorn's bounded protocol."""
@@ -671,6 +729,7 @@ def build_rescue_turn(
         request.document,
         source_request.source_addresses,
         advertised=initial_turn.allowed_source_addresses,
+        max_addresses=initial_turn.max_source_addresses,
     )
     try:
         parsed = parse_source_rescue_request(
