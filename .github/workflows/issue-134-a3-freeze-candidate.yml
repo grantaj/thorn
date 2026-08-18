@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/issue-134-a3-post137-freeze
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
