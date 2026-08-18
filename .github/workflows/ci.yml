@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
 
+# Temporary branch-only issue #101 live experiment. Never merge this workflow change.
 jobs:
   test:
     runs-on: ubuntu-latest
