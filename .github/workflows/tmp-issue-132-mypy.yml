@@ -20,16 +20,16 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Make finding normalization narrowing explicit
+      - name: Remove finding variable shadowing
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path('src/thorn/proof_language_review.py')
           text = path.read_text(encoding='utf-8')
-          old = '''        carried_ids.add(finding.id)\n        canonical = top_by_id.get(finding.id)\n        if canonical is None:\n            canonical = disposition_canonical.setdefault(finding.id, finding)\n        normalized_dispositions.append(\n            disposition.model_copy(update={"finding": canonical})\n        )'''
-          new = '''        carried_ids.add(finding.id)\n        canonical_finding: CandidateFinding = top_by_id.get(finding.id) or finding\n        if finding.id not in top_by_id:\n            canonical_finding = disposition_canonical.setdefault(\n                finding.id, canonical_finding\n            )\n        normalized_dispositions.append(\n            disposition.model_copy(update={"finding": canonical_finding})\n        )'''
+          old = '''    for disposition in response.dispositions:\n        finding = disposition.finding\n        if finding is None:\n            continue\n        canonical = top_by_id.get(finding.id)\n        if canonical is not None:\n            if (\n                not _finding_identity_compatible(canonical, finding)\n                and finding.id not in incompatible\n            ):\n                incompatible.append(finding.id)\n            continue\n\n        previous = disposition_only.get(finding.id)\n        if previous is None:\n            disposition_only[finding.id] = finding\n        elif (\n            _canonical_finding_payload(previous)\n            != _canonical_finding_payload(finding)\n            and finding.id not in ambiguous\n        ):\n            ambiguous.append(finding.id)'''
+          new = '''    for disposition in response.dispositions:\n        disposition_finding = disposition.finding\n        if disposition_finding is None:\n            continue\n        canonical = top_by_id.get(disposition_finding.id)\n        if canonical is not None:\n            if (\n                not _finding_identity_compatible(canonical, disposition_finding)\n                and disposition_finding.id not in incompatible\n            ):\n                incompatible.append(disposition_finding.id)\n            continue\n\n        previous = disposition_only.get(disposition_finding.id)\n        if previous is None:\n            disposition_only[disposition_finding.id] = disposition_finding\n        elif (\n            _canonical_finding_payload(previous)\n            != _canonical_finding_payload(disposition_finding)\n            and disposition_finding.id not in ambiguous\n        ):\n            ambiguous.append(disposition_finding.id)'''
           if old not in text:
-              raise SystemExit('normalization block not found')
+              raise SystemExit('validation block not found')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
       - name: Run static and focused checks
@@ -42,5 +42,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/thorn/proof_language_review.py
-          git commit -m "Make rescue finding normalization type-safe"
+          git commit -m "Avoid rescue finding variable shadowing"
           git push origin HEAD:agent/issue-132-rescue-finding-accounting
