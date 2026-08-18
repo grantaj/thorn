@@ -583,27 +583,27 @@ def _validate_rescue_accountability(
     incompatible: list[str] = []
     ambiguous: list[str] = []
     for disposition in response.dispositions:
-        finding = disposition.finding
-        if finding is None:
+        disposition_finding = disposition.finding
+        if disposition_finding is None:
             continue
-        canonical = top_by_id.get(finding.id)
+        canonical = top_by_id.get(disposition_finding.id)
         if canonical is not None:
             if (
-                not _finding_identity_compatible(canonical, finding)
-                and finding.id not in incompatible
+                not _finding_identity_compatible(canonical, disposition_finding)
+                and disposition_finding.id not in incompatible
             ):
-                incompatible.append(finding.id)
+                incompatible.append(disposition_finding.id)
             continue
 
-        previous = disposition_only.get(finding.id)
+        previous = disposition_only.get(disposition_finding.id)
         if previous is None:
-            disposition_only[finding.id] = finding
+            disposition_only[disposition_finding.id] = disposition_finding
         elif (
             _canonical_finding_payload(previous)
-            != _canonical_finding_payload(finding)
-            and finding.id not in ambiguous
+            != _canonical_finding_payload(disposition_finding)
+            and disposition_finding.id not in ambiguous
         ):
-            ambiguous.append(finding.id)
+            ambiguous.append(disposition_finding.id)
 
     if incompatible:
         raise ProofReviewProtocolError(
