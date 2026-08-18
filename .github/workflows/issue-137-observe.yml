@@ -1,4 +1,4 @@
-name: TEMP observe issue 137 implementation
+name: TEMP observe issue 137 follow-up
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Inspect issue 137 implementation runs
+      - name: Inspect issue 137 follow-up runs
         shell: bash
         run: |
           python - <<'PY'
@@ -37,7 +37,7 @@ jobs:
               'event': 'push',
               'per_page': 10,
           })
-          url = f'https://api.github.com/repos/{repo}/actions/workflows/issue-137-implement.yml/runs?{params}'
+          url = f'https://api.github.com/repos/{repo}/actions/workflows/issue-137-ci-followup.yml/runs?{params}'
           request = urllib.request.Request(url, headers=headers)
           with urllib.request.urlopen(request, timeout=60) as response:
               runs = json.load(response).get('workflow_runs', [])
