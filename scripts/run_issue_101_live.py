@@ -79,7 +79,9 @@ class _Budget:
             raise RuntimeError("issue #101 provider-request ceiling would be exceeded")
         input_bound = _conservative_input_token_bound(envelope)
         if self.input_tokens + input_bound > MAX_INPUT_TOKENS:
-            raise RuntimeError("issue #101 input-token ceiling would be exceeded")
+            raise RuntimeError(
+                "issue #101 input-token ceiling would be exceeded by the next exact request"
+            )
         max_output = envelope.max_output_tokens
         if max_output != MAX_OUTPUT_TOKENS_PER_REQUEST:
             raise RuntimeError(
@@ -91,8 +93,13 @@ class _Budget:
         self.attempts += 1
 
     def commit_usage(self, before: dict[str, int], after: dict[str, int]) -> None:
-        self.input_tokens += after["input_tokens"] - before["input_tokens"]
-        self.output_tokens += after["output_tokens"] - before["output_tokens"]
+        requests = after["requests"] - before["requests"]
+        input_tokens = after["input_tokens"] - before["input_tokens"]
+        output_tokens = after["output_tokens"] - before["output_tokens"]
+        if requests > 0 and input_tokens <= 0:
+            raise RuntimeError("provider returned no input-token accounting for a completed request")
+        self.input_tokens += input_tokens
+        self.output_tokens += output_tokens
         if self.input_tokens > MAX_INPUT_TOKENS:
             raise RuntimeError("provider-reported input usage exceeded issue #101 ceiling")
         if self.output_tokens > MAX_OUTPUT_TOKENS:
@@ -176,10 +183,10 @@ def _usage_delta(after: dict[str, int], before: dict[str, int]) -> dict[str, int
 
 
 def _conservative_input_token_bound(envelope: ProviderRequestEnvelope) -> int:
-    # Every tokenizer token represents at least one byte of serialized request
-    # material. Counting the full canonical envelope bytes therefore deliberately
-    # over-bounds visible request content/schema, with an additional reserve for
-    # transport/message framing not represented by the envelope itself.
+    # A tokenizer cannot produce more tokens than there are UTF-8 bytes in the
+    # serialized request. Counting the full canonical envelope bytes therefore
+    # safely over-bounds its token count. The extra reserve covers transport /
+    # message framing that is not represented in the canonical envelope.
     return (
         len(envelope.canonical_json().encode("utf-8"))
         + SERIALIZATION_FRAMING_RESERVE_TOKENS
@@ -225,13 +232,15 @@ def _load_cases() -> tuple[str, str, list[_PreparedCase]]:
     )
 
 
-def _worst_case_case_input_bound(case: _PreparedCase) -> int:
+def _hypothetical_two_turn_input_bound(case: _PreparedCase) -> int:
     initial = _conservative_input_token_bound(case.initial_envelope)
     all_source_bytes = sum(
         len(source.text.encode("utf-8")) for source in case.prepared.document.sources
     )
-    # A rescue turn repeats the initial transcript, adds at most one model response
-    # capped at 4096 tokens, and can expose only source already held by the document.
+    # Diagnostic stress bound only: suppose the first response consumes its full
+    # 4096-token output allowance and the case then requests every held source.
+    # The live gate does not reserve this hypothetical amount up front; it checks
+    # the exact rescue envelope if and only if the model actually asks for rescue.
     rescue = (
         initial
         + all_source_bytes
@@ -244,12 +253,13 @@ def _worst_case_case_input_bound(case: _PreparedCase) -> int:
 def preflight() -> dict[str, object]:
     assurance_revision, assurance_src_tree_sha, cases = _load_cases()
     _assert_assurance_code_unchanged(assurance_src_tree_sha)
-    worst_case_input = sum(_worst_case_case_input_bound(case) for case in cases)
-    if worst_case_input > MAX_INPUT_TOKENS:
-        raise RuntimeError(
-            "frozen batch cannot be proven to fit the input-token ceiling: "
-            f"upper bound {worst_case_input} > {MAX_INPUT_TOKENS}"
-        )
+    initial_bounds = [_conservative_input_token_bound(case.initial_envelope) for case in cases]
+    if any(bound > MAX_INPUT_TOKENS for bound in initial_bounds):
+        raise RuntimeError("a frozen initial request cannot fit the issue #101 input-token ceiling")
+
+    hypothetical_two_turn_bound = sum(
+        _hypothetical_two_turn_input_bound(case) for case in cases
+    )
     return {
         "format_version": 1,
         "issue": 101,
@@ -266,8 +276,8 @@ def preflight() -> dict[str, object]:
                 "initial_input_token_upper_bound": _conservative_input_token_bound(
                     case.initial_envelope
                 ),
-                "worst_case_two_turn_input_token_upper_bound": (
-                    _worst_case_case_input_bound(case)
+                "hypothetical_maximal_two_turn_input_upper_bound": (
+                    _hypothetical_two_turn_input_bound(case)
                 ),
                 "max_output_tokens_per_request": case.initial_envelope.max_output_tokens,
             }
@@ -279,7 +289,12 @@ def preflight() -> dict[str, object]:
             "max_input_tokens": MAX_INPUT_TOKENS,
             "max_output_tokens_per_request": MAX_OUTPUT_TOKENS_PER_REQUEST,
             "max_output_tokens": MAX_OUTPUT_TOKENS,
-            "worst_case_input_token_upper_bound": worst_case_input,
+            "all_initial_requests_input_upper_bound": sum(initial_bounds),
+            "hypothetical_all_maximal_two_turn_input_upper_bound": hypothetical_two_turn_bound,
+            "input_guard": (
+                "before each actual request, cumulative provider-reported input usage plus "
+                "a conservative exact-envelope upper bound must remain <= max_input_tokens"
+            ),
         },
         "reference_standard_pricing": {
             "as_of": REFERENCE_PRICE_DATE,
@@ -375,6 +390,12 @@ def _run(provider: Any, *, mode: str, report_dir: Path | None) -> dict[str, obje
             )
 
     usage = _usage(provider)
+    if budget.attempts > MAX_PROVIDER_REQUESTS:
+        raise RuntimeError("guarded provider attempts exceeded issue #101 ceiling")
+    if budget.input_tokens > MAX_INPUT_TOKENS:
+        raise RuntimeError("guarded input accounting exceeded issue #101 ceiling")
+    if budget.output_tokens > MAX_OUTPUT_TOKENS:
+        raise RuntimeError("guarded output accounting exceeded issue #101 ceiling")
     if usage["requests"] > MAX_PROVIDER_REQUESTS:
         raise RuntimeError("provider request accounting exceeded issue #101 ceiling")
     if usage["input_tokens"] > MAX_INPUT_TOKENS:
@@ -394,7 +415,11 @@ def _run(provider: Any, *, mode: str, report_dir: Path | None) -> dict[str, obje
         "model": MODEL,
         "limits": preflight()["limits"],
         "provider_usage": usage,
-        "budget_attempts": budget.attempts,
+        "guarded_usage": {
+            "attempts": budget.attempts,
+            "input_tokens": budget.input_tokens,
+            "output_tokens": budget.output_tokens,
+        },
         "results": results,
     }
 
