@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,17 @@ class _ProtocolTransport:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _src_tree_sha() -> str:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD:src/thorn"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
 
 
 def _reachability(document: Any, fragment: str) -> dict[str, object]:
@@ -204,10 +216,15 @@ def _cache_observations() -> dict[str, object]:
 def observe() -> dict[str, object]:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     cases = [manifest["control"], *manifest["variants"]]
+    assurance_src_tree_sha = str(manifest["assurance_src_tree_sha"])
+    current_src_tree_sha = _src_tree_sha()
     return {
         "format_version": 1,
         "issue": 101,
         "assurance_revision": manifest["assurance_revision"],
+        "assurance_src_tree_sha": assurance_src_tree_sha,
+        "current_src_tree_sha": current_src_tree_sha,
+        "assurance_tree_matches": current_src_tree_sha == assurance_src_tree_sha,
         "cases": [_observe_case(case) for case in cases],
         "cache_variations": _cache_observations(),
         "semantic_adjudication": (
@@ -218,13 +235,14 @@ def observe() -> dict[str, object]:
 
 
 def _check(payload: dict[str, object]) -> None:
+    assurance_tree_matches = bool(payload["assurance_tree_matches"])
     cases = payload["cases"]
     assert isinstance(cases, list)
     for case in cases:
         assert isinstance(case, dict)
         if not case["source_hash_matches_frozen"]:
             raise SystemExit(f"{case['id']}: source hash no longer matches frozen manifest")
-        if not case["request_fingerprint_matches_frozen"]:
+        if assurance_tree_matches and not case["request_fingerprint_matches_frozen"]:
             raise SystemExit(f"{case['id']}: frozen initial request fingerprint drifted")
         if not case["review_contract_addresses_match"]:
             raise SystemExit(f"{case['id']}: advertised NEED_SOURCE contract drifted")

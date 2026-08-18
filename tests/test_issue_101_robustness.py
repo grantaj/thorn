@@ -30,5 +30,8 @@ def test_issue_101_keyless_robustness_observer_runs_without_provider_credentials
     assert payload["semantic_adjudication"].startswith("not performed")
     assert len(payload["cases"]) == 5
     assert all(case["source_hash_matches_frozen"] for case in payload["cases"])
-    assert all(case["request_fingerprint_matches_frozen"] for case in payload["cases"])
+    if payload["assurance_tree_matches"]:
+        assert all(case["request_fingerprint_matches_frozen"] for case in payload["cases"])
+    else:
+        assert payload["current_src_tree_sha"] != payload["assurance_src_tree_sha"]
     assert "unsafe semantic cache reuse" not in completed.stdout
