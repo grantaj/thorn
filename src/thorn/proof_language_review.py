@@ -509,24 +509,48 @@ def _canonical_finding_payload(finding: CandidateFinding) -> str:
     )
 
 
+def _finding_identity_compatible(
+    canonical: CandidateFinding,
+    local: CandidateFinding,
+) -> bool:
+    """Return whether two payloads may represent one protocol finding identity.
+
+    ``thorn-proof-review/2`` uses the finding ID as the explicit consolidation
+    signal. A disposition may summarize a finding more tersely than the final
+    top-level version, so prose equality is not required. Category and severity
+    are the stable structural semantics that must agree before one ID can be
+    consolidated without fuzzy text matching.
+    """
+
+    return (
+        canonical.category == local.category
+        and canonical.severity == local.severity
+    )
+
+
 def _validate_rescue_accountability(
     request: ProofReviewTurnRequest,
     response: ProofReviewModelResponse,
 ) -> None:
     if request.stage != "rescue":
         if response.dispositions:
-            raise ProofReviewProtocolError("initial review responses cannot contain dispositions")
+            raise ProofReviewProtocolError(
+                "initial review responses cannot contain dispositions"
+            )
         return
 
     expected = request.carried_review_item_ids()
     disposition_ids = tuple(item.item_id for item in response.dispositions)
     if len(set(disposition_ids)) != len(disposition_ids):
-        raise ProofReviewProtocolError("a carried review item was dispositioned more than once")
+        raise ProofReviewProtocolError(
+            "a carried review item was dispositioned more than once"
+        )
 
     unknown = [item_id for item_id in disposition_ids if item_id not in expected]
     if unknown:
         raise ProofReviewProtocolError(
-            "final response disposition references unknown review item: " + ", ".join(unknown)
+            "final response disposition references unknown review item: "
+            + ", ".join(unknown)
         )
 
     missing = [item_id for item_id in expected if item_id not in disposition_ids]
@@ -541,54 +565,103 @@ def _validate_rescue_accountability(
             "new finding reuses a carried review identity: " + ", ".join(reused)
         )
 
-    carried_by_id: dict[str, CandidateFinding] = {}
-    duplicate_finding_ids: list[str] = []
-    for disposition in response.dispositions:
-        finding = disposition.finding
-        if finding is None:
-            continue
-        if finding.id in carried_by_id and finding.id not in duplicate_finding_ids:
-            duplicate_finding_ids.append(finding.id)
-        else:
-            carried_by_id[finding.id] = finding
-
-    seen_top_level_ids: set[str] = set()
+    top_by_id: dict[str, CandidateFinding] = {}
+    duplicate_top_level: list[str] = []
     for finding in response.findings:
-        if finding.id in seen_top_level_ids and finding.id not in duplicate_finding_ids:
-            duplicate_finding_ids.append(finding.id)
-        seen_top_level_ids.add(finding.id)
-
-        carried = carried_by_id.get(finding.id)
-        if (
-            carried is not None
-            and _canonical_finding_payload(finding) != _canonical_finding_payload(carried)
-            and finding.id not in duplicate_finding_ids
-        ):
-            duplicate_finding_ids.append(finding.id)
-
-    if duplicate_finding_ids:
+        if finding.id in top_by_id:
+            if finding.id not in duplicate_top_level:
+                duplicate_top_level.append(finding.id)
+        else:
+            top_by_id[finding.id] = finding
+    if duplicate_top_level:
         raise ProofReviewProtocolError(
             "final response reuses finding identity across rescue accounting: "
-            + ", ".join(duplicate_finding_ids)
+            + ", ".join(duplicate_top_level)
+        )
+
+    disposition_only: dict[str, CandidateFinding] = {}
+    incompatible: list[str] = []
+    ambiguous: list[str] = []
+    for disposition in response.dispositions:
+        disposition_finding = disposition.finding
+        if disposition_finding is None:
+            continue
+        canonical = top_by_id.get(disposition_finding.id)
+        if canonical is not None:
+            if (
+                not _finding_identity_compatible(canonical, disposition_finding)
+                and disposition_finding.id not in incompatible
+            ):
+                incompatible.append(disposition_finding.id)
+            continue
+
+        previous = disposition_only.get(disposition_finding.id)
+        if previous is None:
+            disposition_only[disposition_finding.id] = disposition_finding
+        elif (
+            _canonical_finding_payload(previous)
+            != _canonical_finding_payload(disposition_finding)
+            and disposition_finding.id not in ambiguous
+        ):
+            ambiguous.append(disposition_finding.id)
+
+    if incompatible:
+        raise ProofReviewProtocolError(
+            "incompatible finding identity across rescue accounting: "
+            + ", ".join(incompatible)
+        )
+    if ambiguous:
+        raise ProofReviewProtocolError(
+            "ambiguous disposition-only finding identity: "
+            + ", ".join(ambiguous)
         )
 
 
-def _normalize_exact_duplicate_carried_findings(
+def _normalize_rescue_finding_identities(
     request: ProofReviewTurnRequest,
     response: ProofReviewModelResponse,
 ) -> ProofReviewModelResponse:
-    if request.stage != "rescue" or not response.findings:
+    """Consolidate repeated rescue finding identities deterministically.
+
+    A unique top-level finding is the canonical payload for its ID. Carried
+    dispositions that use the same compatible ID are rewritten to that payload.
+    Without a top-level canonical payload, repeated disposition-local uses have
+    already been required to be byte-identical by accountability validation.
+    Top-level copies represented by dispositions are then removed so downstream
+    reporting sees one semantic finding identity rather than accounting duplicates.
+    """
+
+    if request.stage != "rescue":
         return response
 
-    carried_ids = {
-        disposition.finding.id
-        for disposition in response.dispositions
-        if disposition.finding is not None
-    }
-    findings = tuple(finding for finding in response.findings if finding.id not in carried_ids)
-    if len(findings) == len(response.findings):
+    top_by_id = {finding.id: finding for finding in response.findings}
+    disposition_canonical: dict[str, CandidateFinding] = {}
+    normalized_dispositions: list[ProofReviewDisposition] = []
+    carried_ids: set[str] = set()
+
+    for disposition in response.dispositions:
+        finding = disposition.finding
+        if finding is None:
+            normalized_dispositions.append(disposition)
+            continue
+
+        carried_ids.add(finding.id)
+        canonical = top_by_id.get(finding.id)
+        if canonical is None:
+            canonical = disposition_canonical.setdefault(finding.id, finding)
+        normalized_dispositions.append(
+            disposition.model_copy(update={"finding": canonical})
+        )
+
+    findings = tuple(
+        finding for finding in response.findings if finding.id not in carried_ids
+    )
+    dispositions = tuple(normalized_dispositions)
+    if findings == response.findings and dispositions == response.dispositions:
         return response
-    return response.model_copy(update={"findings": findings})
+    return response.model_copy(
+        update={"findings": findings, "dispositions": dispositions}
+    )
 
 
 def validate_proof_review_response(
@@ -628,7 +701,7 @@ def validate_proof_review_response(
         ) from exc
     normalized = ProofReviewModelResponse.model_validate(effective.model_dump(mode="python"))
     _validate_rescue_accountability(request, normalized)
-    normalized = _normalize_exact_duplicate_carried_findings(request, normalized)
+    normalized = _normalize_rescue_finding_identities(request, normalized)
     _validate_rescue_accountability(request, normalized)
     return normalized
 
@@ -762,13 +835,25 @@ def build_rescue_turn(
     )
 
 
-def _attack_report_from_response(response: ProofReviewModelResponse) -> AttackReport:
-    carried_findings = [
-        disposition.finding
-        for disposition in response.dispositions
-        if disposition.finding is not None
+def _attack_report_from_response(
+    response: ProofReviewModelResponse,
+) -> AttackReport:
+    ordered = [
+        *(
+            disposition.finding
+            for disposition in response.dispositions
+            if disposition.finding is not None
+        ),
+        *response.findings,
     ]
-    return AttackReport(findings=[*carried_findings, *response.findings])
+    findings: list[CandidateFinding] = []
+    seen_ids: set[str] = set()
+    for finding in ordered:
+        if finding.id in seen_ids:
+            continue
+        seen_ids.add(finding.id)
+        findings.append(finding)
+    return AttackReport(findings=findings)
 
 
 def review_proof_language(

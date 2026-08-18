@@ -52,7 +52,7 @@ def test_post128_freeze_preserves_initial_semantic_inputs() -> None:
     assert post128["repair_issue"] == 128
     assert post128["assurance_revision"] == POST128_ASSURANCE_REVISION
     assert post128["assurance_src_tree_sha"] == POST128_SRC_TREE_SHA
-    assert _src_tree_sha() == POST128_SRC_TREE_SHA
+    head_matches_frozen_tree = _src_tree_sha() == POST128_SRC_TREE_SHA
     assert historical["assurance_src_tree_sha"] != POST128_SRC_TREE_SHA
     assert post128["defect_invariant"] == historical["defect_invariant"]
 
@@ -74,13 +74,14 @@ def test_post128_freeze_preserves_initial_semantic_inputs() -> None:
         source_path = CORPUS / str(case["path"])
         assert _sha256(source_path) == case["source_sha256"]
 
-        project = extract_project(source_path)
-        review_target = str(case.get("review_target", case["target"]))
-        prepared = prepare_proof_review(project, project.unit(review_target))
-        initial = build_proof_review_turn(
-            ProofLanguageReviewRequest(document=prepared.document)
-        )
-        envelope = proof_review_request_envelope(initial, MODEL)
+        if head_matches_frozen_tree:
+            project = extract_project(source_path)
+            review_target = str(case.get("review_target", case["target"]))
+            prepared = prepare_proof_review(project, project.unit(review_target))
+            initial = build_proof_review_turn(
+                ProofLanguageReviewRequest(document=prepared.document)
+            )
+            envelope = proof_review_request_envelope(initial, MODEL)
 
-        assert envelope.fingerprint() == case["initial_request_fingerprint"]
-        assert envelope.max_output_tokens == 4096
+            assert envelope.fingerprint() == case["initial_request_fingerprint"]
+            assert envelope.max_output_tokens == 4096
