@@ -121,13 +121,15 @@ def test_rescue_normalizes_exact_finding_repeated_across_accounting(
     assert normalized.dispositions[0].finding == duplicated
 
 
-def test_rescue_rejects_conflicting_payload_for_carried_finding_identity() -> None:
+def test_rescue_rejects_incompatible_payload_for_carried_finding_identity() -> None:
     _, rescue = _rescue_turn()
     carried = _finding("F1")
-    conflicting = carried.model_copy(update={"explanation": "Conflicting explanation."})
+    incompatible = carried.model_copy(
+        update={"category": FindingCategory.INVALID_IMPLICATION}
+    )
     response = ProofReviewModelResponse(
         action="review",
-        findings=(conflicting,),
+        findings=(incompatible,),
         dispositions=(
             ProofReviewDisposition(
                 item_id="RV1",
@@ -140,7 +142,7 @@ def test_rescue_rejects_conflicting_payload_for_carried_finding_identity() -> No
 
     with pytest.raises(
         ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
+        match="incompatible finding identity across rescue accounting: F1",
     ):
         validate_proof_review_response(rescue, response)
 
@@ -243,8 +245,9 @@ def test_multiple_carried_items_keep_distinct_finding_identities() -> None:
     assert [finding.id for finding in report.findings] == ["F1", "F2"]
 
 
-def test_rescue_rejects_same_finding_identity_for_two_carried_items() -> None:
+def test_rescue_allows_exact_same_finding_identity_for_two_carried_items() -> None:
     _, rescue = _rescue_turn(2)
+    shared = _finding("F1")
     response = ProofReviewModelResponse(
         action="review",
         dispositions=(
@@ -252,22 +255,20 @@ def test_rescue_rejects_same_finding_identity_for_two_carried_items() -> None:
                 item_id="RV1",
                 status="confirmed",
                 explanation="First concern confirmed.",
-                finding=_finding("F1"),
+                finding=shared,
             ),
             ProofReviewDisposition(
                 item_id="RV2",
                 status="revised",
-                explanation="Second concern revised.",
-                finding=_finding("F1"),
+                explanation="Second concern converges on the same finding.",
+                finding=shared,
             ),
         ),
     )
 
-    with pytest.raises(
-        ProofReviewProtocolError,
-        match="reuses finding identity across rescue accounting: F1",
-    ):
-        validate_proof_review_response(rescue, response)
+    normalized = validate_proof_review_response(rescue, response)
+
+    assert [item.finding for item in normalized.dispositions] == [shared, shared]
 
 
 def test_duplicate_rescue_finding_is_normalized_before_recording_and_replays_exactly(
