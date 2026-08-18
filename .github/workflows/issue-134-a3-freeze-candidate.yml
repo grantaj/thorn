@@ -1,36 +1,57 @@
-name: TEMP Issue 134 A3 post-137 freeze candidate
+name: TEMP Issue 134 A3 post-137 freeze finalizer
 
 on:
   push:
     branches:
       - agent/issue-134-a3-post137-freeze
-  pull_request:
-    branches:
-      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  freeze-candidate:
+  finalize-freeze:
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ""
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-134-a3-post137-freeze
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
       - run: python -m pip install -e '.[dev]'
-      - name: Reconstruct A3 post-137 request keylessly
+      - name: Freeze reconstructed A3 contract and write permanent gates
+        run: python .github/issue134_a3_finalize.py
+      - name: Verify exact frozen keyless preflight
         run: |
           python scripts/run_issue_134_a3_post137.py \
             --preflight \
-            --output "$RUNNER_TEMP/a3-post137-preflight.json"
-      - name: Check new harness
+            --output "$RUNNER_TEMP/a3-post137-frozen.json"
+          python - <<'PY'
+          import json, os
+          p = json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'a3-post137-frozen.json')))
+          assert p['case']['frozen_request_contract_verified'] is True
+          assert p['provider_instantiated'] is False
+          assert p['provider_requests'] == 0
+          assert p['live_requests'] == 0
+          PY
+      - name: Run targeted freeze tests
         run: |
-          ruff check scripts/run_issue_134_a3_post137.py
+          pytest -q \
+            tests/test_issue_134_a3_post137_freeze.py \
+            tests/test_issue_137_schema_transport.py \
+            tests/test_issue_128_bounded_rescue_expansion.py \
+            tests/test_issue_132_rescue_finding_accounting.py
+      - name: Run static checks
+        run: |
+          ruff check .
           mypy src
-      - name: Show freeze candidate
-        run: cat "$RUNNER_TEMP/a3-post137-preflight.json"
+      - name: Commit tested freeze and remove temporary machinery
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Freeze repaired A3 pre-125 continuation"
+          git push origin HEAD:agent/issue-134-a3-post137-freeze
