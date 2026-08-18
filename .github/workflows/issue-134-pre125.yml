@@ -1,13 +1,11 @@
 name: Issue 134 pre-125 robustness continuation
 
+# Temporary execution trigger for the explicitly authorized #134 live run.
+# This branch is not to be merged; the experiment runner and frozen inputs are unchanged.
 on:
-  workflow_dispatch:
-    inputs:
-      confirm_live:
-        description: Run separately authorized paid A1/A2/A3 batch after keyless preflight
-        required: true
-        default: false
-        type: boolean
+  push:
+    branches:
+      - agent/issue-134-live-authorized
 
 jobs:
   preflight:
@@ -33,7 +31,6 @@ jobs:
           if-no-files-found: error
 
   live:
-    if: ${{ inputs.confirm_live }}
     needs: preflight
     runs-on: ubuntu-latest
     permissions:
