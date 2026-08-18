@@ -18,6 +18,7 @@ jobs:
       - run: python -m pip install -e '.[dev]'
       - run: pytest -q
       - run: python scripts/issue_101_robustness.py --check
+      - run: python scripts/run_issue_101_live.py --preflight --output /tmp/issue-101-preflight.json
       - run: thorn-eval eval/cases --validate-only
       - run: thorn-eval eval/cases --analyze
       - run: thorn --version
