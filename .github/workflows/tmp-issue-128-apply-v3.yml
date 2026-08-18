@@ -1,0 +1,68 @@
+name: TEMP issue 128 function patch
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: >-
+      github.event.pull_request.head.ref == 'agent/issue-128-bounded-rescue-expansion' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-128-bounded-rescue-expansion
+      - name: Apply function and regression replacement
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          spec = Path(".github/workflows/tmp-issue-128-pr-apply.yml").read_text(
+              encoding="utf-8"
+          )
+
+          def embedded(name: str) -> str:
+              marker = f"          {name} = '''"
+              start = spec.index(marker) + len(marker)
+              end = spec.index("\n          '''", start)
+              raw = spec[start:end]
+              lines = raw.splitlines()
+              if len(lines) <= 1:
+                  return raw
+              return lines[0] + "\n" + dedent("\n".join(lines[1:]))
+
+          replacement = embedded("replacement")
+          source_path = Path("src/thorn/proof_language_review.py")
+          text = source_path.read_text(encoding="utf-8")
+          start = text.index("def _expanded_source_addresses(")
+          end = text.index("\n\nclass ProofReviewProtocolError", start)
+          if "max_addresses: int" not in text[start:end]:
+              text = text[:start] + replacement + text[end:]
+              source_path.write_text(text, encoding="utf-8")
+
+          old_test = embedded("old_test")
+          new_test = embedded("new_test")
+          test_path = Path("tests/test_proof_review_rescue_closure.py")
+          tests = test_path.read_text(encoding="utf-8")
+          if old_test in tests:
+              tests = tests.replace(old_test, new_test, 1)
+              test_path.write_text(tests, encoding="utf-8")
+          elif new_test not in tests:
+              raise SystemExit("legacy cap regression shape not found")
+          PY
+      - name: Commit repair
+        run: |
+          if git diff --quiet; then
+            echo "Repair already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/thorn/proof_language_review.py tests/test_proof_review_rescue_closure.py
+          git commit -m "Bound automatic source-rescue prerequisite expansion"
+          git push origin HEAD:agent/issue-128-bounded-rescue-expansion
