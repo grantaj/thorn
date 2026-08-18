@@ -1,0 +1,91 @@
+{
+  "format_version": 1,
+  "experiment_id": "issue-134-pre-125",
+  "responses": [
+    {
+      "case": "A1",
+      "stage": "initial",
+      "fingerprint": "a7b24f8782586dccec61f0833215abcc9568e77ca7136454dcd6cc5d8fc61b15",
+      "response": {
+        "action": "review",
+        "findings": [
+          {
+            "id": "F1",
+            "category": "counterexample",
+            "severity": "error",
+            "title": "The claimed uniform exponent on I=[0,1) does not exist",
+            "explanation": "R1 provides only pointwise-local bounds. T0 claims that finitely many such neighborhoods cover I and hence yields one exponent N valid for every y∈I. This conclusion is false on the noncompact interval [0,1): convergence of y^n to 0 is not uniform as y approaches 1. Accordingly, no finite-subcover argument establishing T0 can follow from D1 and R1 alone.",
+            "evidence": [
+              "D1 defines I=[0,1).",
+              "R1 gives a neighborhood U_x and exponent N_x separately for each x∈I.",
+              "T0 claims finitely many U_{x_j} cover I and that N=max_j N_{x_j} works uniformly for all y∈I."
+            ],
+            "counterexample": "Take ε=1/2. For every proposed integer N≥1, let y=(3/4)^(1/N). Then 0<y<1, so y∈I, but y^N=3/4>1/2. Thus no N satisfies the uniform conclusion in T0.",
+            "confidence": 1.0
+          }
+        ],
+        "source_addresses": [],
+        "review_items": [],
+        "source_review_item_ids": [],
+        "dispositions": []
+      },
+      "usage": {
+        "requests": 1,
+        "input_tokens": 1694,
+        "output_tokens": 650,
+        "total_tokens": 2344
+      }
+    },
+    {
+      "case": "A2",
+      "stage": "initial",
+      "fingerprint": "037375711aab3e2e976b9adbabf25aa61c0706421a7b98cd36f0827bdc36fd40",
+      "response": {
+        "action": "need_source",
+        "findings": [],
+        "source_addresses": ["P1", "T0"],
+        "review_items": [
+          {
+            "id": "RV1",
+            "kind": "question",
+            "summary": "What does “stable” mean for the profiles b_n, and does the proof establish that property from the stated pointwise convergence b_n(x)→0? The recovered P1 is wholly unresolved, so the claimed implication cannot be assessed without the exact theorem/definition context and proof."
+          }
+        ],
+        "source_review_item_ids": ["RV1"],
+        "dispositions": []
+      },
+      "usage": {
+        "requests": 1,
+        "input_tokens": 1458,
+        "output_tokens": 267,
+        "total_tokens": 1725
+      }
+    },
+    {
+      "case": "A2",
+      "stage": "rescue",
+      "fingerprint": "d5a44378387c79cd488d1e4ce24775db9b92186a35b22950541ef423edcb67a9",
+      "response": {
+        "action": "review",
+        "findings": [],
+        "source_addresses": [],
+        "review_items": [],
+        "source_review_item_ids": [],
+        "dispositions": [
+          {
+            "item_id": "RV1",
+            "status": "unresolved",
+            "explanation": "The rescued text shows only the pointwise-decay result at @R1, the assertion “This is precisely stability” at @P1, and the stability theorem statement at @T0. It does not supply the definition of “stable.” Therefore the bounded evidence does not determine whether pointwise convergence b_n(x)→0 is definitionally sufficient for stability or whether a stronger condition, such as uniform convergence, is required. This remaining uncertainty is not itself a mathematical defect.",
+            "finding": null
+          }
+        ]
+      },
+      "usage": {
+        "requests": 1,
+        "input_tokens": 1853,
+        "output_tokens": 260,
+        "total_tokens": 2113
+      }
+    }
+  ]
+}
