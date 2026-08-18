@@ -53,3 +53,14 @@ replace(
         )
 ''',
 )
+
+replace(
+    "src/thorn/providers/request_envelope.py",
+    "from typing import Literal\n",
+    "from typing import Literal, cast\n",
+)
+replace(
+    "src/thorn/providers/request_envelope.py",
+    "    schema = json.loads(json.dumps(request.response_schema()))\n",
+    "    schema = cast(dict[str, object], json.loads(json.dumps(request.response_schema())))\n",
+)
