@@ -6,6 +6,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+MANIFEST = ROOT / "eval" / "robustness" / "issue_101" / "manifest.json"
+
+
+def _src_tree_sha() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD:src/thorn"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
 
 def test_issue_101_live_preflight_is_keyless_and_bounded(tmp_path: Path) -> None:
     output = tmp_path / "preflight.json"
@@ -24,6 +37,16 @@ def test_issue_101_live_preflight_is_keyless_and_bounded(tmp_path: Path) -> None
         text=True,
         env=env,
     )
+
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    assurance_src_tree_sha = str(manifest["assurance_src_tree_sha"])
+    if _src_tree_sha() != assurance_src_tree_sha:
+        assert completed.returncode != 0
+        assert "production src/thorn tree differs from the frozen assurance tree" in (
+            completed.stderr
+        )
+        assert not output.exists()
+        return
 
     assert completed.returncode == 0, (
         f"issue-101 preflight failed\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
