@@ -2,6 +2,7 @@
   "format_version": 1,
   "issue": 101,
   "assurance_revision": "79dc8b5986b0242240fcc2e5ab0de7437a08a9ff",
+  "assurance_src_tree_sha": "27ff094e3560d95ab8c9bb5bd0a5ec08a7961c30",
   "defect_invariant": "Every defective paper claims one uniform index for x^n on [0,1), while the domain still accumulates at the excluded endpoint 1.",
   "control": {
     "id": "C0",
