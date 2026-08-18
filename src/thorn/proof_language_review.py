@@ -671,6 +671,7 @@ def build_rescue_turn(
         request.document,
         source_request.source_addresses,
         advertised=initial_turn.allowed_source_addresses,
+        max_addresses=initial_turn.max_source_addresses,
     )
     try:
         parsed = parse_source_rescue_request(
