@@ -97,7 +97,9 @@ class _Budget:
         input_tokens = after["input_tokens"] - before["input_tokens"]
         output_tokens = after["output_tokens"] - before["output_tokens"]
         if requests > 0 and input_tokens <= 0:
-            raise RuntimeError("provider returned no input-token accounting for a completed request")
+            raise RuntimeError(
+                "provider returned no input-token accounting for a completed request"
+            )
         self.input_tokens += input_tokens
         self.output_tokens += output_tokens
         if self.input_tokens > MAX_INPUT_TOKENS:
@@ -125,7 +127,11 @@ class _GuardedTransport:
 
     def review_proof_turn(self, request: ProofReviewTurnRequest) -> ProofReviewModelResponse:
         envelope = proof_review_request_envelope(request, self.model)
-        if request.stage == "initial" and envelope.fingerprint() != self.expected_initial_fingerprint:
+        fingerprint_drifted = (
+            request.stage == "initial"
+            and envelope.fingerprint() != self.expected_initial_fingerprint
+        )
+        if fingerprint_drifted:
             raise RuntimeError(f"{self.case_id}: frozen initial request fingerprint drifted")
         self.budget.reserve(envelope)
         before = _usage(self.delegate)
