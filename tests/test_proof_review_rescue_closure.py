@@ -130,16 +130,18 @@ def test_rescue_expansion_covers_cancellation_regression_shape() -> None:
     assert "SOURCE @P1" in rescue.user_content
 
 
-def test_expanded_rescue_still_obeys_existing_source_cap() -> None:
+def test_bounded_rescue_preserves_requested_source_when_cap_is_full() -> None:
     request = ProofLanguageReviewRequest(
         document=_chain_document(),
         max_source_addresses=1,
     )
     initial = build_proof_review_turn(request)
 
-    with pytest.raises(ProofReviewProtocolError, match="at most 1"):
-        build_rescue_turn(request, initial, _need("P2"))
+    rescue = build_rescue_turn(request, initial, _need("P2"))
 
+    assert rescue.requested_source_addresses == ("P2",)
+    assert "SOURCE @P2" in rescue.user_content
+    assert "SOURCE @P1" not in rescue.user_content
 
 def test_review_contract_forbids_converting_recovery_uncertainty_to_defect() -> None:
     request = ProofLanguageReviewRequest(document=_chain_document())
