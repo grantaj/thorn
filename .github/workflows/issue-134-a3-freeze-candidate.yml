@@ -1,0 +1,33 @@
+name: TEMP Issue 134 A3 post-137 freeze candidate
+
+on:
+  push:
+    branches:
+      - agent/issue-134-a3-post137-freeze
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-candidate:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -e '.[dev]'
+      - name: Reconstruct A3 post-137 request keylessly
+        run: |
+          python scripts/run_issue_134_a3_post137.py \
+            --preflight \
+            --output "$RUNNER_TEMP/a3-post137-preflight.json"
+      - name: Check new harness
+        run: |
+          ruff check scripts/run_issue_134_a3_post137.py
+          mypy src
+      - name: Show freeze candidate
+        run: cat "$RUNNER_TEMP/a3-post137-preflight.json"
