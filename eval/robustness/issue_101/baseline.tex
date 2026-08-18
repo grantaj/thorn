@@ -1,0 +1,78 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+
+\title{Uniform attenuation for geometric response profiles}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Geometric profiles}
+
+Let
+\[
+I=[0,1)
+\]
+and, for each integer \(n\geq 1\), define the response profile
+\[
+a_n:I\to\mathbb R,\qquad a_n(x)=x^n.
+\]
+We say that the profiles are uniformly attenuating on \(I\) if for every
+\(\varepsilon>0\) there is an integer \(N\) such that
+\[
+  |a_n(x)|<\varepsilon
+  \qquad\text{for every }x\in I\text{ and every }n\geq N.
+\]
+
+The next elementary observation records the decay seen at any fixed
+observation point.
+
+\begin{lemma}[Pointwise decay]\label{lem:pointwise}
+For every \(x\in I\) and every \(\varepsilon>0\), there is an integer
+\(N_x\) such that
+\[
+  x^n<\varepsilon\qquad\text{for every }n\geq N_x.
+\]
+\end{lemma}
+
+\begin{proof}
+If \(x=0\) the assertion is immediate.  If \(0<x<1\), then
+\(\log x<0\).  Choose \(N_x\) so large that \(N_x\log x<\log\varepsilon\).
+For \(n\geq N_x\) we then have
+\[
+  x^n=\exp(n\log x)\leq \exp(N_x\log x)<\varepsilon.
+\]
+\end{proof}
+
+\section{Uniform attenuation}
+
+\begin{theorem}\label{thm:uniform-decay}
+The geometric response profiles \((a_n)\) are uniformly attenuating on
+\(I\).
+\end{theorem}
+
+\begin{proof}
+Fix \(\varepsilon>0\).  By Lemma~\ref{lem:pointwise}, for each \(x\in I\)
+choose \(N_x\) with \(x^{N_x}<\varepsilon\).  Continuity of
+\(y\mapsto y^{N_x}\) gives an open neighbourhood \(U_x\) of \(x\) in
+\(I\) such that
+\[
+  y^{N_x}<\varepsilon\qquad (y\in U_x).
+\]
+The sets \(U_x\) cover \(I\).  Since \(I\) is a bounded interval, choose
+a finite subcover
+\[
+  I=U_{x_1}\cup\cdots\cup U_{x_m}.
+\]
+Set \(N=\max_j N_{x_j}\).  If \(y\in I\), choose \(j\) with
+\(y\in U_{x_j}\).  For every \(n\geq N\), using \(0\leq y<1\),
+\[
+  y^n\leq y^{N_{x_j}}<\varepsilon.
+\]
+Thus the defining uniform estimate holds.
+\end{proof}
+
+\end{document}

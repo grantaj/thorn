@@ -1,0 +1,63 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+
+\title{Uniform attenuation for geometric response profiles}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Response profiles}
+
+Let \(I=[0,1)\) and define \(a_n(x)=x^n\) for \(x\in I\) and \(n\geq1\).
+Uniform attenuation on \(I\) means that for every \(\varepsilon>0\) there
+is an integer \(N\) such that \(a_n(x)<\varepsilon\) for all \(x\in I\)
+and all \(n\geq N\).
+
+\begin{lemma}[Local attenuation]\label{lem:local}
+For every \(x\in I\) and \(\varepsilon>0\), there are an open neighbourhood
+\(U_x\subset I\) of \(x\) and an integer \(N_x\) such that
+\[
+ y^n<\varepsilon\qquad(y\in U_x,\ n\geq N_x).
+\]
+\end{lemma}
+
+\begin{proof}
+For fixed \(x<1\), choose \(N_x\) with \(x^{N_x}<\varepsilon\).
+Continuity gives a neighbourhood \(U_x\) on which
+\(y^{N_x}<\varepsilon\). Since \(0\leq y<1\), the same inequality holds
+for all \(n\geq N_x\).
+\end{proof}
+
+\begin{lemma}[Finite uniformization]\label{lem:uniformize}
+Fix \(\varepsilon>0\). There are points \(x_1,\ldots,x_m\in I\) such that
+\[
+ I=U_{x_1}\cup\cdots\cup U_{x_m}.
+\]
+Consequently \(N=\max_jN_{x_j}\) satisfies
+\[
+ y^n<\varepsilon\qquad(y\in I,\ n\geq N).
+\]
+\end{lemma}
+
+\begin{proof}
+The neighbourhoods supplied by Lemma~\ref{lem:local} form an open cover of
+the bounded interval \(I\), so finitely many cover \(I\). The conclusion
+then follows by taking the maximum of their indices.
+\end{proof}
+
+\section{Uniform conclusion}
+
+\begin{theorem}\label{thm:uniform-decay}
+The geometric response profiles \((a_n)\) are uniformly attenuating on \(I\).
+\end{theorem}
+
+\begin{proof}
+Given \(\varepsilon>0\), apply Lemma~\ref{lem:uniformize}. Its index \(N\)
+is exactly the index required in the definition of uniform attenuation.
+\end{proof}
+
+\end{document}

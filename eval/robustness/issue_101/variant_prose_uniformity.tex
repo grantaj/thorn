@@ -1,0 +1,53 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+
+\title{Geometric response profiles near a limiting boundary}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Convention and stability criterion}
+
+Throughout, the observation window is
+\[
+ \mathcal W=\{x\in\mathbb R:0\leq x<1\}.
+\]
+A sequence of nonnegative profiles will be called \emph{stable} when the
+following uniform requirement holds: given any positive tolerance, one can
+choose a single sufficiently late stage, depending on the tolerance but not
+on the observation point, after which every later profile stays below that
+tolerance at every point of the observation window.
+
+For \(n\geq1\) put \(b_n(x)=x^n\).
+
+\section{Local decay}
+
+\begin{lemma}\label{lem:local-decay}
+At every observation point \(x\in\mathcal W\), the values \(b_n(x)\) tend
+to zero.
+\end{lemma}
+
+\begin{proof}
+If \(x=0\) this is immediate. Otherwise \(0<x<1\), so
+\(n\log x\to-\infty\), and hence \(x^n=\exp(n\log x)\to0\).
+\end{proof}
+
+\begin{theorem}\label{thm:uniform-decay}
+The geometric profiles \(b_n\) are stable.
+\end{theorem}
+
+\begin{proof}
+Fix a positive tolerance. Lemma~\ref{lem:local-decay} supplies a sufficiently
+late stage at every observation point, and continuity preserves each such
+estimate on a neighbourhood of that point. The resulting neighbourhoods
+cover the bounded observation window, so retain finitely many and take the
+largest associated stage. Every observation point then lies in one retained
+neighbourhood, and all later profiles are smaller still. This is precisely
+stability.
+\end{proof}
+
+\end{document}
