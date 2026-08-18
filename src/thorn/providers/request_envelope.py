@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 from importlib.resources import files
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel
 
@@ -128,6 +128,42 @@ def semantic_request_envelope(
     )
 
 
+def _proof_review_response_schema(
+    request: ProofReviewTurnRequest,
+) -> dict[str, object]:
+    """Expose the request-specific proof-review action states to the provider.
+
+    Pydantic's model-level validators still enforce relational invariants that JSON
+    Schema cannot express cleanly, but the provider must not be offered combinations
+    that are invalid merely because of the selected protocol action.
+    """
+
+    schema = cast(dict[str, object], json.loads(json.dumps(request.response_schema())))
+    if request.stage != "initial" or not request.source_rescue_allowed:
+        return schema
+
+    schema["anyOf"] = [
+        {
+            "properties": {
+                "action": {"const": "review"},
+                "source_addresses": {"maxItems": 0},
+                "review_items": {"maxItems": 0},
+                "source_review_item_ids": {"maxItems": 0},
+            }
+        },
+        {
+            "properties": {
+                "action": {"const": "need_source"},
+                "findings": {"maxItems": 0},
+                "source_addresses": {"minItems": 1},
+                "review_items": {"minItems": 1},
+                "source_review_item_ids": {"minItems": 1},
+            }
+        },
+    ]
+    return schema
+
+
 def proof_review_request_envelope(
     request: ProofReviewTurnRequest,
     model: str,
@@ -151,11 +187,12 @@ def proof_review_request_envelope(
             {"role": "user", "content": request.user_content},
         )
     return ProviderRequestEnvelope(
+        provider="openai-responses-create-json-schema",
         kind="proof_review",
         model=model,
         system_prompt=system_prompt,
         user_content=request.user_content,
-        response_schema=request.response_schema(),
+        response_schema=_proof_review_response_schema(request),
         protocol_version=request.protocol_version,
         representation=request.representation,
         stage=request.stage,

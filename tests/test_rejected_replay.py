@@ -157,6 +157,13 @@ class _FakeResponses:
             usage=SimpleNamespace(input_tokens=10, output_tokens=2, total_tokens=12),
         )
 
+    def create(self, **kwargs: object) -> SimpleNamespace:
+        del kwargs
+        return SimpleNamespace(
+            output_text=self.output.model_dump_json(),
+            usage=SimpleNamespace(input_tokens=10, output_tokens=2, total_tokens=12),
+        )
+
 
 class _FakeClient:
     def __init__(self, output: ProofReviewModelResponse) -> None:

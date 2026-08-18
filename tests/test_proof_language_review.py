@@ -89,6 +89,13 @@ class _FakeResponses:
             usage=SimpleNamespace(input_tokens=11, output_tokens=3, total_tokens=14),
         )
 
+    def create(self, **kwargs: object) -> SimpleNamespace:
+        self.calls.append(kwargs)
+        return SimpleNamespace(
+            output_text=self.response.model_dump_json(),
+            usage=SimpleNamespace(input_tokens=11, output_tokens=3, total_tokens=14),
+        )
+
 
 class _FakeClient:
     def __init__(self, response: ProofReviewModelResponse) -> None:
@@ -353,10 +360,16 @@ def test_openai_provider_transports_exact_proof_review_envelope_keylessly(
     assert len(client.responses.calls) == 1
     call = client.responses.calls[0]
     assert call["model"] == "test-model"
-    text_format = call["text_format"]
-    assert isinstance(text_format, type)
-    assert issubclass(text_format, ProofReviewModelResponse)
-    assert text_format is not ProofReviewModelResponse
+    text = call["text"]
+    assert isinstance(text, dict)
+    text_format = text["format"]
+    assert isinstance(text_format, dict)
+    assert text_format["type"] == "json_schema"
+    assert text_format["strict"] is True
+    schema = text_format["schema"]
+    assert isinstance(schema, dict)
+    assert "anyOf" in schema
+    assert schema["additionalProperties"] is False
     messages = call["input"]
     assert isinstance(messages, list)
     assert "THORN-PROOF 1" in messages[1]["content"]
