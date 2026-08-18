@@ -1,73 +1,93 @@
-name: Issue 101 frozen robustness run
+name: TEMP issue 101 post-128 live
 
 on:
-  workflow_dispatch:
-    inputs:
-      confirm_live:
-        description: Run the authorized paid batch after keyless preflight
-        required: true
-        default: false
-        type: boolean
+  pull_request:
 
 jobs:
   preflight:
+    if: >-
+      github.event.pull_request.head.ref == 'tmp/issue-101-post128-live-20260818' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ""
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: tmp/issue-101-post128-live-20260818
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install -e .
-      - name: Verify frozen request contracts and budgets
+      - run: python -m pip install -e '.[dev]'
+      - name: Verify merged post-128 freeze and bounded rescue
         run: |
+          pytest -q \
+            tests/test_issue_101_post128_freeze.py \
+            tests/test_issue_128_bounded_rescue_expansion.py \
+            tests/test_proof_review_rescue_closure.py
+      - name: Select post-128 manifest in ephemeral workspace
+        run: cp eval/robustness/issue_101/manifest_post128.json eval/robustness/issue_101/manifest.json
+      - name: Verify frozen post-128 request contracts and budgets
+        run: |
+          mkdir -p "$RUNNER_TEMP/issue-101-post128"
           python scripts/run_issue_101_live.py \
             --preflight \
-            --output "$RUNNER_TEMP/issue-101-preflight.json"
+            --output "$RUNNER_TEMP/issue-101-post128/preflight.json"
       - uses: actions/upload-artifact@v4
         with:
-          name: issue-101-preflight-${{ github.run_id }}
-          path: ${{ runner.temp }}/issue-101-preflight.json
+          name: issue-101-post128-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/issue-101-post128/preflight.json
           if-no-files-found: error
 
   live:
-    if: ${{ inputs.confirm_live }}
+    if: >-
+      github.event.pull_request.head.ref == 'tmp/issue-101-post128-live-20260818' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     needs: preflight
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: tmp/issue-101-post128-live-20260818
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
       - run: python -m pip install -e .
-      - name: Run frozen paid batch
+      - name: Select post-128 manifest in ephemeral workspace
+        run: cp eval/robustness/issue_101/manifest_post128.json eval/robustness/issue_101/manifest.json
+      - name: Verify repository live API secret is configured
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: test -n "$OPENAI_API_KEY"
+      - name: Run authorized frozen post-128 paid batch
+        id: live
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          mkdir -p "$RUNNER_TEMP/issue-101/recordings" "$RUNNER_TEMP/issue-101/reports"
+          mkdir -p "$RUNNER_TEMP/issue-101-post128/recordings" "$RUNNER_TEMP/issue-101-post128/reports"
           python scripts/run_issue_101_live.py \
             --live \
-            --record-dir "$RUNNER_TEMP/issue-101/recordings" \
-            --report-dir "$RUNNER_TEMP/issue-101/reports" \
-            --output "$RUNNER_TEMP/issue-101/live.json"
+            --record-dir "$RUNNER_TEMP/issue-101-post128/recordings" \
+            --report-dir "$RUNNER_TEMP/issue-101-post128/reports" \
+            --output "$RUNNER_TEMP/issue-101-post128/live.json"
       - name: Verify exact keyless replay
+        if: steps.live.outcome == 'success'
         env:
           OPENAI_API_KEY: ""
         run: |
-          mkdir -p "$RUNNER_TEMP/issue-101/replay-reports"
+          mkdir -p "$RUNNER_TEMP/issue-101-post128/replay-reports"
           python scripts/run_issue_101_live.py \
-            --replay-dir "$RUNNER_TEMP/issue-101/recordings" \
-            --report-dir "$RUNNER_TEMP/issue-101/replay-reports" \
-            --output "$RUNNER_TEMP/issue-101/replay.json"
-      - name: Preserve live and replay evidence
+            --replay-dir "$RUNNER_TEMP/issue-101-post128/recordings" \
+            --report-dir "$RUNNER_TEMP/issue-101-post128/replay-reports" \
+            --output "$RUNNER_TEMP/issue-101-post128/replay.json"
+      - name: Preserve post-128 live and replay evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: issue-101-live-${{ github.run_id }}
-          path: ${{ runner.temp }}/issue-101
+          name: issue-101-post128-live-${{ github.run_id }}
+          path: ${{ runner.temp }}/issue-101-post128
           if-no-files-found: error
