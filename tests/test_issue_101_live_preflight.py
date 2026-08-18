@@ -19,13 +19,15 @@ def test_issue_101_live_preflight_is_keyless_and_bounded(tmp_path: Path) -> None
             "--output",
             str(output),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         env=env,
     )
 
-    assert completed.returncode == 0
+    assert completed.returncode == 0, (
+        f"issue-101 preflight failed\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+    )
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["mode"] == "preflight"
     assert payload["model"] == "gpt-5.6"
