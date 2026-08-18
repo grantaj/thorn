@@ -50,9 +50,9 @@ uniform index. Directly, `x^n <= rho^n -> 0` uniformly on `I_rho`.
 The control changes the mathematical premise that failed in the baseline; it
 is not tuned against a Thorn/model outcome.
 
-## Frozen invariant for adaptive variants
+## Frozen invariant for presentation variants
 
-Every defective adversarial variant must continue to claim uniform
+Every defective presentation variant must continue to claim uniform
 attenuation all the way up to `1` while excluding the endpoint itself.
 Presentation, notation, lemma decomposition, references, and source
 organization may change, but no variant may add a fixed margin `rho<1`,

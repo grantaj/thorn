@@ -190,7 +190,7 @@ The following list is a coverage map, not a claim that every item needs its own 
 - disconnected or noncompact domains;
 - characteristic-dependent failures.
 
-Cheap adversarial examples such as zero, identity, constant functions, and one-point spaces should be
+Cheap stress-test examples such as zero, identity, constant functions, and one-point spaces should be
 treated as first-class detection strategies.
 
 ### Limits and interchange
@@ -313,12 +313,12 @@ Expectations describe semantic ground truth rather than exact model prose. A liv
 because it happened to complain; it passes because a surviving finding lands in an accepted category at
 the required severity.
 
-### Adaptive adversarial-author red-teaming
+### Adaptive known-defect robustness testing
 
-Adaptive white-box red-teaming is a separate assurance mode from ordinary fixture construction. It asks
-whether an author who can inspect Thorn's source, prompts, canonical IR, source handles, dependency graph,
-reports, and cache decisions can preserve one independently adjudicated mathematical defect while changing
-only its presentation until the assurance boundary loses it.
+Adaptive known-defect testing is a separate assurance mode from ordinary fixture construction. It asks
+whether an implementation-aware author can preserve one independently adjudicated mathematical defect
+while changing only its presentation, then measure whether Thorn's mathematical judgment remains stable.
+The manuscript is the object under variation; this is not a test of computer or service security.
 
 These modes should not be collapsed:
 
@@ -326,30 +326,29 @@ These modes should not be collapsed:
 | --- | --- | --- | --- |
 | paired clean/defect fixture | one small defect and nearby control | normally nothing after admission | does Thorn distinguish an already specified semantic contrast? |
 | metamorphic test | mathematical semantics | a predetermined semantics-preserving transformation family | is behavior invariant under harmless rewrites? |
-| natural-paper acceptance | real or realistically authored paper | normal corpus evolution, not outcome-adaptive attacks | does extraction/representation work on ordinary document shapes without excessive false positives? |
+| natural-paper acceptance | real or realistically authored paper | normal corpus evolution, not outcome-adaptive variation | does extraction/representation work on ordinary document shapes without excessive false positives? |
 | frozen semantic-review evaluation | requests, schemas/protocols, expected categories, and usually provider records/replays | model/arm only as explicitly designed by the experiment | how does a fixed semantic-review treatment perform comparably over time? |
-| adaptive adversarial-author red-team | one wrong mathematical invariant, independent adjudication, matched clean control, and attack journal | presentation changes iteratively after observing Thorn | where is the earliest assurance layer that a knowledgeable author can make lose the same defect? |
+| adaptive known-defect presentation variation | one wrong mathematical invariant, independent adjudication, matched clean control, and variation journal | presentation changes iteratively after observing Thorn | where is the earliest review layer that can lose the same mathematical defect? |
 
-An adaptive attack is valid only while the known mathematical counterexample or missing premise still
+A presentation variant is valid only while the known mathematical counterexample or missing premise still
 applies. Adding the premise, weakening the theorem, removing the proof, or otherwise repairing the
-mathematics invalidates the attack. Malformed LaTeX and parser denial-of-service cases belong to other
-test classes rather than counting as mathematical evasions.
+mathematics invalidates the variant. Malformed LaTeX and parser-failure cases belong to other test classes.
 
-Every adaptive attempt should be journalled before the next mutation, including unsuccessful attacks.
-The journal should record source hashes, parentage, the invariant defect and independent adjudication,
-the attack hypothesis, deterministic/Proof-IR/dependency/source-handle observations, cache decision where
-relevant, Lean/report behavior, the earliest failed boundary, and the outcome. A semantic cache reuse
-decision after a relevant source/dependency change is itself a red-team outcome even if forced fresh
-review would have detected the mathematics.
+Every adaptive attempt should be journalled before the next mutation, including variants that Thorn
+continues to represent faithfully. The journal records source hashes, parentage, the invariant defect and
+independent adjudication, the variation hypothesis, deterministic/Proof-IR/dependency/source-handle
+observations, cache decision where relevant, Lean/report behavior, the earliest failed boundary, and the
+outcome. A semantic cache reuse decision after a relevant source/dependency change is itself a robustness
+result even if a forced fresh review would have noticed the mathematics.
 
-Keyless adaptive testing must not treat a fake reviewer response as mathematical evidence. Deterministic
-representation, reachability, cache, replay, Lean, and report evidence can establish failures at those
-layers; when faithful context reaches a live-model boundary and no exact replay exists, the semantic
+Keyless adaptive testing must not treat a deterministic stand-in reviewer response as mathematical
+evidence. Representation, reachability, cache, replay, Lean, and report evidence can establish failures at
+those layers; when faithful context reaches a live-model boundary and no exact replay exists, the semantic
 outcome remains unresolved until a separately authorized frozen live experiment.
 
-Public CI should contain only reproducible public methodology, representative/sanitized regressions, and
-keyless checks. Unreleased adaptive variants may live in a private held-out corpus, but public CI must not
-depend on private material. Issue #101's durable example lives under `eval/adversarial/issue_101`.
+Public CI contains only reproducible public methodology, representative regressions, and keyless checks.
+Unreleased adaptive variants may live in a private held-out corpus, but public CI must not depend on
+private material. Issue #101's durable public example lives under `eval/robustness/issue_101`.
 
 ## Matrix metadata
 
@@ -390,7 +389,7 @@ A mature Thorn suite should be able to answer questions such as:
 - Do we refuse speculative generalizations that the supplied proof does not actually establish?
 - Do objective readability checks have clean unconventional controls?
 - Can a dependency be flawed without tainting unrelated downstream results?
-- Does every high-severity class have at least one adversarial clean neighbour?
-- Do adaptive white-box attacks preserve one known-wrong mathematical invariant while probing representation, reachability, cache, semantic review, and report boundaries separately?
+- Does every high-severity class have at least one challenging clean neighbour?
+- Do adaptive known-defect variants preserve one known-wrong mathematical invariant while probing representation, reachability, cache, semantic review, and report boundaries separately?
 
 That is a much stronger specification than "we have N bad papers".

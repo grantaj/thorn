@@ -1,6 +1,6 @@
-# Issue #101 adaptive red-team methodology
+# Issue #101 adaptive known-defect robustness methodology
 
-This directory is the durable public record for issue #101. It is an assurance investigation, not a collection of model-prompt tricks.
+This directory is the durable public record for issue #101. It evaluates the robustness of mathematical review under presentation changes; it is not a computer-security exercise.
 
 ## Invariant
 
@@ -10,15 +10,15 @@ The matched clean control fixes `0<rho<1` and works on `[0,rho]`. It was frozen 
 
 ## What may change
 
-An adversarial author may alter wording, notation, theorem/lemma decomposition, local conventions, source organization, and presentation of standard results. The author may not add the missing compactness/margin premise, weaken the theorem, remove the proof, or otherwise make the claimed uniform estimate true.
+A challenge author may alter wording, notation, theorem/lemma decomposition, local conventions, source organization, and presentation of standard results. The author may not add the missing compactness/margin premise, weaken the theorem, remove the proof, or otherwise make the claimed uniform estimate true.
 
-Malformed LaTeX, parser crashes, meaningless statements, and deliberate non-mathematical obfuscation do not count as attacks.
+Malformed LaTeX, parser crashes, meaningless statements, and non-mathematical obfuscation do not count as valid presentation variants.
 
 ## Keyless evidence rule
 
-No live provider response is treated as available in this tranche. A fake transport is used only to exercise review-state and cache transitions; its empty response is never evidence that mathematics is clean.
+No live provider response is treated as available in this tranche. A deterministic stand-in transport is used only to exercise review-state and cache transitions; its empty response is never evidence that mathematics is clean.
 
-A keyless success therefore requires a deterministic assurance failure before model reasoning, such as:
+A keyless robustness counterexample therefore requires a deterministic review-boundary failure before model reasoning, such as:
 
 - load-bearing source information lost by extraction or canonicalization;
 - a dependency/scope edge that disappears;
@@ -26,11 +26,11 @@ A keyless success therefore requires a deterministic assurance failure before mo
 - unsafe semantic-cache reuse after a mathematically relevant source/dependency change;
 - a report/visualization that conceals a concern already present upstream.
 
-If a faithful packet reaches the model boundary, the keyless outcome is `ambiguous`, not `caught`: a fresh model response would be needed to adjudicate semantic reasoning.
+If a faithful packet reaches the model boundary, the keyless semantic outcome is `ambiguous`: a fresh model response or exact replay would be needed to adjudicate semantic reasoning.
 
 ## Earliest-boundary classification
 
-The journal classifies the first failing layer, rather than adding a later heuristic:
+The variation journal classifies the first failing layer rather than adding a later heuristic:
 
 1. source/extraction loss;
 2. canonical representation loss;
@@ -47,18 +47,18 @@ A downstream symptom does not replace an earlier diagnosis. In particular, missi
 
 ## Incremental-cache lane
 
-The #10 cache is attacked separately from semantic reasoning. Starting from a cached review, the harness mutates:
+The #10 cache is tested separately from semantic reasoning. Starting from a cached review, the harness varies:
 
-- source wording that normalizes to the same `thorn-proof/1` packet;
+- local mathematical wording that normalizes to the same `thorn-proof/1` packet;
 - a relevant upstream proof while the target packet remains unchanged;
 - dependency-edge identity/topology;
 - nearby exposition intended to be irrelevant.
 
-A `cache_hit_*`/reuse decision after one of the first three changes is a first-class red-team success. Conservative rechecks are recorded as robustness evidence (and, for genuinely irrelevant exposition, possible efficiency over-invalidation), not silently normalized away.
+Reuse after one of the first three changes would be a first-class robustness counterexample. Conservative rechecks are recorded as robustness evidence and, for genuinely irrelevant exposition, possible efficiency over-invalidation.
 
 ## Public/private discipline
 
-Public Thorn contains the frozen baseline/control, several representative attacks, the observer, methodology, journal, and reduced regressions for understood failure classes. The private `grantaj/thorn-private` repository is used for unreleased adaptive shapes. Public CI never depends on private material.
+Public Thorn contains the frozen baseline/control, representative presentation variants, the observer, methodology, variation journal, and reduced regressions for understood failure classes. The private `grantaj/thorn-private` repository is used for unreleased held-out shapes. Public CI never depends on private material.
 
 ## Reports and formalisation
 

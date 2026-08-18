@@ -7,10 +7,10 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
-_SCRIPT = _ROOT / "scripts" / "issue_101_redteam.py"
+_SCRIPT = _ROOT / "scripts" / "issue_101_robustness.py"
 
 
-def test_issue_101_keyless_redteam_observer_runs_without_provider_credentials(
+def test_issue_101_keyless_robustness_observer_runs_without_provider_credentials(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "observations.json"
@@ -30,4 +30,5 @@ def test_issue_101_keyless_redteam_observer_runs_without_provider_credentials(
     assert payload["semantic_adjudication"].startswith("not performed")
     assert len(payload["cases"]) == 5
     assert all(case["source_hash_matches_frozen"] for case in payload["cases"])
+    assert all(case["request_fingerprint_matches_frozen"] for case in payload["cases"])
     assert "unsafe semantic cache reuse" not in completed.stdout

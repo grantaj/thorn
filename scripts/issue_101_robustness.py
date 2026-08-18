@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Keyless issue #101 red-team observer.
+"""Keyless issue #101 known-defect robustness observer.
 
-This script deliberately does not adjudicate model reasoning.  It exercises the
+This script deliberately does not adjudicate model reasoning. It exercises the
 production deterministic review preparation, source contract, cache policy,
 Lean projection, report and proof-visualizer boundaries and records what reaches
 those boundaries.
@@ -33,15 +33,15 @@ from thorn.review_cache import ProofReviewCache
 from thorn.review_workflow import prepare_proof_review, run_cached_proof_review
 
 ROOT = Path(__file__).resolve().parents[1]
-CORPUS = ROOT / "eval" / "adversarial" / "issue_101"
+CORPUS = ROOT / "eval" / "robustness" / "issue_101"
 MANIFEST = CORPUS / "manifest.json"
 FROZEN_LIVE_MODEL = "gpt-5.6"
 
 
-class _CleanTransport:
+class _ProtocolTransport:
     """Deterministic protocol stand-in; never performs a provider call."""
 
-    model = "issue-101-keyless-fake"
+    model = "issue-101-keyless-standin"
 
     def __init__(self, count: int = 8) -> None:
         self.responses = [ProofReviewModelResponse(action="review") for _ in range(count)]
@@ -85,6 +85,7 @@ def _observe_case(case: dict[str, Any]) -> dict[str, object]:
     advertised = advertised_source_addresses(document)
     turn = build_proof_review_turn(ProofLanguageReviewRequest(document=document))
     envelope = proof_review_request_envelope(turn, FROZEN_LIVE_MODEL)
+    request_fingerprint = envelope.fingerprint()
 
     with tempfile.TemporaryDirectory(prefix="thorn-101-") as raw_tmp:
         tmp = Path(raw_tmp)
@@ -123,7 +124,10 @@ def _observe_case(case: dict[str, Any]) -> dict[str, object]:
             tuple(turn.allowed_source_addresses) == tuple(advertised)
         ),
         "frozen_live_model": FROZEN_LIVE_MODEL,
-        "initial_request_fingerprint": envelope.fingerprint(),
+        "initial_request_fingerprint": request_fingerprint,
+        "request_fingerprint_matches_frozen": (
+            request_fingerprint == case["initial_request_fingerprint"]
+        ),
         "initial_request_characters": sum(
             len(message.get("role", "")) + len(message.get("content", ""))
             for message in envelope.input_messages()
@@ -154,7 +158,7 @@ def _cache_scenario(
         paper = tmp / "paper.tex"
         before = _prepare_text(paper, before_text)
         cache = ProofReviewCache(tmp / "cache")
-        transport = _CleanTransport()
+        transport = _ProtocolTransport()
         first = run_cached_proof_review(before, transport, cache)
         after = _prepare_text(paper, after_text)
         second = run_cached_proof_review(after, transport, cache)
@@ -164,13 +168,13 @@ def _cache_scenario(
             "first_reason": first.cache.reason.value,
             "second_status": second.cache.status.value,
             "second_reason": second.cache.reason.value,
-            "provider_turns": transport.requests,
+            "protocol_turns": transport.requests,
         }
 
 
 def _cache_observations() -> dict[str, object]:
     baseline = (CORPUS / "baseline.tex").read_text(encoding="utf-8")
-    lemma = (CORPUS / "variant_lemma_laundering.tex").read_text(encoding="utf-8")
+    lemma = (CORPUS / "variant_lemma_indirection.tex").read_text(encoding="utf-8")
 
     exposition_after = baseline.replace(
         "\\maketitle\n",
@@ -205,7 +209,7 @@ def observe() -> dict[str, object]:
         "issue": 101,
         "assurance_revision": manifest["assurance_revision"],
         "cases": [_observe_case(case) for case in cases],
-        "cache_attacks": _cache_observations(),
+        "cache_variations": _cache_observations(),
         "semantic_adjudication": (
             "not performed: no paid/live model call and no exact replay was available "
             "for these new request fingerprints"
@@ -220,6 +224,8 @@ def _check(payload: dict[str, object]) -> None:
         assert isinstance(case, dict)
         if not case["source_hash_matches_frozen"]:
             raise SystemExit(f"{case['id']}: source hash no longer matches frozen manifest")
+        if not case["request_fingerprint_matches_frozen"]:
+            raise SystemExit(f"{case['id']}: frozen initial request fingerprint drifted")
         if not case["review_contract_addresses_match"]:
             raise SystemExit(f"{case['id']}: advertised NEED_SOURCE contract drifted")
         if not case["report_mentions_result"]:
@@ -227,7 +233,7 @@ def _check(payload: dict[str, object]) -> None:
         if not case["graph_mentions_result"]:
             raise SystemExit(f"{case['id']}: proof visualizer lost result identity")
 
-    cache = payload["cache_attacks"]
+    cache = payload["cache_variations"]
     assert isinstance(cache, dict)
     unsafe = []
     for name in ("local_wording_edit", "upstream_proof_edit", "dependency_label_edit"):
