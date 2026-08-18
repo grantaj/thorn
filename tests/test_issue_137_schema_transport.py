@@ -45,26 +45,42 @@ def _branch(schema: dict[str, object], action: str) -> dict[str, object]:
     raise AssertionError(f"missing {action} branch")
 
 
+def _property(branch: dict[str, object], name: str) -> dict[str, object]:
+    properties = branch.get("properties")
+    assert isinstance(properties, dict)
+    value = properties.get(name)
+    assert isinstance(value, dict)
+    return value
+
+
 def test_initial_provider_schema_exposes_action_safe_states() -> None:
     turn = _turn()
     envelope = proof_review_request_envelope(turn, "test-model")
     schema = envelope.response_schema
+    root_properties = schema.get("properties")
+    assert isinstance(root_properties, dict)
 
     assert envelope.provider == "openai-responses-create-json-schema"
     review = _branch(schema, "review")
+    assert review["type"] == "object"
+    assert review["additionalProperties"] is False
     review_properties = review["properties"]
     assert isinstance(review_properties, dict)
-    assert review_properties["source_addresses"] == {"maxItems": 0}
-    assert review_properties["review_items"] == {"maxItems": 0}
-    assert review_properties["source_review_item_ids"] == {"maxItems": 0}
+    assert set(review_properties) == set(root_properties)
+    assert _property(review, "source_addresses")["maxItems"] == 0
+    assert _property(review, "review_items")["maxItems"] == 0
+    assert _property(review, "source_review_item_ids")["maxItems"] == 0
 
     need_source = _branch(schema, "need_source")
+    assert need_source["type"] == "object"
+    assert need_source["additionalProperties"] is False
     source_properties = need_source["properties"]
     assert isinstance(source_properties, dict)
-    assert source_properties["findings"] == {"maxItems": 0}
-    assert source_properties["source_addresses"] == {"minItems": 1}
-    assert source_properties["review_items"] == {"minItems": 1}
-    assert source_properties["source_review_item_ids"] == {"minItems": 1}
+    assert set(source_properties) == set(root_properties)
+    assert _property(need_source, "findings")["maxItems"] == 0
+    assert _property(need_source, "source_addresses")["minItems"] == 1
+    assert _property(need_source, "review_items")["minItems"] == 1
+    assert _property(need_source, "source_review_item_ids")["minItems"] == 1
 
 
 class _CompletedInvalidResponse:
@@ -140,7 +156,17 @@ def test_a3_local_validation_failure_preserves_usage_and_provider_response(
     advertised = response_format["schema"]
     assert isinstance(advertised, dict)
     assert advertised["additionalProperties"] is False
-    assert "anyOf" in advertised
+    branches = advertised.get("anyOf")
+    assert isinstance(branches, list)
+    for branch in branches:
+        assert isinstance(branch, dict)
+        assert branch["type"] == "object"
+        assert branch["additionalProperties"] is False
+        properties = branch["properties"]
+        required = branch["required"]
+        assert isinstance(properties, dict)
+        assert isinstance(required, list)
+        assert required == list(properties)
 
     rejected = list((tmp_path / "rejected").glob("*/*.json"))
     assert len(rejected) == 1
