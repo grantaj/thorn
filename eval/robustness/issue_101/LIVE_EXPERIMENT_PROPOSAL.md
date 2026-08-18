@@ -20,7 +20,7 @@ Do not tune any source after seeing model output. H1 remains private held-out ma
 
 ## Thorn/model/protocol freeze
 
-- Assurance code under test: public Thorn `79dc8b5986b0242240fcc2e5ab0de7437a08a9ff` (post-PR #123 / issue #10). The #101 harness may be run from a later commit only when `src/thorn` is byte-equivalent to this assurance revision for the purposes of the experiment and every frozen initial request fingerprint still matches.
+- Assurance code under test: public Thorn `79dc8b5986b0242240fcc2e5ab0de7437a08a9ff` (post-PR #123 / issue #10). The exact `src/thorn` tree for that revision is frozen in `manifest.json`; a later runner commit is allowed only when that tree remains byte-identical and every frozen initial request fingerprint still matches.
 - Model: `gpt-5.6` (GPT-5.6 Sol alias).
 - Model-facing representation: `thorn-proof/1`.
 - Review protocol: `thorn-proof-review/2`.
@@ -38,9 +38,11 @@ This inconsistency was discovered **before any live/model call**. The executable
 
 - Maximum cases: 5.
 - Maximum provider requests: **10** total (one initial request plus at most one production rescue request per case).
-- Aggregate input-token hard guard: **100,000** tokens across all requests. The launcher computes a conservative serialized-request upper bound before the batch and checks the remaining budget before every request; provider-reported usage is also checked after every response.
+- Aggregate input-token hard guard: **100,000** tokens across all requests. Before each actual provider request, the launcher requires cumulative provider-reported input usage plus a conservative upper bound for that exact serialized request to remain within 100,000. After each response it also verifies provider-reported usage. If the next request cannot fit, the batch aborts before sending it.
 - Maximum output tokens: **4,096 per request**, as already encoded in the frozen request fingerprints.
 - Maximum aggregate output: **40,960 tokens**, the strict ten-request worst case.
+
+A diagnostic “every case returns a maximal 4,096-token first response and every case then rescues” bound is intentionally also reported by preflight. That hypothetical is **138,073 input tokens**, so not every logically possible ten-request transcript can fit the 100,000-token guard. This does not enlarge the frozen budget: it means the live batch will stop early if the actual sequence ever approaches that pathological bound. The guard is on requests actually sent, as originally intended.
 
 As of **2026-08-18**, official standard GPT-5.6 Sol pricing is USD $5.00 per million input tokens and USD $30.00 per million output tokens. The resulting absolute token-ceiling cost is therefore **USD $1.7288 (about $1.73)**. Re-verify official pricing before any later authorization; a price change is not permission to expand the token/request ceilings.
 
@@ -75,13 +77,13 @@ OPENAI_API_KEY="" python scripts/run_issue_101_live.py \
   --output /tmp/issue-101-replay.json
 ```
 
-The launcher refuses production-code drift from the frozen assurance revision, source-hash drift, initial request-fingerprint drift, request-count overflow, or token-budget overflow. The normal OpenAI provider already uses zero implicit SDK retries.
+The launcher refuses production-code drift from the frozen assurance tree, source-hash drift, initial request-fingerprint drift, request-count overflow, or token-budget overflow. The normal OpenAI provider already uses zero implicit SDK retries.
 
 ## Recorded evidence
 
 For every request/response record:
 
-- frozen assurance revision and actual runner commit;
+- frozen assurance revision/tree and actual runner commit;
 - model identifier;
 - exact request fingerprint;
 - advertised/source-rescued context encoded in the production protocol;
