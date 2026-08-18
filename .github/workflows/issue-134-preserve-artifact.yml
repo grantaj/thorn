@@ -1,0 +1,75 @@
+name: TEMP preserve issue 134 live artifact
+
+on:
+  push:
+    branches:
+      - agent/issue-134-preserve-live-result
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  preserve:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LIVE_ARTIFACT_ID: '9340382800'
+      PREFLIGHT_ARTIFACT_ID: '9340346665'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-134-preserve-live-result
+      - name: Download exact frozen-run artifacts
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import urllib.request
+          import zipfile
+          from io import BytesIO
+          from pathlib import Path
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'thorn-issue-134-preserver',
+          }
+          root = Path('eval/robustness/issue_134/live_20260819')
+          root.mkdir(parents=True, exist_ok=True)
+
+          def download(artifact_id: str) -> bytes:
+              request = urllib.request.Request(
+                  f'https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip',
+                  headers=headers,
+              )
+              with urllib.request.urlopen(request, timeout=120) as response:
+                  return response.read()
+
+          with zipfile.ZipFile(BytesIO(download(os.environ['LIVE_ARTIFACT_ID']))) as archive:
+              for member in archive.infolist():
+                  if member.is_dir():
+                      continue
+                  target = root / member.filename
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(archive.read(member))
+
+          with zipfile.ZipFile(BytesIO(download(os.environ['PREFLIGHT_ARTIFACT_ID']))) as archive:
+              members = [item for item in archive.infolist() if not item.is_dir()]
+              if len(members) != 1:
+                  raise SystemExit(f'unexpected preflight artifact contents: {[m.filename for m in members]}')
+              (root / 'preflight.json').write_bytes(archive.read(members[0]))
+          PY
+      - name: Commit durable evidence and remove temporary preserver
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/issue-134-preserve-artifact.yml
+          git add eval/robustness/issue_134/live_20260819
+          git commit -m "Preserve exact issue 134 live evidence"
+          git push origin HEAD:agent/issue-134-preserve-live-result
