@@ -1,0 +1,47 @@
+{
+  "assurance_revision": "93cba5eec02af0c83bdcc3ea4eb54dd79efb1704",
+  "assurance_src_tree_sha": "08c1ef7c0d61020424a597be344f0bb08ce10f58",
+  "case": {
+    "fingerprint_changed_by_post137_contract": true,
+    "frozen_request_contract_verified": true,
+    "hypothetical_maximal_two_turn_input_upper_bound": 28101,
+    "id": "A3",
+    "initial_input_token_upper_bound": 10573,
+    "initial_request_fingerprint": "44e1ffa1fb17219c106af28f8e7535e70788c1f7a02b5e762bf381e3637cfb28",
+    "max_output_tokens_per_request": 4096,
+    "path": "eval/robustness/issue_101/variant_result_applicability.tex",
+    "predecessor_initial_request_fingerprint": "0c8ba6c4a8cbfc2d285384b896e65059f67d296d708f75986deaace3434d22a3",
+    "review_result_identifier": "thm:uniform-decay",
+    "source_sha256": "f53d7c5eed1f0145406c3c4dda50680a852b14c2c4cd3705c17940ec5f27f403"
+  },
+  "experiment_id": "issue-134-a3-post137-pre125",
+  "format_version": 1,
+  "issue": 134,
+  "limits": {
+    "hypothetical_maximal_two_turn_input_upper_bound": 28101,
+    "initial_request_input_upper_bound": 10573,
+    "input_guard": "before each actual request, cumulative provider-reported input usage plus a conservative exact-envelope upper bound must remain <= max_input_tokens",
+    "max_cases": 1,
+    "max_input_tokens": 40000,
+    "max_output_tokens": 8192,
+    "max_output_tokens_per_request": 4096,
+    "max_provider_requests": 2
+  },
+  "live_authorized": false,
+  "live_requests": 0,
+  "mode": "preflight",
+  "model": "gpt-5.6",
+  "prompt_sha256": "6e69e97744b8667c06eb936aec931289050c1bbc691aa39c82780d8cecf05258",
+  "prompt_version": "proof_language_reviewer_v2",
+  "protocol": "thorn-proof-review/2",
+  "provider_instantiated": false,
+  "provider_requests": 0,
+  "provider_retries": 0,
+  "representation": "thorn-proof/1",
+  "runner_revision": "92077532c4171982ef770b98de5c928ca14efe6c",
+  "source_rescue": {
+    "allowed_once": true,
+    "max_addresses": 8
+  },
+  "status": "frozen-keylessly-live-not-authorized"
+}

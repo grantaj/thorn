@@ -1,0 +1,313 @@
+{
+  "format_version": 1,
+  "fingerprint": "44e1ffa1fb17219c106af28f8e7535e70788c1f7a02b5e762bf381e3637cfb28",
+  "request": {
+    "format_version": 1,
+    "provider": "openai-responses-create-json-schema",
+    "kind": "proof_review",
+    "model": "gpt-5.6",
+    "system_prompt": "You are Thorn's semantic reviewer for one bounded mathematical result selected by Thorn's deterministic front-end.\n\nReview the supplied mathematics. Identify actual mathematical defects in claimed implications, dependency uses, definition uses, quantification, scope, proof sufficiency, or other load-bearing reasoning. For each theorem goal, compare what must be shown with the strongest conclusion actually supported by the recovered proof structure; do not treat an unresolved candidate discharge as evidence that the goal follows. Prefer a small number of specific, falsifiable findings. If the supplied material establishes no real defect, return an empty findings list.\n\nThe input representation is declared in the request header. Raw packets contain bounded theorem/proof source. `thorn-proof/1` packets begin `THORN-PROOF 1` and are a deterministic projection of Thorn's canonical Proof IR:\n- T/H/R/D/C-style identifiers name propositions or results.\n- `<-` records recovered support; `DEP` records result dependencies; `FLOW` records higher proof structure.\n- `~` means ambiguous recovery and `?` means unresolved recovery. These are extraction-certainty markers, not mathematical truth values.\n- `GOAL`, `HOLE`, and `NEED` expose proof obligations.\n- `@X` is an exact Thorn-held source handle advertised by the packet.\n\nReturn action `review` with final findings when you can complete the review from the supplied material. Every finding must identify the actual mathematical objection and cite the relevant stable identifiers or supplied source wording.\n\nWhen and only when the request says `SOURCE_RESCUE allowed-once`, you may instead return action `need_source`. A source request must include the explicit review questions or concerns that are still under scrutiny, identified locally as `RV1`, `RV2`, ... in list order, and identify which of those items motivate the requested source. `RV...` identifiers are review-protocol-local and deliberately disjoint from the `R...` dependency identifiers in `thorn-proof/1`. Request the smallest set of exact `@` addresses needed to decide the mathematics, using only handles visibly advertised in the initial packet. Review items need not already assert defects, and an independently supported concern may be carried even when it does not motivate source rescue.\n\nOn the rescue turn, the prior structured response is carried review state and the supplied exact source is new evidence, not a fresh review branch. Return action `review` and disposition every carried review item exactly once as `confirmed`, `revised`, `discharged`, or `unresolved`. Confirmed or revised items produce final findings. Discharged items are explicitly resolved or exonerated and do not produce findings. Unresolved items record that the bounded evidence still does not settle the review question and also do not produce findings. You may also report genuinely new findings revealed by the source. Source rescue is exhausted after this turn.\n\nDo not treat parser uncertainty as a correctness defect. Do not assume unseen source repairs or invalidates the step. Do not reconstruct missing mathematical meaning from general world knowledge when the packet marks it unresolved; use bounded source rescue when available and genuinely necessary.",
+    "user_content": "THORN-REVIEW 2\nREPRESENTATION thorn-proof/1\nINITIAL_PACKET_FINGERPRINT f6de18bf12a1137b3cb74f250ce36b4a2de85aaa257866f40bb4894c5fa08def\nSOURCE_RESCUE allowed-once\nREVIEW_POLICY unresolved Proof-IR recovery markers (?, ~, HOLE, NEED) are not mathematical defects. Use source rescue when needed. Never report a defect solely because deterministic recovery remains unresolved.\n\nTHORN-PROOF 1\nT0 ?{For every \\varepsilon>0 there is N such that x^n<\\varepsilon \\text{for all }x∈ I\\text{ and all }n≥ N} <- C1 ? @C1,T0 @T0\nH1 ?{\\varepsilon>0} @H1\nL1 ?{n\\geqN} @L1\nD1 ?{I=[0,1)} @D1\nR1 ?{For every x∈ I}∧?{\\varepsilon>0, there are N_x}∧?{a relative open neighbourhood U_x of x such that y^n<\\varepsilon (y∈ U_x,\\ n≥ N_x)} @R1\nU1 ?{\\varepsilon>0} <- ? @U1\nU2 ?{U_x|I} <- ? @U2\nP1 ? <- property(\"the finite-cover principle\") ? @E1,P1 @P1\nU3 ?{N=\\max_j N_{x_j}|x∈ I|U_{x_j}|n≥ N} <- ? @U3\nC1 ?{x^n≤ x^{N_{x_j}}<\\varepsilon} <- ? @C1\nHOLE O1 U1: ?{\\varepsilon>0} | ctx H1,L1,D1,R1 | open @U1\nHOLE O2 U2: ?{U_x|I} | ctx H1,L1,D1,R1,U1 | open @U2\nHOLE O3 P1: ? | ctx H1,L1,D1,R1,U1,U2 | open @P1\nHOLE O4 U3: ?{N=\\max_j N_{x_j}|x∈ I|U_{x_j}|n≥ N} | ctx H1,L1,D1,R1,U1,U2,P1 | open @U3\nHOLE O5 C1: ?{x^n≤ x^{N_{x_j}}<\\varepsilon} | ctx H1,L1,D1,R1,U1,U2,P1,U3 | open @C1\nGOAL G0 T0: ?{For every \\varepsilon>0 there is N such that x^n<\\varepsilon \\text{for all }x∈ I\\text{ and all }n≥ N} | ctx H1,L1,D1,R1,U1,U2,P1,U3,C1 | open @T0\n",
+    "response_schema": {
+      "$defs": {
+        "CandidateFinding": {
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "category": {
+              "$ref": "#/$defs/FindingCategory"
+            },
+            "severity": {
+              "$ref": "#/$defs/Severity"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "explanation": {
+              "title": "Explanation",
+              "type": "string"
+            },
+            "evidence": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Evidence",
+              "type": "array"
+            },
+            "counterexample": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Counterexample"
+            },
+            "confidence": {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "category",
+            "severity",
+            "title",
+            "explanation",
+            "confidence"
+          ],
+          "title": "CandidateFinding",
+          "type": "object"
+        },
+        "FindingCategory": {
+          "enum": [
+            "hypothesis_mismatch",
+            "invalid_implication",
+            "counterexample",
+            "convergence_mismatch",
+            "quantifier_error",
+            "boundary_case",
+            "circular_dependency",
+            "algebra_error",
+            "definition_mismatch",
+            "well_definedness",
+            "scope_mismatch",
+            "vacuous_truth",
+            "external_dependency",
+            "unsupported_claim",
+            "unproved_dependency",
+            "unstated_axiom",
+            "notation_ambiguity",
+            "specification_ambiguity",
+            "scope_surplus",
+            "other"
+          ],
+          "title": "FindingCategory",
+          "type": "string"
+        },
+        "ProofReviewDisposition": {
+          "additionalProperties": false,
+          "description": "Explicit final accounting for one carried review item.",
+          "properties": {
+            "item_id": {
+              "pattern": "^RV[1-9][0-9]*$",
+              "title": "Item Id",
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "confirmed",
+                "revised",
+                "discharged",
+                "unresolved"
+              ],
+              "title": "Status",
+              "type": "string"
+            },
+            "explanation": {
+              "minLength": 1,
+              "title": "Explanation",
+              "type": "string"
+            },
+            "finding": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CandidateFinding"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "item_id",
+            "status",
+            "explanation"
+          ],
+          "title": "ProofReviewDisposition",
+          "type": "object"
+        },
+        "ProofReviewItem": {
+          "additionalProperties": false,
+          "description": "One local question or concern carried across the single rescue boundary.",
+          "properties": {
+            "id": {
+              "pattern": "^RV[1-9][0-9]*$",
+              "title": "Id",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "question",
+                "concern"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "summary": {
+              "minLength": 1,
+              "title": "Summary",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "summary"
+          ],
+          "title": "ProofReviewItem",
+          "type": "object"
+        },
+        "Severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "review",
+            "need_source"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "findings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CandidateFinding"
+          },
+          "title": "Findings",
+          "type": "array"
+        },
+        "source_addresses": {
+          "default": [],
+          "items": {
+            "enum": [
+              "C1",
+              "D1",
+              "E1",
+              "H1",
+              "L1",
+              "P1",
+              "R1",
+              "T0",
+              "U1",
+              "U2",
+              "U3"
+            ],
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Source Addresses",
+          "type": "array"
+        },
+        "review_items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProofReviewItem"
+          },
+          "title": "Review Items",
+          "type": "array"
+        },
+        "source_review_item_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^RV[1-9][0-9]*$",
+            "type": "string"
+          },
+          "title": "Source Review Item Ids",
+          "type": "array"
+        },
+        "dispositions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProofReviewDisposition"
+          },
+          "maxItems": 0,
+          "title": "Dispositions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "ProofReviewModelResponse",
+      "type": "object",
+      "anyOf": [
+        {
+          "properties": {
+            "action": {
+              "const": "review"
+            },
+            "source_addresses": {
+              "maxItems": 0
+            },
+            "review_items": {
+              "maxItems": 0
+            },
+            "source_review_item_ids": {
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "need_source"
+            },
+            "findings": {
+              "maxItems": 0
+            },
+            "source_addresses": {
+              "minItems": 1
+            },
+            "review_items": {
+              "minItems": 1
+            },
+            "source_review_item_ids": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
+    },
+    "protocol_version": "thorn-proof-review/2",
+    "representation": "thorn-proof/1",
+    "stage": "initial",
+    "initial_packet_fingerprint": "f6de18bf12a1137b3cb74f250ce36b4a2de85aaa257866f40bb4894c5fa08def",
+    "requested_source_addresses": null,
+    "messages": null,
+    "max_output_tokens": 4096
+  },
+  "response": null,
+  "usage": {
+    "requests": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0
+  },
+  "rejection": {
+    "kind": "provider_failure",
+    "message": "provider did not return a structured proof-review response",
+    "exception_type": "BadRequestError",
+    "validator_replayable": false
+  },
+  "response_fingerprint": "5fbf66b0385f619509e05d872b226ba1305fb821d8d07cd33c5b3f9033dc94cf"
+}
