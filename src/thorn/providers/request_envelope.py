@@ -128,6 +128,49 @@ def semantic_request_envelope(
     )
 
 
+def _proof_review_action_branch(
+    schema: dict[str, object],
+    *,
+    action: Literal["review", "need_source"],
+    constraints: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    """Build a complete closed object branch for one protocol action.
+
+    Structured Outputs validates each object-shaped branch independently. Constraint
+    fragments with only ``properties`` are therefore not sufficient: each branch must
+    carry the full top-level property set and be closed in its own right.
+    """
+
+    base_properties = schema.get("properties")
+    if not isinstance(base_properties, dict):
+        raise ValueError("proof-review response schema is missing top-level properties")
+    properties = cast(
+        dict[str, object],
+        json.loads(json.dumps(base_properties)),
+    )
+
+    action_schema = properties.get("action")
+    if not isinstance(action_schema, dict):
+        raise ValueError("proof-review response schema is missing the action property")
+    properties["action"] = {**action_schema, "const": action}
+
+    for name, overlay in constraints.items():
+        property_schema = properties.get(name)
+        if not isinstance(property_schema, dict):
+            raise ValueError(f"proof-review response schema is missing {name!r}")
+        properties[name] = {**property_schema, **overlay}
+
+    required = schema.get("required")
+    if not isinstance(required, list):
+        raise ValueError("proof-review response schema is missing required fields")
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(required),
+        "additionalProperties": False,
+    }
+
+
 def _proof_review_response_schema(
     request: ProofReviewTurnRequest,
 ) -> dict[str, object]:
@@ -143,23 +186,25 @@ def _proof_review_response_schema(
         return schema
 
     schema["anyOf"] = [
-        {
-            "properties": {
-                "action": {"const": "review"},
+        _proof_review_action_branch(
+            schema,
+            action="review",
+            constraints={
                 "source_addresses": {"maxItems": 0},
                 "review_items": {"maxItems": 0},
                 "source_review_item_ids": {"maxItems": 0},
-            }
-        },
-        {
-            "properties": {
-                "action": {"const": "need_source"},
+            },
+        ),
+        _proof_review_action_branch(
+            schema,
+            action="need_source",
+            constraints={
                 "findings": {"maxItems": 0},
                 "source_addresses": {"minItems": 1},
                 "review_items": {"minItems": 1},
                 "source_review_item_ids": {"minItems": 1},
-            }
-        },
+            },
+        ),
     ]
     return schema
 
