@@ -37,5 +37,11 @@ def test_issue_101_live_preflight_is_keyless_and_bounded(tmp_path: Path) -> None
     assert limits["max_input_tokens"] == 100_000
     assert limits["max_output_tokens_per_request"] == 4096
     assert limits["max_output_tokens"] == 40_960
-    assert limits["worst_case_input_token_upper_bound"] <= 100_000
+    assert limits["all_initial_requests_input_upper_bound"] <= 100_000
+    assert limits["hypothetical_all_maximal_two_turn_input_upper_bound"] > 100_000
+    assert "before each actual request" in limits["input_guard"]
+    assert all(
+        case["initial_input_token_upper_bound"] <= limits["max_input_tokens"]
+        for case in payload["cases"]
+    )
     assert all(len(case["initial_request_fingerprint"]) == 64 for case in payload["cases"])
