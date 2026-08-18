@@ -1,0 +1,85 @@
+{
+  "action": "review",
+  "findings": [
+    {
+      "id": "F1",
+      "category": "counterexample",
+      "severity": "error",
+      "title": "The profiles x^n do not decay uniformly on [0,1)",
+      "explanation": "The proof’s intended uniform estimate would require that for every ε>0 there is one N such that y^n<ε for all y∈[0,1) and all n≥N. This is false. For ε=1/2 and any proposed N≥1, choose y with 2^{-1/N}<y<1 and take n=N. Then y^N>1/2. Equivalently, sup_{y∈[0,1)}y^n=1 for every n. Thus the pointwise result R1 cannot support T0.",
+      "evidence": [
+        "D1 defines I=[0,1) and a_n(x)=x^n.",
+        "R1 gives only a threshold N_x depending on x.",
+        "P3 says, ‘Thus the defining uniform estimate holds.’",
+        "T0 claims that (a_n) is uniformly attenuating on I."
+      ],
+      "counterexample": "Let ε=1/2. For every proposed N≥1, take n=N and any y∈(2^{-1/N},1). Then y∈I but a_N(y)=y^N>1/2.",
+      "confidence": 0.99
+    },
+    {
+      "id": "F2",
+      "category": "invalid_implication",
+      "severity": "error",
+      "title": "Boundedness of [0,1) does not justify a finite subcover",
+      "explanation": "P2 infers that a finite subcover can be chosen because I is a bounded interval. Boundedness alone does not imply compactness, and [0,1) is not compact. Hence U5 and the maximum N=max_j N_{x_j} are not established. For example, the relative-open cover U_k=[0,1-1/k), k≥2, covers [0,1) but has no finite subcover.",
+      "evidence": [
+        "P2 states: ‘Since I is a bounded interval, choose a finite subcover.’",
+        "D1 specifies the noncompact interval I=[0,1).",
+        "U5 is the resulting asserted finite cover, and D2/U6 form a maximum over that finite family.",
+        "P3 provides no further justification beyond ‘Thus the defining uniform estimate holds.’"
+      ],
+      "counterexample": "The sets U_k=[0,1-1/k) for k≥2 are open in the subspace [0,1), cover [0,1), and admit no finite subcover.",
+      "confidence": 0.99
+    }
+  ],
+  "source_addresses": [],
+  "review_items": [],
+  "source_review_item_ids": [],
+  "dispositions": [
+    {
+      "item_id": "RV1",
+      "status": "confirmed",
+      "explanation": "D1 identifies a_n(x)=x^n on [0,1), and P3 identifies the target as a uniform estimate. The estimate fails by choosing points arbitrarily close to 1 for each proposed uniform threshold.",
+      "finding": {
+        "id": "F1",
+        "category": "counterexample",
+        "severity": "error",
+        "title": "The profiles x^n do not decay uniformly on [0,1)",
+        "explanation": "For ε=1/2, every proposed N fails at n=N for some y sufficiently close to 1.",
+        "evidence": ["D1", "P3", "T0"],
+        "counterexample": "Choose y∈(2^{-1/N},1); then y^N>1/2.",
+        "confidence": 0.99
+      }
+    },
+    {
+      "item_id": "RV2",
+      "status": "confirmed",
+      "explanation": "The exact source confirms that P2 invokes only boundedness to select a finite subcover. This implication is invalid for I=[0,1), which is not compact.",
+      "finding": {
+        "id": "F2",
+        "category": "invalid_implication",
+        "severity": "error",
+        "title": "Boundedness of [0,1) does not justify a finite subcover",
+        "explanation": "P2 incorrectly uses boundedness as a finite-subcover property.",
+        "evidence": ["D1", "P2", "U5"],
+        "counterexample": "The relative-open cover {[0,1-1/k): k≥2} has no finite subcover.",
+        "confidence": 0.99
+      }
+    },
+    {
+      "item_id": "RV3",
+      "status": "confirmed",
+      "explanation": "P3 merely asserts that the uniform estimate follows. Its recovered support runs through the finite-cover construction, whose key inference at P2 is invalid; moreover, the asserted estimate is directly false by F1.",
+      "finding": {
+        "id": "F1",
+        "category": "counterexample",
+        "severity": "error",
+        "title": "The conclusion asserted at P3 is false",
+        "explanation": "P3 cannot establish the uniform estimate because that estimate fails for x^n on [0,1).",
+        "evidence": ["P2", "P3", "T0"],
+        "counterexample": "For ε=1/2 and any N, choose y∈(2^{-1/N},1) and n=N.",
+        "confidence": 0.99
+      }
+    }
+  ]
+}
