@@ -1,0 +1,77 @@
+name: TEMP issue 128 bounded repair
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: >-
+      github.event.pull_request.head.ref == 'agent/issue-128-bounded-rescue-expansion' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-128-bounded-rescue-expansion
+      - name: Apply bounded expansion and update cap regression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          spec = Path(".github/workflows/tmp-issue-128-pr-apply.yml").read_text(
+              encoding="utf-8"
+          )
+          marker = "          replacement = '''"
+          embedded_start = spec.index(marker) + len(marker)
+          embedded_end = spec.index("\n          '''", embedded_start)
+          raw = spec[embedded_start:embedded_end]
+          lines = raw.splitlines()
+          replacement = lines[0] + "\n" + dedent("\n".join(lines[1:]))
+
+          source_path = Path("src/thorn/proof_language_review.py")
+          text = source_path.read_text(encoding="utf-8")
+          start = text.index("def _expanded_source_addresses(")
+          end = text.index("\n\nclass ProofReviewProtocolError", start)
+          if "max_addresses: int" not in text[start:end]:
+              text = text[:start] + replacement + text[end:]
+              source_path.write_text(text, encoding="utf-8")
+
+          test_path = Path("tests/test_proof_review_rescue_closure.py")
+          tests = test_path.read_text(encoding="utf-8")
+          old_name = "def test_expanded_rescue_still_obeys_existing_source_cap() -> None:"
+          new_name = "def test_bounded_rescue_preserves_requested_source_when_cap_is_full() -> None:"
+          if old_name in tests:
+              start = tests.index(old_name)
+              end = tests.index("\n\ndef test_review_contract_forbids", start)
+              new_block = '''def test_bounded_rescue_preserves_requested_source_when_cap_is_full() -> None:
+              request = ProofLanguageReviewRequest(
+                  document=_chain_document(),
+                  max_source_addresses=1,
+              )
+              initial = build_proof_review_turn(request)
+
+              rescue = build_rescue_turn(request, initial, _need("P2"))
+
+              assert rescue.requested_source_addresses == ("P2",)
+              assert "SOURCE @P2" in rescue.user_content
+              assert "SOURCE @P1" not in rescue.user_content'''
+              tests = tests[:start] + new_block + tests[end:]
+              test_path.write_text(tests, encoding="utf-8")
+          elif new_name not in tests:
+              raise SystemExit("cap regression function not found")
+          PY
+      - name: Commit repair
+        run: |
+          if git diff --quiet; then
+            echo "Repair already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/thorn/proof_language_review.py tests/test_proof_review_rescue_closure.py
+          git commit -m "Bound automatic source-rescue prerequisite expansion"
+          git push origin HEAD:agent/issue-128-bounded-rescue-expansion
