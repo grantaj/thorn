@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -17,7 +16,10 @@ from thorn.proof_language_review import (
 from thorn.providers import execution_contract
 from thorn.providers import openai as openai_provider
 from thorn.providers.base import ProviderResponseValidationError, ProviderTransportError
-from thorn.providers.execution_contract import ProviderRuntimeIdentity
+from thorn.providers.execution_contract import (
+    ProviderExecutionContract,
+    ProviderRuntimeIdentity,
+)
 from thorn.providers.replay import (
     RecordedExchange,
     RecordedRejectedExchange,
@@ -380,7 +382,9 @@ def test_v2_replay_is_exact_and_runtime_change_invalidates_it(
 
     original_builder = replay_module.build_provider_execution_contract
 
-    def changed_runtime(envelope: ProviderRequestEnvelope) -> ProviderExecutionContract:
+    def changed_runtime(
+        envelope: ProviderRequestEnvelope,
+    ) -> ProviderExecutionContract:
         return original_builder(envelope, runtime=_runtime(lock="changed-lock"))
 
     monkeypatch.setattr(
