@@ -80,3 +80,51 @@ jobs:
             --output /tmp/lean-replay-opportunity.json >/dev/null
       - run: ruff check .
       - run: mypy src
+
+  a3-freeze:
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'agent/issue-134-a3-postcanary-freeze-20260819' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENAI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
+      - name: Download successful post-149 readiness evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: provider-readiness-authorized-post149-32232914558
+          run-id: 32232914558
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/readiness
+      - name: Build and round-trip keyless A3 manifest
+        run: |
+          mkdir -p "$RUNNER_TEMP/a3-freeze"
+          python scripts/prepare_provider_experiment.py \
+            --experiment-id issue-134-a3-postcanary-pre125 \
+            --model gpt-5.6 \
+            --readiness-evidence "$RUNNER_TEMP/readiness/live.json" \
+            --case A3 eval/robustness/issue_101/variant_result_applicability.tex thm:uniform-decay \
+            --max-provider-attempts 2 \
+            --max-input-tokens 40000 \
+            --max-output-tokens 8192 \
+            --max-readiness-age-hours 24 \
+            --output "$RUNNER_TEMP/a3-freeze/manifest.json"
+          python scripts/run_provider_experiment.py \
+            --preflight \
+            --manifest "$RUNNER_TEMP/a3-freeze/manifest.json" \
+            --output "$RUNNER_TEMP/a3-freeze/preflight.json"
+      - name: Preserve freeze
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-134-a3-postcanary-freeze-${{ github.run_id }}
+          path: ${{ runner.temp }}/a3-freeze
+          if-no-files-found: error
