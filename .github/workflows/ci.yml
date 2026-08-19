@@ -21,8 +21,10 @@ jobs:
           rm -rf /tmp/thorn-wheel /tmp/thorn-wheel-venv
           mkdir -p /tmp/thorn-wheel
           python -m pip wheel --no-deps --no-build-isolation . --wheel-dir /tmp/thorn-wheel
-          python -m venv --system-site-packages /tmp/thorn-wheel-venv
-          /tmp/thorn-wheel-venv/bin/python -m pip install --no-deps /tmp/thorn-wheel/thorn_math-*.whl
+          python -m venv /tmp/thorn-wheel-venv
+          /tmp/thorn-wheel-venv/bin/python -m pip install \
+            -c "$GITHUB_WORKSPACE/constraints/provider-runtime.txt" \
+            /tmp/thorn-wheel/thorn_math-*.whl
           (
             cd /tmp
             PYTHONPATH= THORN_CONSTRAINTS="$GITHUB_WORKSPACE/constraints/provider-runtime.txt" \
