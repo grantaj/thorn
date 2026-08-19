@@ -9,7 +9,8 @@ import pytest
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.models import AttackReport, SourceRange, TheoremUnit
 from thorn.proof_language_review import ProofLanguageReviewRequest, build_proof_review_turn
-from thorn.providers import execution_contract, openai as openai_provider
+from thorn.providers import execution_contract
+from thorn.providers import openai as openai_provider
 from thorn.providers.base import ProviderResponseValidationError, ProviderTransportError
 from thorn.providers.execution_contract import ProviderRuntimeIdentity
 from thorn.providers.replay import (
