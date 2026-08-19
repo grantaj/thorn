@@ -177,7 +177,10 @@ def test_missing_structured_attacker_result_fails_closed(monkeypatch: pytest.Mon
     monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
     provider = openai_provider.OpenAIProvider(model="fake-model")
 
-    with pytest.raises(ProviderResponseValidationError, match="attacker returned no structured result"):
+    with pytest.raises(
+        ProviderResponseValidationError,
+        match="attacker returned no structured result",
+    ):
         provider.attack(_unit())
 
     assert provider.provider_attempts == 1
