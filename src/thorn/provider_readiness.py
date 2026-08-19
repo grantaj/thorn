@@ -8,11 +8,16 @@ from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
     ProofReviewModelResponse,
+    ProofReviewProtocolError,
     ProofReviewTurnRequest,
     build_proof_review_turn,
     validate_proof_review_response,
 )
-from thorn.providers.base import ProviderTransportError, ProviderTransportEvidence
+from thorn.providers.base import (
+    ProviderResponseValidationError,
+    ProviderTransportError,
+    ProviderTransportEvidence,
+)
 from thorn.providers.execution_contract import (
     ProviderExecutionContract,
     build_provider_execution_contract,
@@ -35,7 +40,12 @@ class ProviderReadinessEvidence(BaseModel):
 
     format: Literal["thorn-provider-readiness/1"] = READINESS_CANARY_FORMAT
     mode: Literal["preflight", "live"]
-    status: Literal["preflight-ready", "live-success", "live-transport-failure"]
+    status: Literal[
+        "preflight-ready",
+        "live-success",
+        "live-transport-failure",
+        "live-response-failure",
+    ]
     readiness_only: bool = True
     scientific_authorization: bool = False
     synthetic_input: bool = True
@@ -52,8 +62,11 @@ class ProviderReadinessEvidence(BaseModel):
     output_tokens: int = 0
     total_tokens: int = 0
     normalized_response: dict[str, object] | None = None
+    structured_response: dict[str, object] | None = None
     provider_response: dict[str, object] | None = None
     transport_failure: ProviderTransportEvidence | None = None
+    response_failure_type: str | None = None
+    response_failure_message: str | None = None
 
 
 def build_readiness_turn() -> ProofReviewTurnRequest:
@@ -113,6 +126,41 @@ def preflight_readiness(model: str) -> ProviderReadinessEvidence:
     )
 
 
+def _live_failure_evidence(
+    provider: OpenAIProvider,
+    expected_contract: ProviderExecutionContract,
+    *,
+    status: Literal["live-transport-failure", "live-response-failure"],
+    transport_failure: ProviderTransportEvidence | None = None,
+    structured_response: ProofReviewModelResponse | None = None,
+    response_failure_type: str | None = None,
+    response_failure_message: str | None = None,
+) -> ProviderReadinessEvidence:
+    return ProviderReadinessEvidence(
+        mode="live",
+        status=status,
+        provider_instantiated=True,
+        model=provider.model,
+        execution_fingerprint=expected_contract.fingerprint(),
+        execution_contract=expected_contract,
+        provider_attempts=provider.provider_attempts,
+        responses_received=provider.responses_received,
+        model_generations=provider.model_generations,
+        input_tokens=provider.input_tokens,
+        output_tokens=provider.output_tokens,
+        total_tokens=provider.total_tokens,
+        structured_response=(
+            structured_response.model_dump(mode="json")
+            if structured_response is not None
+            else None
+        ),
+        provider_response=provider.last_response_payload,
+        transport_failure=transport_failure,
+        response_failure_type=response_failure_type,
+        response_failure_message=response_failure_message,
+    )
+
+
 def run_live_readiness(model: str) -> ProviderReadinessEvidence:
     """Run exactly one bounded, synthetic provider request with no retry."""
 
@@ -136,24 +184,33 @@ def run_live_readiness(model: str) -> ProviderReadinessEvidence:
     try:
         response = provider.review_proof_turn(turn)
     except ProviderTransportError as exc:
-        return ProviderReadinessEvidence(
-            mode="live",
+        return _live_failure_evidence(
+            provider,
+            expected_contract,
             status="live-transport-failure",
-            provider_instantiated=True,
-            model=model,
-            execution_fingerprint=expected_contract.fingerprint(),
-            execution_contract=expected_contract,
-            provider_attempts=provider.provider_attempts,
-            responses_received=provider.responses_received,
-            model_generations=provider.model_generations,
-            input_tokens=provider.input_tokens,
-            output_tokens=provider.output_tokens,
-            total_tokens=provider.total_tokens,
-            provider_response=provider.last_response_payload,
             transport_failure=exc.evidence,
         )
+    except ProviderResponseValidationError as exc:
+        return _live_failure_evidence(
+            provider,
+            expected_contract,
+            status="live-response-failure",
+            response_failure_type=exc.validation_exception_type,
+            response_failure_message=str(exc),
+        )
 
-    normalized = validate_proof_review_response(turn, response)
+    try:
+        normalized = validate_proof_review_response(turn, response)
+    except ProofReviewProtocolError as exc:
+        return _live_failure_evidence(
+            provider,
+            expected_contract,
+            status="live-response-failure",
+            structured_response=response,
+            response_failure_type=type(exc).__name__,
+            response_failure_message=str(exc),
+        )
+
     dispatched_contract = provider.last_execution_contract
     if dispatched_contract is None:
         raise ProviderReadinessError("live provider did not retain its dispatched contract")
@@ -176,6 +233,7 @@ def run_live_readiness(model: str) -> ProviderReadinessEvidence:
         output_tokens=provider.output_tokens,
         total_tokens=provider.total_tokens,
         normalized_response=normalized.model_dump(mode="json"),
+        structured_response=response.model_dump(mode="json"),
         provider_response=provider.last_response_payload,
     )
 
