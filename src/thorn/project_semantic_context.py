@@ -19,9 +19,10 @@ from thorn.symbols import (
 )
 
 # This module recognizes declaration *grammar*, never mathematical vocabulary.
-# A candidate becomes review context only when a theorem statement/proof depends
-# on it, directly or through another authoritative prose declaration. Proximity
-# alone is never a semantic edge.
+# Ordinary prose declarations become review context only when a theorem/proof
+# depends on them directly or through another authoritative declaration.
+# Explicit ambient cues additionally establish a scope dependency on later
+# results. Proximity alone is never a semantic edge.
 _STYLE_TERM = (
     r"(?:\\[A-Za-z]+\{[^{}]+\}|"
     r"[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z][A-Za-z0-9-]*){0,3})"
@@ -97,6 +98,7 @@ class _UseCandidate:
     result_identifier: str | None
     scope_kind: ScopeKind
     owner_identifier: str | None = None
+    ambient_scope: bool = False
 
 
 @dataclass(frozen=True)
@@ -453,6 +455,33 @@ def _use_candidates(
                         )
                     )
 
+    # Explicit ambient cues are scope declarations: their mathematical purpose
+    # is precisely to avoid repeating the subject in every later theorem. Model
+    # that as an implicit use at each later statement boundary. Resolution below
+    # still enforces forward document order and same-term ambient shadowing.
+    ambient_terms: dict[str, str] = {}
+    for site in sites:
+        if site.declaration.kind == "ambient":
+            ambient_terms.setdefault(
+                site.declaration.term.casefold(),
+                site.declaration.term,
+            )
+    for region in regions:
+        if region.file not in files:
+            continue
+        for term in ambient_terms.values():
+            candidates.append(
+                _UseCandidate(
+                    matched_term=term,
+                    file=region.file,
+                    start=region.statement_span.start_offset,
+                    end=region.statement_span.start_offset,
+                    result_identifier=region.identifier,
+                    scope_kind=ScopeKind.STATEMENT,
+                    ambient_scope=True,
+                )
+            )
+
     # Authoritative declarations may themselves depend on earlier prose
     # definitions/conventions. Those edges are required before one-shot rescue.
     for owner in sites:
@@ -491,7 +520,7 @@ def _resolve_uses(
         for site in sites
     }
     resolved_by_location: dict[
-        tuple[str, int, int, str | None, ScopeKind, str | None],
+        tuple[str, int, int, str, str | None, ScopeKind, str | None],
         tuple[int, _ResolvedUse],
     ] = {}
 
@@ -501,6 +530,10 @@ def _resolve_uses(
             site
             for site in sites
             if _terms_match(site.declaration.term, candidate.matched_term)
+            and (
+                not candidate.ambient_scope
+                or site.declaration.kind == "ambient"
+            )
             and site_order[site.identifier] < use_order
         ]
         if not eligible:
@@ -511,6 +544,7 @@ def _resolve_uses(
             candidate.file,
             candidate.start,
             candidate.end,
+            candidate.matched_term.casefold(),
             candidate.result_identifier,
             candidate.scope_kind,
             candidate.owner_identifier,
@@ -650,12 +684,14 @@ def add_project_semantic_context(
 ) -> None:
     """Recover explicit prose semantics as ordinary project-scope symbol edges.
 
-    Declaration-shaped prose is only eligible source material. A declaration is
+    Ordinary declaration-shaped prose is only eligible source material. It is
     activated when a theorem/proof uses it directly or transitively through
-    another activated declaration. All lexical matching uses a source-preserving
-    document view, and all resolution follows expanded project/include order.
-    This keeps the normal Symbol IR -> canonical Proof-IR -> bounded NEED_SOURCE
-    path as the sole semantic-review representation.
+    another activated declaration. Explicit ambient cues are different: the cue
+    itself establishes a forward scope dependency on later results, even when
+    their wording omits the convention's subject. All lexical matching uses a
+    source-preserving document view, and all resolution follows expanded
+    project/include order. This keeps the normal Symbol IR -> canonical Proof-IR
+    -> bounded NEED_SOURCE path as the sole semantic-review representation.
     """
 
     regions_by_file: dict[str, list[ResultRegion]] = {}
