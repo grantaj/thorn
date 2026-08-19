@@ -18,11 +18,11 @@ PROOF_REVIEW_MAX_OUTPUT_TOKENS = 4096
 
 
 class ProviderRequestEnvelope(BaseModel):
-    """Canonical description of one model request made by Thorn.
+    """Canonical provider-neutral description of one model request.
 
-    Optional protocol metadata is omitted from legacy envelopes, preserving their
-    existing canonical representation while making proof-review and rescue turns
-    materially distinct at the replay boundary.
+    This remains useful semantic metadata and preserves legacy replay identity. New
+    live execution identity is defined by ``ProviderExecutionContract`` after all
+    provider-specific request construction has completed.
     """
 
     format_version: int = 1
@@ -49,6 +49,12 @@ class ProviderRequestEnvelope(BaseModel):
         )
 
     def fingerprint(self) -> str:
+        """Return the historical provider-neutral envelope fingerprint.
+
+        Do not use this for new live execution, recording, replay, or experiment
+        freezes. It is retained so historical v1 evidence can be identified exactly.
+        """
+
         return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
     def input_messages(self) -> list[dict[str, str]]:
@@ -128,38 +134,73 @@ def semantic_request_envelope(
     )
 
 
+def _proof_review_action_branch(
+    schema: dict[str, object],
+    *,
+    action: Literal["review", "need_source"],
+    constraints: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    """Build a complete closed object branch for one proof-review action."""
+
+    base_properties = schema.get("properties")
+    if not isinstance(base_properties, dict):
+        raise ValueError("proof-review response schema is missing top-level properties")
+    properties = cast(
+        dict[str, object],
+        json.loads(json.dumps(base_properties)),
+    )
+
+    action_schema = properties.get("action")
+    if not isinstance(action_schema, dict):
+        raise ValueError("proof-review response schema is missing the action property")
+    properties["action"] = {**action_schema, "const": action}
+
+    for name, overlay in constraints.items():
+        property_schema = properties.get(name)
+        if not isinstance(property_schema, dict):
+            raise ValueError(f"proof-review response schema is missing {name!r}")
+        properties[name] = {**property_schema, **overlay}
+
+    required = schema.get("required")
+    if not isinstance(required, list):
+        raise ValueError("proof-review response schema is missing required fields")
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(required),
+        "additionalProperties": False,
+    }
+
+
 def _proof_review_response_schema(
     request: ProofReviewTurnRequest,
 ) -> dict[str, object]:
-    """Expose the request-specific proof-review action states to the provider.
-
-    Pydantic's model-level validators still enforce relational invariants that JSON
-    Schema cannot express cleanly, but the provider must not be offered combinations
-    that are invalid merely because of the selected protocol action.
-    """
+    """Expose request-specific action-safe proof-review states to the provider."""
 
     schema = cast(dict[str, object], json.loads(json.dumps(request.response_schema())))
     if request.stage != "initial" or not request.source_rescue_allowed:
         return schema
 
     schema["anyOf"] = [
-        {
-            "properties": {
-                "action": {"const": "review"},
+        _proof_review_action_branch(
+            schema,
+            action="review",
+            constraints={
                 "source_addresses": {"maxItems": 0},
                 "review_items": {"maxItems": 0},
                 "source_review_item_ids": {"maxItems": 0},
-            }
-        },
-        {
-            "properties": {
-                "action": {"const": "need_source"},
+            },
+        ),
+        _proof_review_action_branch(
+            schema,
+            action="need_source",
+            constraints={
                 "findings": {"maxItems": 0},
                 "source_addresses": {"minItems": 1},
                 "review_items": {"minItems": 1},
                 "source_review_item_ids": {"minItems": 1},
-            }
-        },
+            },
+        ),
     ]
     return schema
 
@@ -168,7 +209,7 @@ def proof_review_request_envelope(
     request: ProofReviewTurnRequest,
     model: str,
 ) -> ProviderRequestEnvelope:
-    """Build one exact transport envelope for a proof-review protocol turn."""
+    """Build one provider-neutral proof-review turn."""
 
     system_prompt = _read_prompt(f"{PROMPT_VERSION}.md")
     messages: tuple[dict[str, str], ...] | None = None
