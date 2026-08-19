@@ -354,8 +354,8 @@ def _document_order(
 
     files = {file.path: file for file in project.files}
     points_by_file: dict[str, list[int]] = {}
-    for file, offset in points:
-        points_by_file.setdefault(file, []).append(offset)
+    for point_file, offset in points:
+        points_by_file.setdefault(point_file, []).append(offset)
     for offsets in points_by_file.values():
         offsets.sort()
 
@@ -743,21 +743,21 @@ def add_project_semantic_context(
             continue
 
         if candidate.result_identifier is None:
-            scope = "project"
+            scope_identifier: str | None = "project"
         else:
-            scope = _scope_for_use(
+            scope_identifier = _scope_for_use(
                 table,
                 result_identifier=candidate.result_identifier,
                 kind=candidate.scope_kind,
                 source=source,
             )
-            if scope is None:
+            if scope_identifier is None:
                 continue
 
         table.uses.append(
             SymbolUse(
                 name=name,
-                scope_identifier=scope,
+                scope_identifier=scope_identifier,
                 source=source,
                 raw=source.text(file.raw),
                 resolved_symbol_identifier=(
