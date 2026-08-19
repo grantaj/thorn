@@ -85,6 +85,7 @@ def test_initial_provider_schema_exposes_action_safe_states() -> None:
 
 class _CompletedInvalidResponse:
     def __init__(self, output_text: str) -> None:
+        self.id = "resp_issue_137_a3"
         self.output_text = output_text
         self.status = "completed"
         self.usage = SimpleNamespace(input_tokens=321, output_tokens=45, total_tokens=366)
@@ -92,7 +93,7 @@ class _CompletedInvalidResponse:
     def model_dump(self, *, mode: str) -> dict[str, object]:
         assert mode == "json"
         return {
-            "id": "resp_issue_137_a3",
+            "id": self.id,
             "status": self.status,
             "output": [{"type": "message", "content": self.output_text}],
             "usage": {
@@ -183,7 +184,16 @@ def test_a3_local_validation_failure_preserves_usage_and_provider_response(
     assert exchange.usage.model_generations == 1
     assert exchange.usage.input_tokens == 321
     assert exchange.usage.output_tokens == 45
-    assert exchange.response == completed.model_dump(mode="json")
+    assert exchange.response == {
+        "id": "resp_issue_137_a3",
+        "status": "completed",
+        "output_text": invalid,
+        "usage": {
+            "input_tokens": 321,
+            "output_tokens": 45,
+            "total_tokens": 366,
+        },
+    }
     assert exchange.rejection.kind == "response_validation"
     assert exchange.rejection.exception_type == "ValidationError"
     assert exchange.rejection.validator_replayable is False
