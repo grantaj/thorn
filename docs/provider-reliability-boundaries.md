@@ -18,7 +18,8 @@ identity used by historical v1 recordings. New live evidence uses
 - the final strict JSON Schema, after Thorn-owned schema conversion;
 - model, endpoint, input transcript, output cap, and storage setting;
 - an explicit response-acceptance/validator contract;
-- exact provider-sensitive Python/OpenAI/Pydantic runtime versions; and
+- exact provider-sensitive Python/OpenAI/Pydantic and serialization/HTTP runtime
+  versions; and
 - the SHA-256 identity of the provider-neutral semantic envelope.
 
 The execution contract is built before dispatch. The provider receives a deep copy of
@@ -40,7 +41,7 @@ allowed after the execution fingerprint exists.
 | 9 | Exact / forensic replay | replay providers | v2 replay reconstructs the current final execution contract and requires an exact match. Legacy v1 envelope-only evidence remains replayable but is explicitly counted as `legacy_replay_hits`. |
 | 10 | Source-rescue turn | proof-review protocol | Rescue transcript, carried review state, requested source addresses, exhausted rescue state, schema, and validator semantics are all in the execution identity. |
 | 11 | Experiment manifest/freeze | experiment tooling | Freeze must cover source/runner revision, final execution fingerprints, runtime lock, model policy, budgets, and readiness evidence; mathematics alone is not a freeze. |
-| 12 | GitHub Actions/runtime | workflows | Provider-sensitive workflows use CPython 3.11.16 and `constraints/provider-runtime.txt`; the execution artifact records resolved OpenAI/Pydantic versions as well. |
+| 12 | GitHub Actions/runtime | workflows | Provider-sensitive workflows use CPython 3.11.16 and `constraints/provider-runtime.txt`; the execution artifact records the resolved provider-sensitive dependency versions as well. |
 | 13 | Artifact preservation/adjudication | workflow + experiment | Preflight, live outcome, rejected evidence, replay, runtime, and adjudication stay distinct. Readiness evidence never grants scientific authorization. |
 
 ## Accounting vocabulary
@@ -86,7 +87,8 @@ identity even when the mathematical input is unchanged:
 - transcript or output cap;
 - model/endpoint;
 - validator/normalization semantics;
-- OpenAI SDK, Pydantic/pydantic-core, Python patch, or execution-contract version.
+- OpenAI SDK, Pydantic/pydantic-core, Python patch, provider serialization/HTTP
+  dependencies, or execution-contract version.
 
 Accepted recording files are immutable. Re-running an identical execution and
 obtaining byte/semantic-identical evidence is a no-op. A different accepted result for
@@ -115,19 +117,24 @@ observed before this audit:
 - OpenAI 3.3.0;
 - Pydantic 2.13.4;
 - pydantic-core 2.46.4;
-- provider serialization/HTTP dependencies listed in the constraints file.
+- httpx2 2.12.0;
+- httpcore2 2.12.0; and
+- jiter 0.16.0.
 
-The constraints make Actions deterministic; `ProviderRuntimeIdentity` also embeds the
-resolved runtime in every v2 execution fingerprint, so an out-of-band local dependency
-change cannot masquerade as the same exact execution.
+The constraints make Actions deterministic; `ProviderRuntimeIdentity` embeds all of
+these resolved versions in every v2 execution fingerprint, so an out-of-band local
+dependency change cannot masquerade as the same exact execution.
 
 ## Provider readiness is not scientific authorization
 
 `provider_readiness_canary.py` and the `Provider readiness canary` workflow exercise
 the exact production proof-review request construction with synthetic material only.
-The live canary is bounded to one request, zero SDK retries, source rescue disabled,
-and a 256-token output cap. It has two separate gates: workflow `confirm_live` plus the
-runner's `--confirm-paid-readiness-canary` flag.
+The canary advertises the normal rescue-capable **initial-turn** action schema so it
+exercises the schema branch that previously failed in production, but the runner makes
+exactly one request: a valid `need_source` response is readiness success and is never
+followed by a rescue request. The live canary also has zero SDK retries and a 256-token
+output cap. It has two separate gates: workflow `confirm_live` plus the runner's
+`--confirm-paid-readiness-canary` flag.
 
 Its evidence always contains:
 
@@ -139,8 +146,10 @@ synthetic_input = true
 
 Keyless preflight records the exact final execution contract without constructing a
 provider client. A successful live canary records the exact contract, runtime, attempt
-and usage counters, normalized response, and provider response metadata. Keyless replay
-reconstructs the current execution contract and re-runs local response/protocol
+and usage counters, normalized response, and provider response metadata. A returned
+response that fails local schema or protocol validation is preserved as explicit
+`live-response-failure` evidence rather than disappearing into workflow logs. Keyless
+replay reconstructs the current execution contract and re-runs local response/protocol
 validation. A scientific freeze may cite matching readiness evidence, but still needs
 its own explicit paid-run authorization and frozen scientific request fingerprints.
 
@@ -187,6 +196,12 @@ A provider-backed scientific experiment is not frozen until its manifest identif
    provider seam;
 7. recording/replay directories and artifact policy; and
 8. a distinct scientific authorization record.
+
+The manifest may be committed after the production revision it names. The generic
+runner verifies that the named revision resolves to the frozen `src/thorn` tree and
+that the current checkout has the same tree, runner bytes, constraints, protocol,
+prompt, and runtime. This avoids a self-referential manifest commit without weakening
+the production freeze.
 
 Issue-specific scripts may remain only as historical frozen runners. New experiments
 should use shared provider-readiness, execution-contract, recording/replay, budget, and
