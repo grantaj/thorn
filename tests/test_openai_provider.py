@@ -31,7 +31,7 @@ class FakeResponses:
         output = next(self.outputs)
         return SimpleNamespace(
             output_text=output.model_dump_json() if output is not None else "",
-            status="completed" if output is not None else "incomplete",
+            status="completed",
             usage=SimpleNamespace(
                 input_tokens=100,
                 output_tokens=20 if output is not None else 0,
@@ -43,6 +43,22 @@ class FakeResponses:
 class FakeClient:
     def __init__(self, outputs: list[BaseModel | None]) -> None:
         self.responses = FakeResponses(outputs)
+        self.max_retries = 2
+
+
+class FixedResponses:
+    def __init__(self, response: object) -> None:
+        self.response = response
+        self.calls: list[dict[str, object]] = []
+
+    def create(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        return self.response
+
+
+class FixedClient:
+    def __init__(self, response: object) -> None:
+        self.responses = FixedResponses(response)
         self.max_retries = 2
 
 
@@ -185,7 +201,44 @@ def test_missing_structured_attacker_result_fails_closed(monkeypatch: pytest.Mon
 
     assert provider.provider_attempts == 1
     assert provider.responses_received == 1
-    assert provider.model_generations == 0
+    assert provider.model_generations == 1
     assert provider.input_tokens == 100
     assert provider.output_tokens == 0
     assert provider.total_tokens == 100
+
+
+@pytest.mark.parametrize("status", ["incomplete", "failed", "in_progress", "cancelled", "queued"])
+def test_non_completed_response_cannot_be_accepted_even_with_valid_json(
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+) -> None:
+    response = SimpleNamespace(
+        id=f"resp_{status}",
+        status=status,
+        output_text=AttackReport(findings=[]).model_dump_json(),
+        error=SimpleNamespace(type="server_error", code="transient", message="do not persist"),
+        incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+        usage=SimpleNamespace(input_tokens=10, output_tokens=3, total_tokens=13),
+    )
+    client = FixedClient(response)
+    monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
+    provider = openai_provider.OpenAIProvider(model="fake-model")
+
+    with pytest.raises(ProviderResponseValidationError) as captured:
+        provider.attack(_unit())
+
+    error = captured.value
+    assert error.validation_exception_type == "ProviderResponseNotCompleted"
+    assert error.response_payload["status"] == status
+    assert error.response_payload["id"] == f"resp_{status}"
+    assert error.response_payload["error"] == {
+        "type": "server_error",
+        "code": "transient",
+    }
+    assert error.response_payload["incomplete_details"] == {"reason": "max_output_tokens"}
+    assert "do not persist" not in str(error.response_payload)
+    assert provider.responses_received == 1
+    assert provider.model_generations == 1
+    assert provider.input_tokens == 10
+    assert provider.output_tokens == 3
+    assert provider.total_tokens == 13
