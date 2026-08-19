@@ -41,9 +41,9 @@ class ProviderTransportProfile(BaseModel):
 
     A readiness profile can cover a scientific profile when the transport family and
     normalized schema structure are identical and the readiness probe exercised at
-    least as large an enum/array cardinality. This makes the max-shape canary cover
-    smaller request-specific source-address and carried-review-ID schemas without
-    pretending that a tiny enum proves acceptance of a larger one.
+    least as large a literal-set/array cardinality. ``const`` and ``enum`` are
+    normalized as one literal-set feature because they express the same provider
+    schema capability; cardinality remains an independent monotone coverage bound.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -254,11 +254,28 @@ def build_provider_execution_contract(
     )
 
 
+def _literal_types(values: list[object]) -> list[str]:
+    return sorted({type(value).__name__ for value in values})
+
+
 def _schema_profile_value(value: object, *, key: str | None = None) -> object:
     if isinstance(value, dict):
         normalized: dict[str, object] = {}
+        enum = value.get("enum")
+        if isinstance(enum, list):
+            normalized["literalSet"] = {"types": _literal_types(enum)}
+        elif "const" in value:
+            normalized["literalSet"] = {"types": [type(value["const"]).__name__]}
+
         for child_key in sorted(value):
-            if child_key in {"title", "description", "default", "examples"}:
+            if child_key in {
+                "title",
+                "description",
+                "default",
+                "examples",
+                "enum",
+                "const",
+            }:
                 continue
             normalized[child_key] = _schema_profile_value(
                 value[child_key],
@@ -266,8 +283,6 @@ def _schema_profile_value(value: object, *, key: str | None = None) -> object:
             )
         return normalized
     if isinstance(value, list):
-        if key == "enum":
-            return ["<enum-item>" if isinstance(item, str) else type(item).__name__ for item in value]
         return [_schema_profile_value(item, key=key) for item in value]
     if isinstance(value, int) and key in {"minItems", "maxItems"}:
         return "<array-bound>"
@@ -281,6 +296,8 @@ def _schema_cardinalities(value: object) -> tuple[int, int]:
         enum = value.get("enum")
         if isinstance(enum, list):
             max_enum = len(enum)
+        elif "const" in value:
+            max_enum = 1
         for name in ("minItems", "maxItems"):
             bound = value.get(name)
             if isinstance(bound, int):
