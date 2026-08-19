@@ -111,7 +111,24 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$PRIOR_TRIGGER_SHA&per_page=100")"
-          printf '%s' "$runs" | python -c 'import json,os,sys; d=json.load(sys.stdin); n=os.environ["PRIOR_WORKFLOW_NAME"]; s=os.environ["PRIOR_TRIGGER_SHA"]; m=[r for r in d.get("workflow_runs",[]) if r.get("name")==n and r.get("head_sha")==s]; assert not m, f"prior authorized canary run exists: {[r.get("id") for r in m]}"'
+          printf '%s' "$runs" > /tmp/prior-runs.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/prior-runs.json').read_text())
+          name = os.environ['PRIOR_WORKFLOW_NAME']
+          sha = os.environ['PRIOR_TRIGGER_SHA']
+          matches = [
+              run
+              for run in data.get('workflow_runs', [])
+              if run.get('name') == name and run.get('head_sha') == sha
+          ]
+          if matches:
+              ids = [run.get('id') for run in matches]
+              raise SystemExit(f'prior authorized canary run exists: {ids}')
+          PY
       - name: Keyless preflight
         env:
           OPENAI_API_KEY: ""
