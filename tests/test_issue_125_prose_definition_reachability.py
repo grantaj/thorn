@@ -2,17 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from thorn.latex import extract_project
 from thorn.proof_language_review import advertised_source_addresses
 from thorn.review_workflow import prepare_proof_review
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="issue #125: prose-defined result semantics are not source-reachable",
-)
 def test_prose_defined_result_property_is_available_to_semantic_review(
     tmp_path: Path,
 ) -> None:
@@ -46,6 +40,5 @@ The required estimate follows from the preceding discussion.
     ]
 
     assert defining_sources
-    assert "one constant works uniformly" in packet or any(
-        source.address in advertised for source in defining_sources
-    )
+    assert "one constant works uniformly" not in packet
+    assert any(source.address in advertised for source in defining_sources)
