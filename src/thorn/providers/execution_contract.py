@@ -25,6 +25,9 @@ class ProviderRuntimeIdentity(BaseModel):
     openai: str
     pydantic: str
     pydantic_core: str
+    httpx2: str
+    httpcore2: str
+    jiter: str
     execution_contract: str = EXECUTION_CONTRACT_VERSION
 
 
@@ -79,6 +82,9 @@ def current_provider_runtime() -> ProviderRuntimeIdentity:
         openai=_installed_version("openai"),
         pydantic=_installed_version("pydantic"),
         pydantic_core=_installed_version("pydantic-core"),
+        httpx2=_installed_version("httpx2"),
+        httpcore2=_installed_version("httpcore2"),
+        jiter=_installed_version("jiter"),
     )
 
 
