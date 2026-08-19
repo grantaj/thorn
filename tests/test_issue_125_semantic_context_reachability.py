@@ -6,7 +6,13 @@ import pytest
 
 from thorn.latex import extract_project
 from thorn.llm_proof_language import parse_source_rescue_request, render_source_rescue
-from thorn.proof_language_review import advertised_source_addresses
+from thorn.proof_language_review import (
+    ProofReviewItem,
+    ProofReviewModelResponse,
+    ProofReviewTurnRequest,
+    advertised_source_addresses,
+)
+from thorn.report import ProofReviewReportInput, ReviewExecution, proof_review_metadata
 from thorn.review_workflow import prepare_proof_review
 from thorn.semantic_review import _select_symbol_context
 
@@ -168,6 +174,77 @@ Use the usual diagonal symmetry of a rectangle.
     assert source.address in set(advertised_source_addresses(prepared.document))
     assert "converg" not in source.text.lower()
     assert "uniform" not in source.text.lower()
+
+
+def test_recovered_prose_keeps_report_source_navigation(tmp_path: Path) -> None:
+    definition = (
+        "A map will be called \\emph{balanced} when every fibre contains exactly two points."
+    )
+    paper, prepared = _prepare(
+        tmp_path,
+        rf"""
+{definition}
+
+\begin{{theorem}}\label{{thm:main}}
+The map \(f\) is balanced.
+\end{{theorem}}
+\begin{{proof}}
+The assertion follows from the construction.
+\end{{proof}}
+""",
+    )
+    project = extract_project(paper)
+    unit = project.unit("thm:main")
+    source = _source_matching(prepared, "every fibre contains exactly two points")
+    initial = ProofReviewTurnRequest(
+        representation="thorn-proof/1",
+        stage="initial",
+        initial_packet_fingerprint=prepared.document.fingerprint(),
+        user_content=prepared.document.render_initial(),
+        source_rescue_allowed=True,
+        allowed_source_addresses=(source.address,),
+    )
+    prior = ProofReviewModelResponse(
+        action="need_source",
+        source_addresses=(source.address,),
+        review_items=(
+            ProofReviewItem(
+                id="RV1",
+                kind="question",
+                summary="What is the authoritative meaning of balanced?",
+            ),
+        ),
+        source_review_item_ids=("RV1",),
+    )
+    rescue = ProofReviewTurnRequest(
+        representation="thorn-proof/1",
+        stage="rescue",
+        initial_packet_fingerprint=prepared.document.fingerprint(),
+        user_content=definition,
+        source_rescue_allowed=False,
+        requested_source_addresses=(source.address,),
+        initial_user_content=initial.user_content,
+        prior_response=prior,
+    )
+    metadata = proof_review_metadata(
+        ProofReviewReportInput(
+            result_identifier=unit.identifier,
+            initial_turn=initial,
+            model="keyless-test",
+            execution=ReviewExecution.REPLAY,
+            rescue_turn=rescue,
+            document=prepared.document,
+            source=unit.statement_range,
+        )
+    )
+
+    assert len(metadata.source_rescue) == 1
+    report_source = metadata.source_rescue[0].source
+    assert report_source is not None
+    assert report_source.file == str(paper.resolve())
+    assert report_source.excerpt == definition
+    assert report_source.source_addresses == (source.address,)
+    assert report_source.uri is not None and report_source.uri.startswith("file:")
 
 
 def test_source_rescue_remains_closed_world_for_semantic_context(tmp_path: Path) -> None:
