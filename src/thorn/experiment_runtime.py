@@ -140,7 +140,8 @@ class ProviderBudget:
         wire_bound = conservative_wire_input_token_bound(contract)
         if self.input_tokens + wire_bound > self.spec.max_input_tokens:
             raise ExperimentFreezeError("input-token ceiling would be exceeded")
-        if self.output_tokens + self.spec.max_output_tokens_per_request > self.spec.max_output_tokens:
+        projected_output = self.output_tokens + self.spec.max_output_tokens_per_request
+        if projected_output > self.spec.max_output_tokens:
             raise ExperimentFreezeError("aggregate output-token ceiling would be exceeded")
         self.reserved_turns += 1
 
@@ -151,11 +152,17 @@ class ProviderBudget:
     ) -> None:
         delta = after.minus(before)
         if delta.provider_attempts < 0 or delta.provider_attempts > 1:
-            raise ExperimentFreezeError("one logical turn changed provider-attempt count by more than one")
+            raise ExperimentFreezeError(
+                "one logical turn changed provider-attempt count by more than one"
+            )
         if delta.responses_received < 0 or delta.responses_received > 1:
-            raise ExperimentFreezeError("one logical turn changed response count by more than one")
+            raise ExperimentFreezeError(
+                "one logical turn changed response count by more than one"
+            )
         if delta.model_generations < 0 or delta.model_generations > 1:
-            raise ExperimentFreezeError("one logical turn changed model-generation count by more than one")
+            raise ExperimentFreezeError(
+                "one logical turn changed model-generation count by more than one"
+            )
         self.provider_attempts += delta.provider_attempts
         self.input_tokens += delta.input_tokens
         self.output_tokens += delta.output_tokens
@@ -264,7 +271,9 @@ def assert_readiness_compatible(
     if evidence.model != manifest.model:
         raise ExperimentFreezeError("readiness model does not match scientific manifest")
     if readiness.runtime != manifest.runtime or scientific_contract.runtime != manifest.runtime:
-        raise ExperimentFreezeError("readiness/scientific provider runtime does not match manifest")
+        raise ExperimentFreezeError(
+            "readiness/scientific provider runtime does not match manifest"
+        )
     if readiness.provider != scientific_contract.provider:
         raise ExperimentFreezeError("readiness and scientific provider identities differ")
     if readiness.endpoint != scientific_contract.endpoint:
