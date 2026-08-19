@@ -8,9 +8,16 @@ from thorn.semantic_review import (
     ReviewSourceContext,
     ReviewTargetKind,
     SemanticReviewItem,
+    _close_project_symbol_dependencies,
 )
 from thorn.support import Claim, SupportEdge
-from thorn.symbols import Constraint, Definition, ScopeKind, Symbol, SymbolIntroductionCandidate
+from thorn.symbols import (
+    Constraint,
+    Definition,
+    ScopeKind,
+    Symbol,
+    SymbolIntroductionCandidate,
+)
 
 
 def _span_key(span: SourceSpan) -> tuple[str, int, int, int, int, int, int]:
@@ -122,6 +129,8 @@ def _result_symbol_context(
         for use in table.uses
         if use.resolved_symbol_identifier is not None and is_target_use(use.source)
     )
+    _close_project_symbol_dependencies(table, symbol_ids)
+
     symbols = sorted(
         (symbol for symbol in table.symbols if symbol.identifier in symbol_ids),
         key=_symbol_key,
@@ -198,7 +207,13 @@ def build_result_review_context(
         key=_claim_key,
     )
     relations = _result_relations(project, claims)
-    hypotheses, local_constraints, symbols, definitions, candidates = _result_symbol_context(
+    (
+        hypotheses,
+        local_constraints,
+        symbols,
+        definitions,
+        candidates,
+    ) = _result_symbol_context(
         project,
         result_identifier,
         claims,
