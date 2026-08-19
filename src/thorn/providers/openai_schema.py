@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-
 _UNSUPPORTED_COMPOSITION_KEYWORDS = frozenset(
     {
         "allOf",
