@@ -93,6 +93,19 @@ def _unit() -> TheoremUnit:
         ),
         (
             _HTTPFailure(
+                "model access denied",
+                status_code=403,
+                error_type="permission_error",
+                code="model_access_denied",
+                request_id="req_permission",
+            ),
+            403,
+            "permission_error",
+            "model_access_denied",
+            None,
+        ),
+        (
+            _HTTPFailure(
                 "rate limited",
                 status_code=429,
                 error_type="rate_limit_error",
