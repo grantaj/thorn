@@ -272,8 +272,13 @@ class RecordingProvider:
         if dispatched is None:
             return
         if not isinstance(dispatched, ProviderExecutionContract):
-            raise RecordingConflictError("delegate retained an invalid execution contract")
-        if dispatched is not contract and dispatched.canonical_json() != contract.canonical_json():
+            raise RecordingConflictError(
+                "delegate retained an invalid execution contract"
+            )
+        if (
+            dispatched is not contract
+            and dispatched.canonical_json() != contract.canonical_json()
+        ):
             raise RecordingConflictError(
                 "delegate dispatched a different execution contract from the recorder"
             )
@@ -322,7 +327,10 @@ class RecordingProvider:
             )
 
         temporary = destination.with_suffix(".json.tmp")
-        temporary.write_text(exchange.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        temporary.write_text(
+            exchange.model_dump_json(indent=2) + "\n",
+            encoding="utf-8",
+        )
         temporary.replace(destination)
 
     def _write_rejected(
@@ -337,7 +345,10 @@ class RecordingProvider:
         response_payload = (
             response.model_dump(mode="json") if isinstance(response, BaseModel) else response
         )
-        response_fingerprint = _rejected_response_fingerprint(response_payload, rejection)
+        response_fingerprint = _rejected_response_fingerprint(
+            response_payload,
+            rejection,
+        )
         exchange = RecordedRejectedExchange(
             fingerprint=fingerprint,
             request=envelope,
@@ -353,7 +364,10 @@ class RecordingProvider:
         if destination.exists():
             return
         temporary = destination.with_suffix(".json.tmp")
-        temporary.write_text(exchange.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        temporary.write_text(
+            exchange.model_dump_json(indent=2) + "\n",
+            encoding="utf-8",
+        )
         temporary.replace(destination)
 
     def _invoke(
@@ -431,7 +445,9 @@ class RecordingProvider:
         self._write(envelope, contract, response, usage)
         if self.verify_after_write:
             if self._replay().attack(unit) != response:
-                raise RecordingConflictError("immediate exact replay changed accepted attack evidence")
+                raise RecordingConflictError(
+                    "immediate exact replay changed accepted attack evidence"
+                )
             self.exact_replay_verifications += 1
         return response
 
@@ -461,7 +477,11 @@ class RecordingProvider:
         )
         response, usage, contract = self._invoke(
             envelope,
-            lambda exact: self._call_with_contract("review_proof_turn", exact, request),
+            lambda exact: self._call_with_contract(
+                "review_proof_turn",
+                exact,
+                request,
+            ),
         )
         try:
             normalized = validate_proof_review_response(request, response)
@@ -497,12 +517,19 @@ class RecordingProvider:
         envelope = defense_request_envelope(unit, findings, self.model)
         response, usage, contract = self._invoke(
             envelope,
-            lambda exact: self._call_with_contract("defend", exact, unit, findings),
+            lambda exact: self._call_with_contract(
+                "defend",
+                exact,
+                unit,
+                findings,
+            ),
         )
         self._write(envelope, contract, response, usage)
         if self.verify_after_write:
             if self._replay().defend(unit, findings) != response:
-                raise RecordingConflictError("immediate exact replay changed accepted defense evidence")
+                raise RecordingConflictError(
+                    "immediate exact replay changed accepted defense evidence"
+                )
             self.exact_replay_verifications += 1
         return response
 
@@ -567,7 +594,9 @@ class ReplayProvider:
             )
 
         try:
-            exchange = RecordedExchange.model_validate_json(path.read_text(encoding="utf-8"))
+            exchange = RecordedExchange.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
         except (OSError, UnicodeError, ValidationError, json.JSONDecodeError) as exc:
             raise ReplayError(f"invalid recording {path}: {exc}") from exc
         if exchange.fingerprint != expected_fingerprint:
@@ -637,7 +666,9 @@ class ReplayProvider:
         unit: TheoremUnit,
         findings: list[CandidateFinding],
     ) -> DefenseReport:
-        exchange, legacy = self._load(defense_request_envelope(unit, findings, self.model))
+        exchange, legacy = self._load(
+            defense_request_envelope(unit, findings, self.model)
+        )
         response = DefenseReport.model_validate(exchange.response)
         self._record_hit(exchange, legacy=legacy)
         return response
