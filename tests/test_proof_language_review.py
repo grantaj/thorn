@@ -369,8 +369,12 @@ def test_openai_provider_transports_exact_proof_review_envelope_keylessly(
     assert text_format["strict"] is True
     schema = text_format["schema"]
     assert isinstance(schema, dict)
-    assert "anyOf" in schema
+    assert schema["type"] == "object"
+    assert "anyOf" not in schema
     assert schema["additionalProperties"] is False
+    properties = schema["properties"]
+    assert isinstance(properties, dict)
+    assert schema["required"] == list(properties)
     messages = call["input"]
     assert isinstance(messages, list)
     assert "THORN-PROOF 1" in messages[1]["content"]

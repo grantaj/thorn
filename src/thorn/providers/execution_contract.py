@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from thorn.provider_runtime_lock import PROVIDER_RUNTIME_LOCK, PROVIDER_RUNTIME_LOCK_TEXT
+from thorn.providers.openai_schema import validate_openai_structured_outputs_schema
 from thorn.providers.request_envelope import ProviderRequestEnvelope, RequestKind
 
 EXECUTION_CONTRACT_VERSION = "thorn-provider-execution/2"
@@ -20,6 +21,7 @@ LOCAL_STRUCTURED_VALIDATOR_CONTRACT = "thorn-local-structured-validator/1"
 _PROVIDER_ADAPTER_PATHS = (
     Path(__file__),
     Path(__file__).with_name("openai.py"),
+    Path(__file__).with_name("openai_schema.py"),
     Path(__file__).with_name("request_envelope.py"),
     Path(__file__).resolve().parents[1] / "proof_language_review.py",
 )
@@ -187,22 +189,46 @@ def provider_runtime_matches_lock(runtime: ProviderRuntimeIdentity | None = None
 
 
 def strict_json_schema(schema: dict[str, object]) -> dict[str, object]:
-    """Return Thorn's final strict Structured Outputs schema."""
+    """Return Thorn's final provider-visible strict Structured Outputs schema.
+
+    Pydantic defaults are local parsing behavior, not provider-side optionality.
+    Strip them from every schema node before the provider-subset gate and execution
+    identity are computed, while preserving properties or definitions actually named
+    ``default``.
+    """
 
     strict = copy.deepcopy(schema)
 
     def visit(value: object) -> None:
-        if isinstance(value, dict):
-            if value.get("type") == "object":
-                value["additionalProperties"] = False
-                properties = value.get("properties")
-                if isinstance(properties, dict):
-                    value["required"] = list(properties)
-            for child in value.values():
+        if not isinstance(value, dict):
+            return
+
+        value.pop("default", None)
+        if value.get("type") == "object":
+            value["additionalProperties"] = False
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                value["required"] = list(properties)
+
+        properties = value.get("properties")
+        if isinstance(properties, dict):
+            for child in properties.values():
                 visit(child)
-        elif isinstance(value, list):
-            for child in value:
+
+        definitions = value.get("$defs")
+        if isinstance(definitions, dict):
+            for child in definitions.values():
                 visit(child)
+
+        items = value.get("items")
+        if isinstance(items, dict):
+            visit(items)
+
+        for keyword in ("anyOf", "oneOf", "allOf"):
+            branches = value.get(keyword)
+            if isinstance(branches, list):
+                for child in branches:
+                    visit(child)
 
     visit(strict)
     return strict
@@ -232,7 +258,10 @@ def build_provider_execution_contract(
     *,
     runtime: ProviderRuntimeIdentity | None = None,
 ) -> ProviderExecutionContract:
-    """Build the final provider request before validation, identity, or dispatch."""
+    """Build and validate the final provider request before identity or dispatch."""
+
+    provider_schema = strict_json_schema(envelope.response_schema)
+    validate_openai_structured_outputs_schema(provider_schema)
 
     wire_request: dict[str, Any] = {
         "model": envelope.model,
@@ -241,7 +270,7 @@ def build_provider_execution_contract(
             "format": {
                 "type": "json_schema",
                 "name": _schema_name(envelope),
-                "schema": strict_json_schema(envelope.response_schema),
+                "schema": provider_schema,
                 "strict": True,
             }
         },
