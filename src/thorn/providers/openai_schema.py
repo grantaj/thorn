@@ -30,9 +30,9 @@ _SUPPORTED_STRING_FORMATS = frozenset(
         "uuid",
     }
 )
-# Keep this allowlist deliberately small. ``title`` and ``default`` are retained
-# because OpenAI's current Python strict-schema adapter preserves them for
-# Pydantic schemas; everything else must be explicitly admitted here.
+# Keep this allowlist deliberately small. ``title`` is retained because OpenAI's
+# current Python strict-schema adapter preserves it for Pydantic schemas;
+# everything else must be explicitly admitted here.
 _ALLOWED_SCHEMA_KEYWORDS = frozenset(
     {
         "$defs",
@@ -47,7 +47,6 @@ _ALLOWED_SCHEMA_KEYWORDS = frozenset(
         "anyOf",
         "description",
         "title",
-        "default",
         "pattern",
         "format",
         "minLength",
