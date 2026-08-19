@@ -25,7 +25,9 @@ from thorn.providers.execution_contract import (
 from thorn.providers.openai import OpenAIProvider
 from thorn.providers.request_envelope import proof_review_request_envelope
 
-READINESS_CANARY_FORMAT = "thorn-provider-readiness/1"
+READINESS_CANARY_FORMAT: Literal["thorn-provider-readiness/1"] = (
+    "thorn-provider-readiness/1"
+)
 READINESS_CANARY_MAX_OUTPUT_TOKENS = 256
 
 
