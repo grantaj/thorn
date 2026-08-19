@@ -18,8 +18,8 @@ identity used by historical v1 recordings. New live evidence uses
 - the final strict JSON Schema, after Thorn-owned schema conversion;
 - model, endpoint, input transcript, output cap, and storage setting;
 - an explicit response-acceptance/validator contract;
-- the full committed provider dependency-lock digest plus the resolved version of
-  every locked package; and
+- the packaged provider dependency-lock digest plus the actually installed version
+  of every expected lock entry; and
 - the SHA-256 identity of the provider-neutral semantic envelope.
 
 The execution contract is built before dispatch. Production recording passes that
@@ -35,14 +35,14 @@ reconstruct a subtly different request after the call.
 | 2 | Proof-IR -> proof-review turn | `proof_language_review` | Representation, protocol, source universe, stage, and transcript are explicit and deterministic. |
 | 3 | Turn -> response state/schema | Thorn | Request-specific Pydantic/schema state is constructed before provider execution. Relational semantics are separately versioned. |
 | 4 | Provider-neutral request -> final wire request | `execution_contract` | Final schema conversion and `responses.create` wrapper happen exactly once, before fingerprinting. |
-| 5 | SDK/client construction | `OpenAIProvider` | SDK retries are zero. The full committed provider dependency closure and its resolved runtime are part of execution identity. |
-| 6 | Dispatch -> outcome | `OpenAIProvider` | `provider_attempts` increments before dispatch. Transport failures become typed, redacted evidence rather than generic log-only exceptions. |
+| 5 | SDK/client construction | `OpenAIProvider` | SDK retries are zero. The packaged provider dependency closure and the actual resolved runtime are part of execution identity. |
+| 6 | Dispatch -> provider response | `OpenAIProvider` | `provider_attempts` increments before dispatch. Transport failures become typed, redacted evidence. Returned Responses are accepted only when `status == completed`. |
 | 7 | Usage / billing evidence | provider adapter | Attempts, responses received, known model generations, input/output/total tokens, live attempts, and replay hits are separate quantities. Unknown usage remains unknown/zero rather than inferred. |
 | 8 | Accepted/rejected recording | `RecordingProvider` | Recording receives the exact dispatched contract. Accepted v2 evidence is immutable and exact-replayed immediately; conflicts are preserved separately and fail loudly. |
 | 9 | Exact / forensic replay | replay providers | v2 replay reconstructs the current final execution contract and requires an exact match. Legacy v1 envelope-only evidence remains replayable but is explicitly counted as `legacy_replay_hits`. |
 | 10 | Source-rescue turn | proof-review protocol | Rescue transcript, carried review state, requested source addresses, exhausted rescue state, schema, and validator semantics are all in execution identity and must be covered by readiness before live dispatch. |
 | 11 | Experiment manifest/freeze | experiment tooling | Freeze covers source/runner revision, every initial execution fingerprint, full runtime lock, budgets, and the exact successful readiness evidence identity. |
-| 12 | GitHub Actions/runtime | workflows | Provider-sensitive workflows use CPython 3.11.16 and the full `constraints/provider-runtime.txt` dependency closure. Historical paid workflows are retired. |
+| 12 | GitHub Actions/runtime | workflows | Provider-sensitive workflows use CPython 3.11.16 and the full provider dependency closure. CI verifies the same lock identity from an installed wheel outside the source checkout. Historical paid workflows are retired. |
 | 13 | Artifact preservation/adjudication | workflow + experiment | Preflight, readiness, live outcome, rejected evidence, immediate exact replay, runtime, and adjudication stay distinct. Readiness never grants scientific authorization. |
 
 ## Accounting vocabulary
@@ -63,7 +63,7 @@ These names are deliberately non-interchangeable:
 An HTTP 400/401/403/429/5xx, connectivity error, or timeout therefore counts as a
 provider attempt even if no model generation or token usage is known.
 
-## Transport-failure evidence
+## Provider response acceptance and failure evidence
 
 `ProviderTransportError` carries `ProviderTransportEvidence`. Thorn preserves an
 allowlisted set of safe, JSON-serializable metadata when available: exception type,
@@ -72,10 +72,17 @@ HTTP status, provider request ID, structured error type/code/parameter, and
 strings, provider error messages, request headers, authorization headers, and API keys
 are not serialized into evidence.
 
-A returned response that is empty, malformed JSON, or fails the request-specific
-Pydantic schema is a different class: `ProviderResponseValidationError`. It records
-the provider response payload and provider-reported usage because transport itself
-succeeded.
+A returned provider object is a distinct boundary. **Only a Responses object whose
+status is exactly `completed` can reach Thorn's structured/Pydantic validator.** An
+`incomplete`, `failed`, in-progress, cancelled, queued, missing, or otherwise unknown
+status is a response-validation failure even if `output_text` happens to contain valid
+JSON. Rejected evidence preserves the response ID, status, provider-reported usage,
+and allowlisted `error` (`type`, `code`, `param`) / `incomplete_details` (`reason`)
+fields. Arbitrary provider messages are deliberately omitted.
+
+For a completed response, empty output, malformed JSON, or a request-specific schema
+failure is also `ProviderResponseValidationError`; provider-reported usage remains
+preserved because transport itself succeeded.
 
 ## Recording and replay identity
 
@@ -89,7 +96,7 @@ identity even when the mathematical input is unchanged:
 - transcript or output cap;
 - model/endpoint;
 - validator/normalization semantics;
-- Python patch or any package/version in the committed provider dependency closure;
+- Python patch or any expected package/version in the provider dependency closure;
 - the provider lock digest; or
 - the execution-contract version.
 
@@ -120,18 +127,25 @@ Historical #134 attempts therefore remain evidence of what happened under their
 recorded contracts. Any post-#146 A3 measurement is a new comparability epoch; A1/A2
 are not resampled merely to migrate recording formats.
 
-## Reproducible provider runtime
+## Reproducible provider runtime, including wheel installs
 
-Provider-sensitive Actions run on CPython 3.11.16 and install through
-`constraints/provider-runtime.txt`. The file now freezes the full resolved dependency
-closure used by the OpenAI transport, not only a hand-picked subset. It includes the
-OpenAI/Pydantic stack and its provider-side HTTP, serialization, typing, certificate,
-and retry/progress dependencies.
+The canonical provider dependency closure is packaged in Thorn itself. The repository
+file `constraints/provider-runtime.txt` is an install-time projection of those exact
+canonical bytes; it is not the source of runtime identity. Consequently an installed
+wheel does not need to reach back into a repository checkout to identify the expected
+runtime.
 
-`ProviderRuntimeIdentity` records the lock-file SHA-256 plus the actually installed
-version of every lock entry. Experiment preflight fails when the installed closure no
-longer equals the committed lock, and any lock or resolved-version change alters the
-v2 execution identity.
+`ProviderRuntimeIdentity` records the packaged lock SHA-256 plus the actually installed
+version (or explicit `not-installed` state) of every expected entry. Exact execution
+identity is therefore meaningful even for an ordinary wheel install whose broad
+project dependencies resolve differently. Scientific experiment preflight additionally
+requires every actual version to equal the packaged expected closure and fails closed
+before provider dispatch otherwise.
+
+CI builds a wheel, installs it into a fresh venv outside the checkout, imports that
+installed Thorn package from `/tmp`, and verifies that the packaged digest and expected
+package set exactly match `constraints/provider-runtime.txt` and the installed closure.
+This guards against accidentally reintroducing repository-relative lock discovery.
 
 ## Provider readiness is not scientific authorization
 
@@ -141,24 +155,33 @@ The readiness canary exercises **two deterministic synthetic transport profiles*
 2. a deterministic max-carried-state rescue request with the production four-message
    transcript shape.
 
-The canary uses synthetic mathematical content only, zero SDK retries, and a bounded
-512-token output cap per request. A live run therefore makes exactly two paid
-readiness calls. The rescue probe is constructed deterministically rather than being
-conditional on whatever action the model returns in the initial probe.
+The canary uses synthetic mathematical content only and zero SDK retries. Crucially,
+it advertises the **same provider-visible `max_output_tokens` value as production proof
+review** (`PROOF_REVIEW_MAX_OUTPUT_TOKENS`, currently 4096). The synthetic expected
+answer remains tiny; the larger advertised cap is part of the transport compatibility
+probe rather than a request to generate a large answer. A live run makes exactly two
+paid readiness calls.
 
-Each contract is reduced to a provider transport profile containing the endpoint,
-request kind, message-role shape, normalized response-schema structure, and maximum
-literal-set/array cardinalities. Payload-specific literal values are erased; `const`
-and `enum` are treated as one literal-set feature while cardinality remains explicit.
-A readiness profile can cover a scientific profile only when structural identity
-matches and the readiness cardinality bounds are at least as large.
+Each contract is reduced to a provider transport profile containing:
+
+- provider, endpoint, request kind, and message-role shape;
+- the exact provider-visible output cap;
+- normalized response-schema structure with literal values erased;
+- total serialized schema bytes;
+- **per-schema-path** enum/const cardinality and serialized literal-set bytes; and
+- **per-schema-path** `minItems` / `maxItems` bounds.
+
+Coverage is path-sensitive. A large unrelated enum cannot hide growth in the actual
+source-address or rescue-disposition enum. A readiness profile covers a scientific
+profile only when structural identity and output cap match exactly and every dynamic
+schema location exercised by science is no larger than the corresponding readiness
+location. This also accounts for literal/schema size, not only item counts.
 
 This matters because production schemas contain request-specific source-address enums
-and rescue schemas contain carried review-item IDs. A successful readiness run is not
-merely evidence that *some* proof-review request worked: every initial scientific
-contract is checked for profile coverage before the experiment begins, and every
-runtime-generated rescue contract is checked again before its provider dispatch.
-Uncovered profiles fail closed without a paid scientific call.
+and rescue schemas contain carried review-item IDs. Every initial scientific contract
+is checked for profile coverage before the experiment begins, and every runtime-
+generated rescue contract is checked again before provider dispatch. Uncovered
+profiles fail closed without a paid scientific call.
 
 Readiness evidence always contains:
 
@@ -170,8 +193,8 @@ synthetic_input = true
 
 It also records generation time, workflow/run identity, the exact `src/thorn` tree,
 provider-adapter digest, provider-lock digest, both execution contracts, both transport
-profiles, attempt/usage counters, normalized responses, and provider response metadata.
-Keyless replay reconstructs and validates both readiness profiles.
+profiles, attempt/usage counters, normalized responses, and safe provider response
+metadata. Keyless replay reconstructs and validates both readiness profiles.
 
 ## Readiness is part of the scientific freeze
 
@@ -197,31 +220,60 @@ standing paid-run authorization.
 
 No live readiness or scientific request is executed by this implementation PR.
 
+## Canonical keyless experiment freeze path
+
+Humans should not hand-transcribe v2 freeze hashes. The supported builder is:
+
+```bash
+python scripts/prepare_provider_experiment.py \
+  --experiment-id example \
+  --model gpt-5.6 \
+  --readiness-evidence path/to/successful-readiness.json \
+  --case C1 eval/cases/example.tex thm:example \
+  --max-provider-attempts 2 \
+  --max-input-tokens 50000 \
+  --max-output-tokens 8192 \
+  --output eval/provider-experiments/example.json
+```
+
+The user selects only scientific intent: model, cases/targets, budgets, readiness
+artifact, freshness policy, and output location. The builder derives source hashes,
+HEAD/repository and `src/thorn` identities, runner and constraints hashes, packaged
+runtime identity, readiness evidence hash/run/time/adapter/lock/profile identities,
+protocol/prompt/representation versions, and exact initial execution fingerprints.
+It checks readiness coverage for every case, writes deterministic sorted JSON, then
+invokes `run_provider_experiment.py --preflight` on the generated manifest. A manifest
+that cannot round-trip through the generic runner is not successfully prepared.
+
 ## Failure-injection invariant matrix
 
 The provider invariant suite, together with proof-review protocol tests, covers:
 
 | Failure / change | Expected invariant |
 |---|---|
-| accepted structured response | one attempt, one response, known generation/usage where exposed; immediate exact v2 replay succeeds |
+| accepted structured response | `status == completed`; one attempt/response; immediate exact v2 replay succeeds |
+| incomplete/failed/in-progress response containing valid JSON | never accepted; safe status/error/details/usage quarantined |
 | pre-generation schema rejection | one attempt; typed HTTP evidence; zero generation unless provider proves otherwise |
 | auth/permission error | one attempt; typed status/request-ID/error classification when exposed |
 | rate limit | one attempt; retry metadata retained; no implicit SDK retry |
 | provider 5xx | one attempt; typed transport evidence |
 | network/connectivity error | one attempt; no invented HTTP metadata |
 | timeout | one attempt; no implicit retry |
-| exception containing a fake API secret | arbitrary exception/provider messages are absent from persisted evidence |
-| empty output | response received; response-validation failure, not transport failure |
+| exception/provider response containing a fake API secret | arbitrary messages are absent from persisted evidence |
+| completed empty output | response received; response-validation failure, not transport failure |
 | malformed JSON | response received; response-validation failure with usage preserved |
-| request-schema failure | response received; response-validation failure with response evidence |
+| request-schema failure | response received; response-validation failure with safe response evidence |
 | Thorn protocol-validator failure | quarantined structured response; forensic replay reproduces the same validator rejection |
 | source-rescue initial/final turns | distinct identities and distinct readiness-covered transport profiles |
+| readiness vs scientific output-cap drift | profile coverage fails before scientific dispatch |
+| dynamic enum grows at one schema path while another enum is larger | path-sensitive profile coverage fails |
 | non-default output cap through recorder | recorded contract is the exact dispatched contract; immediate replay uses the same cap |
 | duplicate live execution | original accepted evidence immutable; conflicting result preserved and rejected |
 | stale/tampered recording | replay fails closed |
 | changed final wire request | execution fingerprint changes |
 | changed validator semantics | execution fingerprint changes |
 | changed dependency lock/runtime | execution fingerprint changes |
+| installed wheel outside checkout | packaged lock digest/package set survives; scientific runtime comparison still works |
 | exact accepted replay | no provider client/network/token use; v2 execution contract must match exactly |
 
 ## Paid workflow policy
@@ -230,7 +282,7 @@ There is one supported path for new paid scientific work:
 
 ```text
 Provider readiness canary
-    -> freeze successful readiness evidence in thorn-provider-experiment/2
+    -> prepare_provider_experiment.py (freeze successful readiness evidence)
     -> Provider experiment
 ```
 
@@ -249,11 +301,11 @@ A provider-backed scientific experiment is not frozen until its manifest identif
 
 1. the production source/runner revision and exact `src/thorn` tree;
 2. every exact initial execution fingerprint, not only semantic envelopes;
-3. the full provider dependency lock/runtime identity;
+3. the packaged provider dependency lock and actual runtime identity;
 4. model identity policy;
 5. request/output/token/request-count budgets and zero/explicit retry policy;
 6. exact, fresh successful readiness evidence for the same production tree and all
-   required provider transport profiles;
+   required provider transport profiles, including the scientific output cap;
 7. recording/replay directories and immutable artifact policy; and
 8. a distinct scientific authorization at dispatch time.
 
@@ -264,5 +316,6 @@ prompt, runtime, and readiness identity. This avoids a self-referential manifest
 commit without weakening the production freeze.
 
 Issue-specific scripts remain only as historical reconstruction tools. New experiments
-must use the shared readiness, execution-contract, recording/replay, budget, and
-manifest primitives rather than cloning operational logic into another paid workflow.
+must use the shared readiness, execution-contract, recording/replay, budget, manifest
+builder, and runner primitives rather than cloning operational logic into another paid
+workflow.
