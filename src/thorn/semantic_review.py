@@ -238,6 +238,19 @@ def _relevant_spans(claims: list[Claim], relations: list[SupportEdge]) -> list[S
     return spans
 
 
+def _span_in_result(span: SourceSpan, project: ExtractedProject, result_identifier: str) -> bool:
+    unit = project.unit(result_identifier)
+    ranges = [unit.statement_range]
+    if unit.proof_range is not None:
+        ranges.append(unit.proof_range)
+    return any(
+        span.file == source_range.file
+        and source_range.start_line <= span.start_line
+        and span.end_line <= source_range.end_line
+        for source_range in ranges
+    )
+
+
 def _select_symbol_context(
     project: ExtractedProject,
     result_identifier: str,
@@ -255,7 +268,14 @@ def _select_symbol_context(
     for use in table.uses:
         if use.resolved_symbol_identifier is None:
             continue
-        if any(_spans_overlap(use.source, span) for span in spans):
+        symbol = table.symbol(use.resolved_symbol_identifier)
+        direct_project_dependency = (
+            table.scope(symbol.scope_identifier).kind == ScopeKind.PROJECT
+            and _span_in_result(use.source, project, result_identifier)
+        )
+        if direct_project_dependency or any(
+            _spans_overlap(use.source, span) for span in spans
+        ):
             selected_ids.add(use.resolved_symbol_identifier)
 
     for symbol in table.symbols:
@@ -346,7 +366,9 @@ def _select_dependencies(
 
 
 def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
-    contexts: dict[tuple[str, tuple[str, int, int, int, int, int, int]], ReviewSourceContext] = {}
+    contexts: dict[
+        tuple[str, tuple[str, int, int, int, int, int, int]], ReviewSourceContext
+    ] = {}
     for relation in relations:
         for evidence in relation.evidence:
             text = evidence.context.strip()
@@ -388,7 +410,9 @@ def _build_item(
             or edge.source_claim_identifier in core_claim_ids
         )
     ]
-    relations_by_id = {edge.identifier: edge for edge in [*trigger_edges, *contextual_relations]}
+    relations_by_id = {
+        edge.identifier: edge for edge in [*trigger_edges, *contextual_relations]
+    }
     relations = sorted(relations_by_id.values(), key=_edge_sort_key)
     spans = _relevant_spans(claims, relations)
     hypotheses, local_constraints, symbols, definitions, candidates = _select_symbol_context(
