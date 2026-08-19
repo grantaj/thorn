@@ -110,22 +110,33 @@ def _transport_evidence(exc: Exception) -> ProviderTransportEvidence:
 
 def _safe_named_fields(value: object, allowed: tuple[str, ...]) -> dict[str, object] | None:
     raw = _json_safe(value)
-    if not isinstance(raw, dict):
-        return None
+    mapping = raw if isinstance(raw, dict) else {}
     result: dict[str, object] = {}
     for name in allowed:
-        field = raw.get(name)
-        if isinstance(field, (str, int, float, bool)) or field is None:
-            if field is not None:
-                result[name] = field
+        field = mapping.get(name)
+        if field is None:
+            field = getattr(value, name, None)
+        if isinstance(field, (str, int, float, bool)):
+            result[name] = field
     return result or None
+
+
+def _safe_response_id(response: object) -> str | None:
+    for name in ("id", "response_id"):
+        value = getattr(response, name, None)
+        if value is not None:
+            return str(value)
+    raw = _json_safe(response)
+    if isinstance(raw, dict):
+        value = raw.get("id")
+        if value is not None:
+            return str(value)
+    return None
 
 
 def _response_payload(response: object) -> dict[str, object]:
     usage = getattr(response, "usage", None)
-    response_id = getattr(response, "id", None)
-    if response_id is None:
-        response_id = getattr(response, "response_id", None)
+    response_id = _safe_response_id(response)
     status = getattr(response, "status", None)
     output_text = getattr(response, "output_text", "")
 
@@ -139,7 +150,7 @@ def _response_payload(response: object) -> dict[str, object]:
         },
     }
     if response_id is not None:
-        payload["id"] = str(response_id)
+        payload["id"] = response_id
 
     error = _safe_named_fields(
         getattr(response, "error", None),
