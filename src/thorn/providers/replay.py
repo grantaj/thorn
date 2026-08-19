@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -26,6 +26,7 @@ from thorn.providers.execution_contract import (
     build_provider_execution_contract,
 )
 from thorn.providers.request_envelope import (
+    PROOF_REVIEW_MAX_OUTPUT_TOKENS,
     ProviderRequestEnvelope,
     attack_request_envelope,
     defense_request_envelope,
@@ -97,12 +98,7 @@ class RecordedUsage(BaseModel):
 
 
 class RecordedExchange(BaseModel):
-    """Accepted provider evidence.
-
-    Version-1 files omit ``execution_contract`` and remain replayable only as
-    explicitly legacy envelope-only evidence. Version-2 identity includes the final
-    wire request, validator contract, and provider-sensitive runtime.
-    """
+    """Accepted provider evidence."""
 
     format_version: int = 2
     fingerprint: str
@@ -167,12 +163,7 @@ def _rejected_response_fingerprint(
 
 
 def _generic_provider_rejection(exc: Exception) -> RecordedRejection:
-    """Classify an unstructured delegate failure without serializing its message.
-
-    Arbitrary exception strings may contain API keys, Authorization headers, or other
-    client internals. Typed transport errors have a separate safe evidence path; the
-    generic fallback therefore records only the exception class and a fixed message.
-    """
+    """Classify an unstructured delegate failure without serializing its message."""
 
     return RecordedRejection(
         kind="provider_failure",
@@ -182,14 +173,41 @@ def _generic_provider_rejection(exc: Exception) -> RecordedRejection:
     )
 
 
-class RecordingProvider:
-    """Record immutable accepted exchanges and quarantine all rejected evidence."""
+def _proof_output_cap(provider: object) -> int:
+    direct = getattr(provider, "proof_review_max_output_tokens", None)
+    if isinstance(direct, int):
+        return direct
+    delegate = getattr(provider, "_delegate", None)
+    nested = getattr(delegate, "proof_review_max_output_tokens", None)
+    if isinstance(nested, int):
+        return nested
+    return PROOF_REVIEW_MAX_OUTPUT_TOKENS
 
-    def __init__(self, delegate: EvaluationProvider, directory: Path) -> None:
+
+class RecordingProvider:
+    """Record immutable evidence from the exact contract passed to dispatch.
+
+    Production delegates that advertise ``accepts_execution_contract`` receive the
+    exact object built by this wrapper. The recorder then checks that the delegate
+    retained that same contract as its dispatched identity. Every accepted exchange
+    is exact-replayed immediately after commit, so later failures cannot leave prior
+    accepted scientific evidence unverified.
+    """
+
+    def __init__(
+        self,
+        delegate: EvaluationProvider,
+        directory: Path,
+        *,
+        verify_after_write: bool = True,
+    ) -> None:
         self._delegate = delegate
         self.directory = directory
         self.directory.mkdir(parents=True, exist_ok=True)
         self.model = delegate.model
+        self.verify_after_write = verify_after_write
+        self.exact_replay_verifications = 0
+        self.proof_review_max_output_tokens = _proof_output_cap(delegate)
 
     @property
     def requests(self) -> int:
@@ -238,13 +256,35 @@ class RecordingProvider:
                 return contract
         return build_provider_execution_contract(envelope)
 
+    def _call_with_contract(
+        self,
+        method_name: str,
+        contract: ProviderExecutionContract,
+        *args: object,
+    ) -> TResponse:
+        method = getattr(self._delegate, method_name)
+        if bool(getattr(self._delegate, "accepts_execution_contract", False)):
+            return cast(TResponse, method(*args, execution_contract=contract))
+        return cast(TResponse, method(*args))
+
+    def _assert_dispatched_contract(self, contract: ProviderExecutionContract) -> None:
+        dispatched = getattr(self._delegate, "last_execution_contract", None)
+        if dispatched is None:
+            return
+        if not isinstance(dispatched, ProviderExecutionContract):
+            raise RecordingConflictError("delegate retained an invalid execution contract")
+        if dispatched is not contract and dispatched.canonical_json() != contract.canonical_json():
+            raise RecordingConflictError(
+                "delegate dispatched a different execution contract from the recorder"
+            )
+
     def _write(
         self,
         envelope: ProviderRequestEnvelope,
+        contract: ProviderExecutionContract,
         response: BaseModel,
         usage: RecordedUsage,
     ) -> None:
-        contract = self.execution_contract(envelope)
         fingerprint = contract.fingerprint()
         exchange = RecordedExchange(
             fingerprint=fingerprint,
@@ -288,11 +328,11 @@ class RecordingProvider:
     def _write_rejected(
         self,
         envelope: ProviderRequestEnvelope,
+        contract: ProviderExecutionContract,
         response: BaseModel | dict[str, object] | None,
         usage: RecordedUsage,
         rejection: RecordedRejection,
     ) -> None:
-        contract = self.execution_contract(envelope)
         fingerprint = contract.fingerprint()
         response_payload = (
             response.model_dump(mode="json") if isinstance(response, BaseModel) else response
@@ -319,15 +359,19 @@ class RecordingProvider:
     def _invoke(
         self,
         envelope: ProviderRequestEnvelope,
-        callback: Callable[[], TResponse],
-    ) -> tuple[TResponse, RecordedUsage]:
+        callback: Callable[[ProviderExecutionContract], TResponse],
+    ) -> tuple[TResponse, RecordedUsage, ProviderExecutionContract]:
+        contract = self.execution_contract(envelope)
         before = RecordedUsage.snapshot(self._delegate)
         try:
-            response = callback()
+            response = callback(contract)
+            self._assert_dispatched_contract(contract)
         except ProviderTransportError as exc:
+            self._assert_dispatched_contract(contract)
             usage = RecordedUsage.snapshot(self._delegate).minus(before)
             self._write_rejected(
                 envelope,
+                contract,
                 None,
                 usage,
                 RecordedRejection(
@@ -340,9 +384,11 @@ class RecordingProvider:
             )
             raise
         except ProviderResponseValidationError as exc:
+            self._assert_dispatched_contract(contract)
             usage = RecordedUsage.snapshot(self._delegate).minus(before)
             self._write_rejected(
                 envelope,
+                contract,
                 exc.response_payload,
                 usage,
                 RecordedRejection(
@@ -353,10 +399,13 @@ class RecordingProvider:
                 ),
             )
             raise
+        except RecordingConflictError:
+            raise
         except Exception as exc:
             usage = RecordedUsage.snapshot(self._delegate).minus(before)
             self._write_rejected(
                 envelope,
+                contract,
                 None,
                 usage,
                 _generic_provider_rejection(exc),
@@ -364,37 +413,62 @@ class RecordingProvider:
             raise
 
         usage = RecordedUsage.snapshot(self._delegate).minus(before)
-        return response, usage
+        return response, usage, contract
+
+    def _replay(self) -> ReplayProvider:
+        return ReplayProvider(
+            model=self.model,
+            directory=self.directory,
+            proof_review_max_output_tokens=self.proof_review_max_output_tokens,
+        )
 
     def attack(self, unit: TheoremUnit) -> AttackReport:
         envelope = attack_request_envelope(unit, self.model)
-        response, usage = self._invoke(envelope, lambda: self._delegate.attack(unit))
-        self._write(envelope, response, usage)
+        response, usage, contract = self._invoke(
+            envelope,
+            lambda exact: self._call_with_contract("attack", exact, unit),
+        )
+        self._write(envelope, contract, response, usage)
+        if self.verify_after_write:
+            if self._replay().attack(unit) != response:
+                raise RecordingConflictError("immediate exact replay changed accepted attack evidence")
+            self.exact_replay_verifications += 1
         return response
 
     def review_semantic(self, request: SemanticReviewRequest) -> AttackReport:
         envelope = semantic_request_envelope(request, self.model)
-        response, usage = self._invoke(
+        response, usage, contract = self._invoke(
             envelope,
-            lambda: self._delegate.review_semantic(request),
+            lambda exact: self._call_with_contract("review_semantic", exact, request),
         )
-        self._write(envelope, response, usage)
+        self._write(envelope, contract, response, usage)
+        if self.verify_after_write:
+            if self._replay().review_semantic(request) != response:
+                raise RecordingConflictError(
+                    "immediate exact replay changed accepted semantic evidence"
+                )
+            self.exact_replay_verifications += 1
         return response
 
     def review_proof_turn(
         self,
         request: ProofReviewTurnRequest,
     ) -> ProofReviewModelResponse:
-        envelope = proof_review_request_envelope(request, self.model)
-        response, usage = self._invoke(
+        envelope = proof_review_request_envelope(
+            request,
+            self.model,
+            max_output_tokens=self.proof_review_max_output_tokens,
+        )
+        response, usage, contract = self._invoke(
             envelope,
-            lambda: self._delegate.review_proof_turn(request),
+            lambda exact: self._call_with_contract("review_proof_turn", exact, request),
         )
         try:
             normalized = validate_proof_review_response(request, response)
         except ProofReviewProtocolError as exc:
             self._write_rejected(
                 envelope,
+                contract,
                 response,
                 usage,
                 RecordedRejection(
@@ -406,7 +480,13 @@ class RecordingProvider:
             )
             raise
 
-        self._write(envelope, normalized, usage)
+        self._write(envelope, contract, normalized, usage)
+        if self.verify_after_write:
+            if self._replay().review_proof_turn(request) != normalized:
+                raise RecordingConflictError(
+                    "immediate exact replay changed accepted proof-review evidence"
+                )
+            self.exact_replay_verifications += 1
         return normalized
 
     def defend(
@@ -415,20 +495,31 @@ class RecordingProvider:
         findings: list[CandidateFinding],
     ) -> DefenseReport:
         envelope = defense_request_envelope(unit, findings, self.model)
-        response, usage = self._invoke(
+        response, usage, contract = self._invoke(
             envelope,
-            lambda: self._delegate.defend(unit, findings),
+            lambda exact: self._call_with_contract("defend", exact, unit, findings),
         )
-        self._write(envelope, response, usage)
+        self._write(envelope, contract, response, usage)
+        if self.verify_after_write:
+            if self._replay().defend(unit, findings) != response:
+                raise RecordingConflictError("immediate exact replay changed accepted defense evidence")
+            self.exact_replay_verifications += 1
         return response
 
 
 class ReplayProvider:
     """Replay accepted evidence without constructing a live provider client."""
 
-    def __init__(self, model: str, directory: Path) -> None:
+    def __init__(
+        self,
+        model: str,
+        directory: Path,
+        *,
+        proof_review_max_output_tokens: int = PROOF_REVIEW_MAX_OUTPUT_TOKENS,
+    ) -> None:
         self.model = model
         self.directory = directory
+        self.proof_review_max_output_tokens = proof_review_max_output_tokens
         self.requests = 0
         self.live_requests = 0
         self.replay_hits = 0
@@ -471,7 +562,7 @@ class ReplayProvider:
             raise ReplayMissError(
                 "no recording for "
                 f"{envelope.kind} execution fingerprint {exact_fingerprint}; the final wire "
-                "request, validator contract, provider-sensitive runtime, model, prompt, "
+                "request, validator contract, provider runtime lock, model, prompt, "
                 "or recording set has changed"
             )
 
@@ -530,7 +621,12 @@ class ReplayProvider:
         self,
         request: ProofReviewTurnRequest,
     ) -> ProofReviewModelResponse:
-        exchange, legacy = self._load(proof_review_request_envelope(request, self.model))
+        envelope = proof_review_request_envelope(
+            request,
+            self.model,
+            max_output_tokens=self.proof_review_max_output_tokens,
+        )
+        exchange, legacy = self._load(envelope)
         response = request.response_model().model_validate(exchange.response)
         response = validate_proof_review_response(request, response)
         self._record_hit(exchange, legacy=legacy)
@@ -556,8 +652,13 @@ class ForensicReplayProvider(ReplayProvider):
         directory: Path,
         *,
         rejected_response_fingerprints: dict[str, str] | None = None,
+        proof_review_max_output_tokens: int = PROOF_REVIEW_MAX_OUTPUT_TOKENS,
     ) -> None:
-        super().__init__(model=model, directory=directory)
+        super().__init__(
+            model=model,
+            directory=directory,
+            proof_review_max_output_tokens=proof_review_max_output_tokens,
+        )
         self.rejected_response_fingerprints = dict(rejected_response_fingerprints or {})
         self.forensic_hits = 0
 
@@ -656,7 +757,11 @@ class ForensicReplayProvider(ReplayProvider):
         self,
         request: ProofReviewTurnRequest,
     ) -> ProofReviewModelResponse:
-        envelope = proof_review_request_envelope(request, self.model)
+        envelope = proof_review_request_envelope(
+            request,
+            self.model,
+            max_output_tokens=self.proof_review_max_output_tokens,
+        )
         contract_fingerprint = self.execution_contract(envelope).fingerprint()
         legacy_fingerprint = envelope.fingerprint()
         explicitly_selected = (
