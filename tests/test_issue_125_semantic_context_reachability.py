@@ -8,6 +8,7 @@ from thorn.latex import extract_project
 from thorn.llm_proof_language import parse_source_rescue_request, render_source_rescue
 from thorn.proof_language_review import advertised_source_addresses
 from thorn.review_workflow import prepare_proof_review
+from thorn.semantic_review import _select_symbol_context
 
 ROOT = Path(__file__).resolve().parents[1]
 A2_SOURCE = ROOT / "eval" / "robustness" / "issue_101" / "variant_prose_uniformity.tex"
@@ -69,6 +70,33 @@ The assertion follows from the construction.
     assert definition in rescue.text
 
 
+def test_direct_project_semantics_survive_trigger_local_selection(tmp_path: Path) -> None:
+    paper = tmp_path / "paper.tex"
+    paper.write_text(
+        r"""\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+A map will be called \emph{balanced} when every fibre contains exactly two points.
+
+\begin{theorem}\label{thm:main}
+The map \(f\) is balanced.
+\end{theorem}
+\begin{proof}
+The assertion follows from the construction.
+\end{proof}
+\end{document}
+""",
+        encoding="utf-8",
+    )
+    project = extract_project(paper)
+
+    _, _, symbols, definitions, _ = _select_symbol_context(project, "thm:main", [])
+
+    assert any(symbol.name == "balanced" for symbol in symbols)
+    assert any("every fibre contains exactly two points" in item.raw for item in definitions)
+
+
 def test_ambient_convention_is_reachable_when_result_uses_its_subject(tmp_path: Path) -> None:
     convention = r"Throughout, the coefficient ring is \(R=\mathbb Z/6\mathbb Z\)."
     _, prepared = _prepare(
@@ -119,7 +147,8 @@ The assertion follows from the construction.
 
 def test_held_out_geometric_predicate_uses_same_dependency_mechanism(tmp_path: Path) -> None:
     definition = (
-        "A quadrilateral is called \\emph{diagonal-regular} when its two diagonals have equal length."
+        "A quadrilateral is called \\emph{diagonal-regular} when its two diagonals "
+        "have equal length."
     )
     _, prepared = _prepare(
         tmp_path,
