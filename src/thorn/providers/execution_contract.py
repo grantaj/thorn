@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from thorn.provider_runtime_lock import PROVIDER_RUNTIME_LOCK, PROVIDER_RUNTIME_LOCK_TEXT
+from thorn.providers.openai_schema import validate_openai_structured_outputs_schema
 from thorn.providers.request_envelope import ProviderRequestEnvelope, RequestKind
 
 EXECUTION_CONTRACT_VERSION = "thorn-provider-execution/2"
@@ -20,6 +21,7 @@ LOCAL_STRUCTURED_VALIDATOR_CONTRACT = "thorn-local-structured-validator/1"
 _PROVIDER_ADAPTER_PATHS = (
     Path(__file__),
     Path(__file__).with_name("openai.py"),
+    Path(__file__).with_name("openai_schema.py"),
     Path(__file__).with_name("request_envelope.py"),
     Path(__file__).resolve().parents[1] / "proof_language_review.py",
 )
@@ -232,7 +234,10 @@ def build_provider_execution_contract(
     *,
     runtime: ProviderRuntimeIdentity | None = None,
 ) -> ProviderExecutionContract:
-    """Build the final provider request before validation, identity, or dispatch."""
+    """Build and validate the final provider request before identity or dispatch."""
+
+    provider_schema = strict_json_schema(envelope.response_schema)
+    validate_openai_structured_outputs_schema(provider_schema)
 
     wire_request: dict[str, Any] = {
         "model": envelope.model,
@@ -241,7 +246,7 @@ def build_provider_execution_contract(
             "format": {
                 "type": "json_schema",
                 "name": _schema_name(envelope),
-                "schema": strict_json_schema(envelope.response_schema),
+                "schema": provider_schema,
                 "strict": True,
             }
         },
