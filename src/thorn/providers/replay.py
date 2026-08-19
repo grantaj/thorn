@@ -53,11 +53,11 @@ class ReplayAmbiguousError(ReplayError):
 
 
 class RecordingConflictError(ReplayError):
-    """Raised when the same execution identity produces conflicting accepted evidence."""
+    """Raised when the same execution identity has conflicting accepted evidence."""
 
 
 class RecordedUsage(BaseModel):
-    """Per-exchange accounting, including failures before a completed response."""
+    """Per-exchange accounting, including failed provider attempts."""
 
     requests: int = 0
     provider_attempts: int = 0
@@ -99,8 +99,8 @@ class RecordedExchange(BaseModel):
     """Accepted provider evidence.
 
     Version-1 files omit ``execution_contract`` and remain replayable only as
-    explicitly legacy envelope-only evidence. New version-2 files key identity on
-    the final provider request, validator contract, and provider-sensitive runtime.
+    explicitly legacy envelope-only evidence. Version-2 identity includes the final
+    wire request, validator contract, and provider-sensitive runtime.
     """
 
     format_version: int = 2
@@ -128,7 +128,7 @@ class RecordedRejection(BaseModel):
 
 
 class RecordedRejectedExchange(BaseModel):
-    """Quarantined evidence that can never satisfy ordinary replay lookup."""
+    """Quarantined evidence that ordinary replay can never consume."""
 
     format_version: int = 2
     fingerprint: str
@@ -150,9 +150,8 @@ def _canonical_json(payload: object) -> str:
 
 
 def _exchange_fingerprint(exchange: RecordedExchange) -> str:
-    return hashlib.sha256(
-        exchange.model_dump_json().encode("utf-8")
-    ).hexdigest()
+    payload = exchange.model_dump(mode="json")
+    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
 
 def _rejected_response_fingerprint(
@@ -164,6 +163,22 @@ def _rejected_response_fingerprint(
         "rejection": rejection.model_dump(mode="json"),
     }
     return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+def _generic_provider_rejection(exc: Exception) -> RecordedRejection:
+    """Classify an unstructured delegate failure without serializing its message.
+
+    Arbitrary exception strings may contain API keys, Authorization headers, or other
+    client internals. Typed transport errors have a separate safe evidence path; the
+    generic fallback therefore records only the exception class and a fixed message.
+    """
+
+    return RecordedRejection(
+        kind="provider_failure",
+        message="provider did not return a structured response",
+        exception_type=type(exc).__name__,
+        validator_replayable=False,
+    )
 
 
 class RecordingProvider:
@@ -211,7 +226,7 @@ class RecordingProvider:
     def total_tokens(self) -> int:
         return int(getattr(self._delegate, "total_tokens", 0))
 
-    def _execution_contract(
+    def execution_contract(
         self,
         envelope: ProviderRequestEnvelope,
     ) -> ProviderExecutionContract:
@@ -228,7 +243,7 @@ class RecordingProvider:
         response: BaseModel,
         usage: RecordedUsage,
     ) -> None:
-        contract = self._execution_contract(envelope)
+        contract = self.execution_contract(envelope)
         fingerprint = contract.fingerprint()
         exchange = RecordedExchange(
             fingerprint=fingerprint,
@@ -276,12 +291,10 @@ class RecordingProvider:
         usage: RecordedUsage,
         rejection: RecordedRejection,
     ) -> None:
-        contract = self._execution_contract(envelope)
+        contract = self.execution_contract(envelope)
         fingerprint = contract.fingerprint()
         response_payload = (
-            response.model_dump(mode="json")
-            if isinstance(response, BaseModel)
-            else response
+            response.model_dump(mode="json") if isinstance(response, BaseModel) else response
         )
         response_fingerprint = _rejected_response_fingerprint(response_payload, rejection)
         exchange = RecordedRejectedExchange(
@@ -345,12 +358,7 @@ class RecordingProvider:
                 envelope,
                 None,
                 usage,
-                RecordedRejection(
-                    kind="provider_failure",
-                    message=str(exc),
-                    exception_type=type(exc).__name__,
-                    validator_replayable=False,
-                ),
+                _generic_provider_rejection(exc),
             )
             raise
 
@@ -434,11 +442,17 @@ class ReplayProvider:
         self.recorded_output_tokens = 0
         self.recorded_total_tokens = 0
 
+    def execution_contract(
+        self,
+        envelope: ProviderRequestEnvelope,
+    ) -> ProviderExecutionContract:
+        return build_provider_execution_contract(envelope)
+
     def _load(
         self,
         envelope: ProviderRequestEnvelope,
     ) -> tuple[RecordedExchange, bool]:
-        contract = build_provider_execution_contract(envelope)
+        contract = self.execution_contract(envelope)
         exact_fingerprint = contract.fingerprint()
         exact_path = self.directory / f"{exact_fingerprint}.json"
         legacy_fingerprint = envelope.fingerprint()
@@ -550,7 +564,7 @@ class ForensicReplayProvider(ReplayProvider):
         self,
         envelope: ProviderRequestEnvelope,
     ) -> RecordedRejectedExchange:
-        contract = build_provider_execution_contract(envelope)
+        contract = self.execution_contract(envelope)
         exact_fingerprint = contract.fingerprint()
         legacy_fingerprint = envelope.fingerprint()
 
@@ -642,7 +656,7 @@ class ForensicReplayProvider(ReplayProvider):
         request: ProofReviewTurnRequest,
     ) -> ProofReviewModelResponse:
         envelope = proof_review_request_envelope(request, self.model)
-        contract_fingerprint = build_provider_execution_contract(envelope).fingerprint()
+        contract_fingerprint = self.execution_contract(envelope).fingerprint()
         legacy_fingerprint = envelope.fingerprint()
         explicitly_selected = (
             contract_fingerprint in self.rejected_response_fingerprints
