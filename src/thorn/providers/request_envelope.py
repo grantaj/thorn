@@ -208,8 +208,13 @@ def _proof_review_response_schema(
 def proof_review_request_envelope(
     request: ProofReviewTurnRequest,
     model: str,
+    *,
+    max_output_tokens: int = PROOF_REVIEW_MAX_OUTPUT_TOKENS,
 ) -> ProviderRequestEnvelope:
-    """Build one provider-neutral proof-review turn."""
+    """Build one provider-neutral proof-review turn with an explicit output cap."""
+
+    if max_output_tokens <= 0:
+        raise ValueError("proof-review max_output_tokens must be positive")
 
     system_prompt = _read_prompt(f"{PROMPT_VERSION}.md")
     messages: tuple[dict[str, str], ...] | None = None
@@ -242,7 +247,7 @@ def proof_review_request_envelope(
             request.requested_source_addresses if request.requested_source_addresses else None
         ),
         messages=messages,
-        max_output_tokens=PROOF_REVIEW_MAX_OUTPUT_TOKENS,
+        max_output_tokens=max_output_tokens,
     )
 
 
