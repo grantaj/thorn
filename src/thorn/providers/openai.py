@@ -17,6 +17,7 @@ from thorn.providers.execution_contract import (
     build_provider_execution_contract,
 )
 from thorn.providers.request_envelope import (
+    PROOF_REVIEW_MAX_OUTPUT_TOKENS,
     ProviderRequestEnvelope,
     attack_request_envelope,
     defense_request_envelope,
@@ -121,8 +122,16 @@ def _generation_known(response: object) -> bool:
 class OpenAIProvider:
     """OpenAI transport with one explicit, fingerprintable execution boundary."""
 
-    def __init__(self, model: str = "gpt-5.6") -> None:
+    def __init__(
+        self,
+        model: str = "gpt-5.6",
+        *,
+        proof_review_max_output_tokens: int = PROOF_REVIEW_MAX_OUTPUT_TOKENS,
+    ) -> None:
+        if proof_review_max_output_tokens <= 0:
+            raise ValueError("proof_review_max_output_tokens must be positive")
         self.model = model
+        self.proof_review_max_output_tokens = proof_review_max_output_tokens
         self.client = OpenAI()
         self.client.max_retries = 0
         self.requests = 0
@@ -220,7 +229,11 @@ class OpenAIProvider:
         self,
         request: ProofReviewTurnRequest,
     ) -> ProofReviewModelResponse:
-        envelope = proof_review_request_envelope(request, self.model)
+        envelope = proof_review_request_envelope(
+            request,
+            self.model,
+            max_output_tokens=self.proof_review_max_output_tokens,
+        )
         response, _ = self._execute(envelope)
         parsed = self._validate_structured_response(
             response,
