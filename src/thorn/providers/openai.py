@@ -28,6 +28,7 @@ from thorn.semantic_review_render import SemanticReviewRequest
 
 TModel = TypeVar("TModel", bound=BaseModel)
 _SAFE_TRANSPORT_MESSAGE = "provider request failed before a response was returned"
+_SAFE_RESPONSE_STATUS_MESSAGE = "provider response did not complete successfully"
 
 
 def _json_safe(value: object) -> Any:
@@ -107,23 +108,52 @@ def _transport_evidence(exc: Exception) -> ProviderTransportEvidence:
     )
 
 
-def _response_payload(response: object) -> dict[str, object]:
-    model_dump = getattr(response, "model_dump", None)
-    if callable(model_dump):
-        payload = model_dump(mode="json")
-        if isinstance(payload, dict):
-            return cast(dict[str, object], payload)
+def _safe_named_fields(value: object, allowed: tuple[str, ...]) -> dict[str, object] | None:
+    raw = _json_safe(value)
+    if not isinstance(raw, dict):
+        return None
+    result: dict[str, object] = {}
+    for name in allowed:
+        field = raw.get(name)
+        if isinstance(field, (str, int, float, bool)) or field is None:
+            if field is not None:
+                result[name] = field
+    return result or None
 
+
+def _response_payload(response: object) -> dict[str, object]:
     usage = getattr(response, "usage", None)
-    return {
-        "output_text": str(getattr(response, "output_text", "")),
-        "status": str(getattr(response, "status", "")),
+    response_id = getattr(response, "id", None)
+    if response_id is None:
+        response_id = getattr(response, "response_id", None)
+    status = getattr(response, "status", None)
+    output_text = getattr(response, "output_text", "")
+
+    payload: dict[str, object] = {
+        "status": str(status) if status is not None else "<missing>",
+        "output_text": output_text if isinstance(output_text, str) else "",
         "usage": {
             "input_tokens": int(getattr(usage, "input_tokens", 0) or 0),
             "output_tokens": int(getattr(usage, "output_tokens", 0) or 0),
             "total_tokens": int(getattr(usage, "total_tokens", 0) or 0),
         },
     }
+    if response_id is not None:
+        payload["id"] = str(response_id)
+
+    error = _safe_named_fields(
+        getattr(response, "error", None),
+        ("type", "code", "param"),
+    )
+    if error is not None:
+        payload["error"] = error
+    incomplete_details = _safe_named_fields(
+        getattr(response, "incomplete_details", None),
+        ("reason",),
+    )
+    if incomplete_details is not None:
+        payload["incomplete_details"] = incomplete_details
+    return payload
 
 
 def _generation_known(response: object) -> bool:
@@ -226,6 +256,13 @@ class OpenAIProvider:
         *,
         label: str,
     ) -> TModel:
+        if getattr(response, "status", None) != "completed":
+            raise ProviderResponseValidationError(
+                _SAFE_RESPONSE_STATUS_MESSAGE,
+                response_payload=_response_payload(response),
+                validation_exception_type="ProviderResponseNotCompleted",
+            )
+
         output_text = getattr(response, "output_text", "")
         if not isinstance(output_text, str) or not output_text:
             raise ProviderResponseValidationError(
