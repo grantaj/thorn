@@ -135,15 +135,24 @@ def test_readiness_preflight_is_keyless_and_covers_initial_and_rescue_profiles(
     assert rescue_profile.literal_set_cardinalities
     assert initial_profile.schema_utf8_bytes > 0
 
-    wire = evidence.execution_contract.wire_request
-    assert wire["max_output_tokens"] == PROOF_REVIEW_MAX_OUTPUT_TOKENS
-    text = wire["text"]
-    assert isinstance(text, dict)
-    response_format = text["format"]
-    assert isinstance(response_format, dict)
-    schema = response_format["schema"]
-    assert isinstance(schema, dict)
-    assert "anyOf" in schema
+    for contract in (
+        evidence.execution_contract,
+        evidence.rescue_execution_contract,
+    ):
+        wire = contract.wire_request
+        assert wire["max_output_tokens"] == PROOF_REVIEW_MAX_OUTPUT_TOKENS
+        text = wire["text"]
+        assert isinstance(text, dict)
+        response_format = text["format"]
+        assert isinstance(response_format, dict)
+        schema = response_format["schema"]
+        assert isinstance(schema, dict)
+        assert schema["type"] == "object"
+        assert "anyOf" not in schema
+        assert schema["additionalProperties"] is False
+        properties = schema["properties"]
+        assert isinstance(properties, dict)
+        assert schema["required"] == list(properties)
 
     rescue_wire = evidence.rescue_execution_contract.wire_request
     messages = rescue_wire["input"]
