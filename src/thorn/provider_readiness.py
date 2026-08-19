@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -105,7 +105,7 @@ def _identity_fields(
     run_id: str,
 ) -> dict[str, object]:
     return {
-        "generated_at": datetime.now(timezone.utc),
+        "generated_at": datetime.now(UTC),
         "run_id": run_id,
         "boundary_source_tree_sha": boundary_source_tree_sha,
         "adapter_sha256": provider_adapter_sha256(),
@@ -116,7 +116,9 @@ def _identity_fields(
 def build_readiness_turn() -> ProofReviewTurnRequest:
     """Build a max-cardinality initial schema probe with synthetic content only."""
 
-    addresses = tuple(f"S{index:02d}" for index in range(1, READINESS_CANARY_SOURCE_ENUM_SIZE + 1))
+    addresses = tuple(
+        f"S{index:02d}" for index in range(1, READINESS_CANARY_SOURCE_ENUM_SIZE + 1)
+    )
     lines = [
         "THORN-PROOF 1",
         "T0 SyntheticGoal <- P1 @S01",
@@ -167,7 +169,9 @@ def build_readiness_rescue_turn() -> ProofReviewTurnRequest:
 
 def _readiness_document(initial: ProofReviewTurnRequest) -> LLMProofLanguage:
     # Rebuild through the same deterministic constructor without exposing mutable state.
-    addresses = tuple(f"S{index:02d}" for index in range(1, READINESS_CANARY_SOURCE_ENUM_SIZE + 1))
+    addresses = tuple(
+        f"S{index:02d}" for index in range(1, READINESS_CANARY_SOURCE_ENUM_SIZE + 1)
+    )
     lines = [
         "THORN-PROOF 1",
         "T0 SyntheticGoal <- P1 @S01",
@@ -190,7 +194,9 @@ def _readiness_document(initial: ProofReviewTurnRequest) -> LLMProofLanguage:
         ),
     )
     if document.fingerprint() != initial.initial_packet_fingerprint:
-        raise ProviderReadinessError("synthetic readiness document construction is not deterministic")
+        raise ProviderReadinessError(
+            "synthetic readiness document construction is not deterministic"
+        )
     return document
 
 
@@ -299,8 +305,12 @@ def _live_failure_evidence(
             if structured_response is not None and failed_profile == "rescue"
             else None
         ),
-        provider_response=provider.last_response_payload if failed_profile == "initial" else None,
-        rescue_provider_response=provider.last_response_payload if failed_profile == "rescue" else None,
+        provider_response=(
+            provider.last_response_payload if failed_profile == "initial" else None
+        ),
+        rescue_provider_response=(
+            provider.last_response_payload if failed_profile == "rescue" else None
+        ),
         failed_profile=failed_profile,
         transport_failure=transport_failure,
         response_failure_type=response_failure_type,
@@ -426,7 +436,9 @@ def run_live_readiness(
         )
 
     if provider.provider_attempts != 2:
-        raise ProviderReadinessError("readiness canary must execute exactly two provider attempts")
+        raise ProviderReadinessError(
+            "readiness canary must execute exactly two provider attempts"
+        )
 
     return ProviderReadinessEvidence(
         mode="live",
@@ -466,13 +478,21 @@ def verify_readiness_evidence(
     """Keylessly replay both validation boundaries for successful readiness evidence."""
 
     if evidence.mode != "live" or evidence.status != "live-success":
-        raise ProviderReadinessError("only successful live readiness evidence can be replayed")
+        raise ProviderReadinessError(
+            "only successful live readiness evidence can be replayed"
+        )
     if evidence.scientific_authorization:
-        raise ProviderReadinessError("readiness evidence must never carry scientific authorization")
+        raise ProviderReadinessError(
+            "readiness evidence must never carry scientific authorization"
+        )
     if evidence.adapter_sha256 != provider_adapter_sha256():
-        raise ProviderReadinessError("readiness evidence was produced by a different provider adapter")
+        raise ProviderReadinessError(
+            "readiness evidence was produced by a different provider adapter"
+        )
     if evidence.provider_lock_sha256 != provider_lock_sha256():
-        raise ProviderReadinessError("readiness evidence was produced under a different provider lock")
+        raise ProviderReadinessError(
+            "readiness evidence was produced under a different provider lock"
+        )
 
     current_initial, current_rescue = readiness_execution_contracts(evidence.model)
     expected_pairs = (
@@ -491,14 +511,24 @@ def verify_readiness_evidence(
         if current.canonical_json() != recorded.canonical_json():
             raise ProviderReadinessError("readiness execution contract is stale")
 
-    current_profiles = (current_initial.transport_profile(), current_rescue.transport_profile())
+    current_profiles = (
+        current_initial.transport_profile(),
+        current_rescue.transport_profile(),
+    )
     if evidence.transport_profiles != current_profiles:
         raise ProviderReadinessError("readiness transport profiles are stale")
-    if evidence.normalized_response is None or evidence.rescue_normalized_response is None:
-        raise ProviderReadinessError("successful readiness evidence is missing normalized responses")
+    if (
+        evidence.normalized_response is None
+        or evidence.rescue_normalized_response is None
+    ):
+        raise ProviderReadinessError(
+            "successful readiness evidence is missing normalized responses"
+        )
 
     initial_turn = build_readiness_turn()
-    initial_response = initial_turn.response_model().model_validate(evidence.normalized_response)
+    initial_response = initial_turn.response_model().model_validate(
+        evidence.normalized_response
+    )
     initial_response = validate_proof_review_response(initial_turn, initial_response)
 
     rescue_turn = build_readiness_rescue_turn()
