@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from thorn.proof_language_review import ProofReviewModelResponse, ProofReviewTurnRequest
+from thorn.proof_language_review import (
+    ProofReviewModelResponse,
+    ProofReviewTransport,
+    ProofReviewTurnRequest,
+)
 from thorn.provider_readiness import ProviderReadinessEvidence, verify_readiness_evidence
 from thorn.providers.execution_contract import (
     ProviderExecutionContract,
@@ -20,7 +24,9 @@ from thorn.providers.request_envelope import (
     proof_review_request_envelope,
 )
 
-EXPERIMENT_MANIFEST_FORMAT = "thorn-provider-experiment/1"
+EXPERIMENT_MANIFEST_FORMAT: Literal["thorn-provider-experiment/1"] = (
+    "thorn-provider-experiment/1"
+)
 SERIALIZATION_FRAMING_RESERVE_BYTES = 2_048
 
 
@@ -219,14 +225,14 @@ def _execution_contract(
 class GuardedProofReviewTransport:
     """Budget/freeze wrapper shared by manifest-driven live and replay runs."""
 
-    delegate: Any
+    delegate: ProofReviewTransport
     budget: ProviderBudget
     expected_initial_fingerprint: str
     model: str = field(init=False)
     contracts: list[ProviderExecutionContract] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        self.model = str(self.delegate.model)
+        self.model = self.delegate.model
 
     def review_proof_turn(
         self,
