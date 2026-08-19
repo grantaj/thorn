@@ -159,7 +159,12 @@ def test_recording_and_replay_round_trip_all_provider_request_kinds(tmp_path: Pa
         "defend",
     }
     assert sum(exchange.usage.requests for exchange in exchanges) == 3
-    assert all(exchange.fingerprint == exchange.request.fingerprint() for exchange in exchanges)
+    assert all(exchange.execution_contract is not None for exchange in exchanges)
+    assert all(
+        exchange.fingerprint == exchange.execution_contract.fingerprint()
+        for exchange in exchanges
+        if exchange.execution_contract is not None
+    )
 
     replay = ReplayProvider(model="fixture-model", directory=tmp_path)
     assert replay.attack(unit) == attack
@@ -168,6 +173,7 @@ def test_recording_and_replay_round_trip_all_provider_request_kinds(tmp_path: Pa
     assert replay.requests == 3
     assert replay.live_requests == 0
     assert replay.replay_hits == 3
+    assert replay.legacy_replay_hits == 0
     assert replay.input_tokens == 0
     assert replay.output_tokens == 0
     assert replay.total_tokens == 0
@@ -179,7 +185,7 @@ def test_replay_fails_loudly_when_material_request_input_changes(tmp_path: Path)
     recording.attack(_unit())
     replay = ReplayProvider(model="fixture-model", directory=tmp_path)
 
-    with pytest.raises(ReplayMissError, match="model, prompt, rendered input, output schema"):
+    with pytest.raises(ReplayMissError, match="final wire request, validator contract"):
         replay.attack(_unit(statement="Changed theorem statement."))
 
     assert replay.requests == 0
