@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import argparse
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from scripts import prepare_provider_experiment as prepare
+from thorn.experiment_runtime import ProviderExperimentManifest
 from thorn.proof_language_review import ProofReviewModelResponse, validate_proof_review_response
 from thorn.provider_readiness import (
     READINESS_CANARY_CARRIED_ITEMS,
@@ -14,11 +14,13 @@ from thorn.provider_readiness import (
     preflight_readiness,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def _src_tree_sha() -> str:
     return subprocess.run(
         ["git", "rev-parse", "HEAD:src/thorn"],
-        cwd=prepare.ROOT,
+        cwd=ROOT,
         check=True,
         capture_output=True,
         text=True,
@@ -80,30 +82,35 @@ def test_keyless_builder_derives_freeze_and_round_trips_generic_preflight(
     output = tmp_path / "manifest.json"
     _synthetic_successful_readiness(readiness, model)
 
-    args = argparse.Namespace(
-        experiment_id="synthetic-builder-test",
-        model=model,
-        readiness_evidence=readiness,
-        case=[
-            (
-                "C1",
-                "eval/cases/ladder/03_hypotheses/clean_nonzero_cancellation.tex",
-                "thm:clean-nonzero",
-            )
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/prepare_provider_experiment.py",
+            "--experiment-id",
+            "synthetic-builder-test",
+            "--model",
+            model,
+            "--readiness-evidence",
+            str(readiness),
+            "--case",
+            "C1",
+            "eval/cases/ladder/03_hypotheses/clean_nonzero_cancellation.tex",
+            "thm:clean-nonzero",
+            "--max-provider-attempts",
+            "2",
+            "--max-input-tokens",
+            "100000",
+            "--max-output-tokens",
+            "8192",
+            "--output",
+            str(output),
         ],
-        max_provider_attempts=2,
-        max_input_tokens=100_000,
-        max_output_tokens=8_192,
-        max_readiness_age_hours=24,
-        output=output,
+        cwd=ROOT,
+        check=True,
     )
 
-    manifest = prepare._build_manifest(args)
-    prepare._write_json(output, manifest.model_dump(mode="json"))
-    prepare._round_trip_preflight(output)
-
-    loaded = prepare.ProviderExperimentManifest.load(output)
-    assert loaded == manifest
+    loaded = ProviderExperimentManifest.load(output)
+    assert loaded.experiment_id == "synthetic-builder-test"
     assert loaded.cases[0].source_sha256
     assert loaded.cases[0].initial_execution_fingerprint
     assert loaded.readiness.evidence_sha256
