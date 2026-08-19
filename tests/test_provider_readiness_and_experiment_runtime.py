@@ -156,7 +156,9 @@ def test_transport_profile_erases_literal_values_but_preserves_cardinality_bound
         max_enum_items=max(1, profile.max_enum_items - 1),
         max_array_bound=profile.max_array_bound,
     )
-    larger = smaller.model_copy(update={"max_enum_items": profile.max_enum_items + 1})
+    larger = smaller.model_copy(
+        update={"max_enum_items": profile.max_enum_items + 1}
+    )
 
     assert profile.covers(smaller)
     assert not profile.covers(larger)
@@ -167,8 +169,14 @@ def test_live_readiness_exercises_both_profiles_and_replays_both(
 ) -> None:
     client = _ReadinessClient(
         [
-            _ReadinessResponse(_initial_review_json(), response_id="resp_readiness_initial"),
-            _ReadinessResponse(_rescue_review_json(), response_id="resp_readiness_rescue"),
+            _ReadinessResponse(
+                _initial_review_json(),
+                response_id="resp_readiness_initial",
+            ),
+            _ReadinessResponse(
+                _rescue_review_json(),
+                response_id="resp_readiness_rescue",
+            ),
         ]
     )
     monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
