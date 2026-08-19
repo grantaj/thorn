@@ -85,7 +85,7 @@ Apply the stated cancellation law.
 """,
     )
 
-    source = _source_matching(prepared, "coefficient ring")
+    source = _source_matching(prepared, "Throughout, the coefficient ring is")
     advertised = set(advertised_source_addresses(prepared.document))
     assert source.address in advertised
     assert convention in render_source_rescue(
