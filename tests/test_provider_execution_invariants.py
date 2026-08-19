@@ -8,7 +8,11 @@ import pytest
 
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.models import AttackReport, SourceRange, TheoremUnit
-from thorn.proof_language_review import ProofLanguageReviewRequest, build_proof_review_turn
+from thorn.proof_language_review import (
+    ProofLanguageReviewRequest,
+    ProofReviewModelResponse,
+    build_proof_review_turn,
+)
 from thorn.providers import execution_contract
 from thorn.providers import openai as openai_provider
 from thorn.providers.base import ProviderResponseValidationError, ProviderTransportError
@@ -25,15 +29,11 @@ from thorn.providers.replay import (
 from thorn.providers.request_envelope import attack_request_envelope, proof_review_request_envelope
 
 
-def _runtime(*, openai: str = "3.3.0") -> ProviderRuntimeIdentity:
+def _runtime(*, lock: str = "lock-a") -> ProviderRuntimeIdentity:
     return ProviderRuntimeIdentity(
         python="3.11.16",
-        openai=openai,
-        pydantic="2.13.4",
-        pydantic_core="2.46.4",
-        httpx2="2.12.0",
-        httpcore2="2.12.0",
-        jiter="0.16.0",
+        provider_lock_sha256=lock,
+        locked_packages={"openai": "3.3.0", "pydantic": "2.13.4"},
     )
 
 
@@ -118,7 +118,7 @@ def test_execution_fingerprint_covers_final_wire_validator_and_runtime(
 
     changed_runtime = execution_contract.build_provider_execution_contract(
         envelope,
-        runtime=_runtime(openai="3.3.1"),
+        runtime=_runtime(lock="lock-b"),
     )
     assert changed_runtime.fingerprint() != contract.fingerprint()
 
@@ -162,8 +162,8 @@ class _FakeClient:
 
 
 class _FakeHTTPError(RuntimeError):
-    def __init__(self) -> None:
-        super().__init__("rate limited")
+    def __init__(self, message: str = "rate limited") -> None:
+        super().__init__(message)
         self.status_code = 429
         self.request_id = "req_synthetic_146"
         self.body = {
@@ -171,7 +171,7 @@ class _FakeHTTPError(RuntimeError):
                 "type": "rate_limit_error",
                 "code": "rate_limit_exceeded",
                 "param": "model",
-                "message": "rate limited",
+                "message": message,
             }
         }
         self.response = SimpleNamespace(
@@ -198,6 +198,7 @@ def test_provider_dispatches_the_already_fingerprinted_wire_request(
 
     assert client.max_retries == 0
     assert client.responses.calls == [contract.provider_kwargs()]
+    assert provider.last_execution_contract is contract
     assert provider.provider_attempts == 1
     assert provider.responses_received == 1
     assert provider.model_generations == 1
@@ -239,6 +240,26 @@ def test_transport_failure_is_counted_before_dispatch_and_recorded(
     assert exchange.rejection.transport == evidence
 
 
+def test_transport_evidence_never_persists_arbitrary_exception_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    secret = "sk-test-super-secret Authorization: Bearer top-secret"
+    client = _FakeClient([_FakeHTTPError(secret)])
+    monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
+    recorder = RecordingProvider(openai_provider.OpenAIProvider(model="test-model"), tmp_path)
+
+    with pytest.raises(ProviderTransportError) as caught:
+        recorder.attack(_unit())
+
+    serialized = caught.value.evidence.model_dump_json()
+    assert "sk-test-super-secret" not in serialized
+    assert "Bearer top-secret" not in serialized
+    rejected = next((tmp_path / "rejected").glob("*/*.json"))
+    assert "sk-test-super-secret" not in rejected.read_text(encoding="utf-8")
+    assert "Bearer top-secret" not in rejected.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize(
     ("output", "exception_type"),
     [
@@ -265,6 +286,43 @@ def test_received_invalid_structured_output_is_separate_from_transport_failure(
     assert provider.model_generations == (1 if output else 0)
 
 
+def test_recording_provider_passes_and_records_exact_nondefault_proof_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    turn = _proof_turn()
+    output = ProofReviewModelResponse(action="review").model_dump_json()
+    client = _FakeClient([output])
+    monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
+    provider = openai_provider.OpenAIProvider(
+        model="test-model",
+        proof_review_max_output_tokens=256,
+    )
+    recorder = RecordingProvider(provider, tmp_path)
+
+    response = recorder.review_proof_turn(turn)
+    assert response.action == "review"
+    assert len(client.responses.calls) == 1
+    assert client.responses.calls[0]["max_output_tokens"] == 256
+    assert recorder.exact_replay_verifications == 1
+
+    accepted = list(tmp_path.glob("*.json"))
+    assert len(accepted) == 1
+    exchange = RecordedExchange.model_validate_json(accepted[0].read_text(encoding="utf-8"))
+    assert exchange.request.max_output_tokens == 256
+    assert exchange.execution_contract is not None
+    assert exchange.execution_contract.wire_request["max_output_tokens"] == 256
+    assert provider.last_execution_contract is not None
+    assert exchange.execution_contract == provider.last_execution_contract
+
+    replay = ReplayProvider(
+        model="test-model",
+        directory=tmp_path,
+        proof_review_max_output_tokens=256,
+    )
+    assert replay.review_proof_turn(turn) == response
+
+
 def test_accepted_recording_is_immutable_and_conflicting_duplicate_is_preserved(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -284,6 +342,7 @@ def test_accepted_recording_is_immutable_and_conflicting_duplicate_is_preserved(
     accepted = list(tmp_path.glob("*.json"))
     assert len(accepted) == 1
     original_bytes = accepted[0].read_bytes()
+    assert recorder.exact_replay_verifications == 1
 
     with pytest.raises(RecordingConflictError, match="conflicting evidence"):
         recorder.attack(_unit())
@@ -314,11 +373,11 @@ def test_v2_replay_is_exact_and_runtime_change_invalidates_it(
     original_builder = replay_module.build_provider_execution_contract
 
     def changed_runtime(envelope: Any):
-        return original_builder(envelope, runtime=_runtime(openai="99.0.0"))
+        return original_builder(envelope, runtime=_runtime(lock="changed-lock"))
 
     monkeypatch.setattr(replay_module, "build_provider_execution_contract", changed_runtime)
     stale_runtime_replay = ReplayProvider(model="test-model", directory=tmp_path)
-    with pytest.raises(ReplayMissError, match="provider-sensitive runtime"):
+    with pytest.raises(ReplayMissError, match="provider runtime lock"):
         stale_runtime_replay.attack(_unit())
 
 
