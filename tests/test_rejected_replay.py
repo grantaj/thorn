@@ -21,6 +21,7 @@ from thorn.proof_language_review import (
     validate_proof_review_response,
 )
 from thorn.providers import openai as openai_provider
+from thorn.providers.execution_contract import build_provider_execution_contract
 from thorn.providers.openai import OpenAIProvider
 from thorn.providers.replay import (
     ForensicReplayProvider,
@@ -150,17 +151,11 @@ class _FakeResponses:
     def __init__(self, output: ProofReviewModelResponse) -> None:
         self.output = output
 
-    def parse(self, **kwargs: object) -> SimpleNamespace:
-        del kwargs
-        return SimpleNamespace(
-            output_parsed=self.output,
-            usage=SimpleNamespace(input_tokens=10, output_tokens=2, total_tokens=12),
-        )
-
     def create(self, **kwargs: object) -> SimpleNamespace:
         del kwargs
         return SimpleNamespace(
             output_text=self.output.model_dump_json(),
+            status="completed",
             usage=SimpleNamespace(input_tokens=10, output_tokens=2, total_tokens=12),
         )
 
@@ -168,12 +163,16 @@ class _FakeResponses:
 class _FakeClient:
     def __init__(self, output: ProofReviewModelResponse) -> None:
         self.responses = _FakeResponses(output)
-        self.max_retries = 0
+        self.max_retries = 2
+
+
+def _execution_fingerprint(request: ProofReviewTurnRequest) -> str:
+    envelope = proof_review_request_envelope(request, "test-model")
+    return build_provider_execution_contract(envelope).fingerprint()
 
 
 def _rejected_paths(directory: Path, request: ProofReviewTurnRequest) -> list[Path]:
-    fingerprint = proof_review_request_envelope(request, "test-model").fingerprint()
-    return sorted((directory / "rejected" / fingerprint).glob("*.json"))
+    return sorted((directory / "rejected" / _execution_fingerprint(request)).glob("*.json"))
 
 
 def test_openai_proof_review_provider_returns_schema_valid_protocol_rejection_to_thorn(
@@ -189,7 +188,9 @@ def test_openai_proof_review_provider_returns_schema_valid_protocol_rejection_to
     returned = provider.review_proof_turn(rescue)
 
     assert returned.model_dump(mode="json") == schema_valid.model_dump(mode="json")
-    assert provider.requests == provider.live_requests == 1
+    assert provider.requests == provider.live_requests == provider.provider_attempts == 1
+    assert provider.responses_received == provider.model_generations == 1
+    assert client.max_retries == 0
     with pytest.raises(
         ProofReviewProtocolError,
         match="incompatible finding identity across rescue accounting: F1",
@@ -218,7 +219,8 @@ def test_protocol_rejection_is_quarantined_and_forensic_replay_reproduces_it(
     exchange = RecordedRejectedExchange.model_validate_json(
         rejected[0].read_text(encoding="utf-8")
     )
-    assert exchange.fingerprint == exchange.request.fingerprint()
+    assert exchange.execution_contract is not None
+    assert exchange.fingerprint == exchange.execution_contract.fingerprint()
     assert exchange.response == invalid.model_dump(mode="json")
     assert exchange.usage.requests == 1
     assert exchange.usage.total_tokens == 12
@@ -264,7 +266,7 @@ def test_multiple_rejected_responses_coexist_and_require_explicit_selection(
     with pytest.raises(ReplayAmbiguousError, match="multiple quarantined responses"):
         ambiguous.review_proof_turn(rescue)
 
-    request_fingerprint = proof_review_request_envelope(rescue, "test-model").fingerprint()
+    request_fingerprint = _execution_fingerprint(rescue)
     for path in rejected:
         selected = ForensicReplayProvider(
             "test-model",
@@ -298,7 +300,7 @@ def test_forensic_replay_rejects_request_drift_and_tampered_evidence(tmp_path: P
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     stale = ForensicReplayProvider("test-model", tmp_path)
-    with pytest.raises(ReplayStaleError, match="request payload does not match"):
+    with pytest.raises(ReplayStaleError, match="semantic request does not match current request"):
         stale.review_proof_turn(rescue)
 
 
@@ -343,11 +345,11 @@ def test_unstructured_provider_failure_is_safely_quarantined_without_secret_leak
     assert exchange.rejection.validator_replayable is False
     assert exchange.rejection.exception_type == "RuntimeError"
     assert exchange.rejection.message == (
-        "provider did not return a structured proof-review response"
+        "provider did not return a structured response"
     )
 
     forensic = ForensicReplayProvider("test-model", tmp_path)
-    with pytest.raises(ReplayError, match="not validator-replayable"):
+    with pytest.raises(ReplayError, match="no validator-replayable structured response"):
         forensic.review_proof_turn(initial)
     assert forensic.live_requests == 0
     assert forensic.replay_hits == 0
@@ -366,6 +368,7 @@ def test_accepted_recording_does_not_serialize_delegate_secrets(tmp_path: Path) 
     text = accepted[0].read_text(encoding="utf-8")
     assert "sk-delegate-secret" not in text
     assert not (tmp_path / "rejected").exists()
+
 
 def test_explicit_forensic_selection_overrides_accepted_recording_for_same_request(
     tmp_path: Path,
@@ -401,7 +404,7 @@ def test_explicit_forensic_selection_overrides_accepted_recording_for_same_reque
 
     rejected = _rejected_paths(tmp_path, rescue)
     assert len(rejected) == 1
-    request_fingerprint = proof_review_request_envelope(rescue, "test-model").fingerprint()
+    request_fingerprint = _execution_fingerprint(rescue)
     forensic = ForensicReplayProvider(
         "test-model",
         tmp_path,
@@ -415,4 +418,3 @@ def test_explicit_forensic_selection_overrides_accepted_recording_for_same_reque
     assert forensic.replay_hits == 0
     assert forensic.forensic_hits == 1
     assert forensic.live_requests == 0
-

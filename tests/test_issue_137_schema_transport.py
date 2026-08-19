@@ -45,37 +45,56 @@ def _branch(schema: dict[str, object], action: str) -> dict[str, object]:
     raise AssertionError(f"missing {action} branch")
 
 
+def _property(branch: dict[str, object], name: str) -> dict[str, object]:
+    properties = branch.get("properties")
+    assert isinstance(properties, dict)
+    value = properties.get(name)
+    assert isinstance(value, dict)
+    return value
+
+
 def test_initial_provider_schema_exposes_action_safe_states() -> None:
     turn = _turn()
     envelope = proof_review_request_envelope(turn, "test-model")
     schema = envelope.response_schema
+    root_properties = schema.get("properties")
+    assert isinstance(root_properties, dict)
 
     assert envelope.provider == "openai-responses-create-json-schema"
     review = _branch(schema, "review")
+    assert review["type"] == "object"
+    assert review["additionalProperties"] is False
     review_properties = review["properties"]
     assert isinstance(review_properties, dict)
-    assert review_properties["source_addresses"] == {"maxItems": 0}
-    assert review_properties["review_items"] == {"maxItems": 0}
-    assert review_properties["source_review_item_ids"] == {"maxItems": 0}
+    assert set(review_properties) == set(root_properties)
+    assert _property(review, "source_addresses")["maxItems"] == 0
+    assert _property(review, "review_items")["maxItems"] == 0
+    assert _property(review, "source_review_item_ids")["maxItems"] == 0
 
     need_source = _branch(schema, "need_source")
+    assert need_source["type"] == "object"
+    assert need_source["additionalProperties"] is False
     source_properties = need_source["properties"]
     assert isinstance(source_properties, dict)
-    assert source_properties["findings"] == {"maxItems": 0}
-    assert source_properties["source_addresses"] == {"minItems": 1}
-    assert source_properties["review_items"] == {"minItems": 1}
-    assert source_properties["source_review_item_ids"] == {"minItems": 1}
+    assert set(source_properties) == set(root_properties)
+    assert _property(need_source, "findings")["maxItems"] == 0
+    assert _property(need_source, "source_addresses")["minItems"] == 1
+    assert _property(need_source, "review_items")["minItems"] == 1
+    assert _property(need_source, "source_review_item_ids")["minItems"] == 1
 
 
 class _CompletedInvalidResponse:
     def __init__(self, output_text: str) -> None:
+        self.id = "resp_issue_137_a3"
         self.output_text = output_text
+        self.status = "completed"
         self.usage = SimpleNamespace(input_tokens=321, output_tokens=45, total_tokens=366)
 
     def model_dump(self, *, mode: str) -> dict[str, object]:
         assert mode == "json"
         return {
-            "id": "resp_issue_137_a3",
+            "id": self.id,
+            "status": self.status,
             "output": [{"type": "message", "content": self.output_text}],
             "usage": {
                 "input_tokens": 321,
@@ -125,7 +144,8 @@ def test_a3_local_validation_failure_preserves_usage_and_provider_response(
     with pytest.raises(ProviderResponseValidationError, match="failed Thorn-local validation"):
         recorder.review_proof_turn(turn)
 
-    assert provider.requests == provider.live_requests == 1
+    assert provider.requests == provider.live_requests == provider.provider_attempts == 1
+    assert provider.responses_received == provider.model_generations == 1
     assert provider.input_tokens == 321
     assert provider.output_tokens == 45
     assert provider.total_tokens == 366
@@ -140,17 +160,40 @@ def test_a3_local_validation_failure_preserves_usage_and_provider_response(
     advertised = response_format["schema"]
     assert isinstance(advertised, dict)
     assert advertised["additionalProperties"] is False
-    assert "anyOf" in advertised
+    branches = advertised.get("anyOf")
+    assert isinstance(branches, list)
+    for branch in branches:
+        assert isinstance(branch, dict)
+        assert branch["type"] == "object"
+        assert branch["additionalProperties"] is False
+        properties = branch["properties"]
+        required = branch["required"]
+        assert isinstance(properties, dict)
+        assert isinstance(required, list)
+        assert required == list(properties)
 
     rejected = list((tmp_path / "rejected").glob("*/*.json"))
     assert len(rejected) == 1
     exchange = RecordedRejectedExchange.model_validate_json(
         rejected[0].read_text(encoding="utf-8")
     )
+    assert exchange.execution_contract is not None
     assert exchange.usage.requests == 1
+    assert exchange.usage.provider_attempts == 1
+    assert exchange.usage.responses_received == 1
+    assert exchange.usage.model_generations == 1
     assert exchange.usage.input_tokens == 321
     assert exchange.usage.output_tokens == 45
-    assert exchange.response == completed.model_dump(mode="json")
-    assert exchange.rejection.kind == "provider_failure"
+    assert exchange.response == {
+        "id": "resp_issue_137_a3",
+        "status": "completed",
+        "output_text": invalid,
+        "usage": {
+            "input_tokens": 321,
+            "output_tokens": 45,
+            "total_tokens": 366,
+        },
+    }
+    assert exchange.rejection.kind == "response_validation"
     assert exchange.rejection.exception_type == "ValidationError"
     assert exchange.rejection.validator_replayable is False

@@ -20,6 +20,7 @@ pylatexenc = [
   "pylatexenc==2.10",
 ]
 dev = [
+  "hatchling>=1.27",
   "mypy>=1.15",
   "pylatexenc==2.10",
   "pytest>=8.3",

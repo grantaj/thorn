@@ -1,62 +1,18 @@
-name: Live evaluation
+name: Live evaluation (retired)
 
 on:
   workflow_dispatch:
-    inputs:
-      model:
-        description: OpenAI API model name
-        required: true
-        type: string
-      min_confidence:
-        description: Minimum surviving diagnostic confidence
-        required: true
-        default: "0.65"
-        type: string
-      case_filter:
-        description: Optional case-name or fixture-path substring
-        required: false
-        default: ""
-        type: string
 
 jobs:
-  eval:
+  retired:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      OPENAI_API_KEY: ""
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: python -m pip install -e .
-      - name: Run known-case semantic evaluation
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          THORN_EVAL_MODEL: ${{ inputs.model }}
-          THORN_EVAL_MIN_CONFIDENCE: ${{ inputs.min_confidence }}
-          THORN_EVAL_CASE_FILTER: ${{ inputs.case_filter }}
+      - name: Paid live evaluation moved behind provider reliability gates
         run: |
-          set -o pipefail
-          args=(
-            eval/cases
-            --model "$THORN_EVAL_MODEL"
-            --min-confidence "$THORN_EVAL_MIN_CONFIDENCE"
-          )
-          if [[ -n "$THORN_EVAL_CASE_FILTER" ]]; then
-            args+=(--case-filter "$THORN_EVAL_CASE_FILTER")
-          fi
-          {
-            echo "commit=$(git rev-parse HEAD)"
-            echo "model=$THORN_EVAL_MODEL"
-            echo "min_confidence=$THORN_EVAL_MIN_CONFIDENCE"
-            echo "case_filter=$THORN_EVAL_CASE_FILTER"
-            thorn-eval "${args[@]}"
-          } | tee live-eval.txt
-      - name: Preserve evaluation report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-eval-${{ github.run_id }}
-          path: live-eval.txt
-          if-no-files-found: error
+          echo "The legacy Live evaluation workflow is retired."
+          echo "Use Provider readiness canary, freeze its successful evidence into a thorn-provider-experiment/2 manifest, then use Provider experiment."
+          exit 1

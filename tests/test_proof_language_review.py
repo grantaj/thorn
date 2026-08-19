@@ -93,6 +93,7 @@ class _FakeResponses:
         self.calls.append(kwargs)
         return SimpleNamespace(
             output_text=self.response.model_dump_json(),
+            status="completed",
             usage=SimpleNamespace(input_tokens=11, output_tokens=3, total_tokens=14),
         )
 
