@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
@@ -51,6 +51,12 @@ class CanonicalProofSource(BaseModel):
     source_span: SourceSpan | None = None
     source_range: SourceRange | None = None
     referenced_result_identifier: str | None = None
+
+    @model_validator(mode="after")
+    def _retain_line_range(self) -> CanonicalProofSource:
+        if self.source_range is None and self.source_span is not None:
+            self.source_range = self.source_span.source_range()
+        return self
 
 
 class CanonicalProofNode(BaseModel):
