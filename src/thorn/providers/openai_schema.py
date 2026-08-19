@@ -254,12 +254,13 @@ def _visit_schema(
         if value is not None and not isinstance(value, str):
             raise _schema_error((*path, annotation), f"{annotation} must be a string")
 
-    if "pattern" in schema:
-        if "string" not in type_names or not isinstance(schema["pattern"], str):
-            raise _schema_error(
-                (*path, "pattern"),
-                "pattern is only supported as a string constraint",
-            )
+    if "pattern" in schema and (
+        "string" not in type_names or not isinstance(schema["pattern"], str)
+    ):
+        raise _schema_error(
+            (*path, "pattern"),
+            "pattern is only supported as a string constraint",
+        )
     fmt = schema.get("format")
     if fmt is not None:
         if "string" not in type_names:
