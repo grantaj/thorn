@@ -12,6 +12,7 @@ from thorn.proof_language_review import (
     build_proof_review_turn,
     build_rescue_turn,
 )
+from thorn.provider_readiness import build_readiness_turn
 from thorn.providers.execution_contract import build_provider_execution_contract
 from thorn.providers.openai_schema import (
     OpenAIStructuredOutputsSchemaError,
@@ -55,6 +56,32 @@ def _strict_object() -> dict[str, object]:
     }
 
 
+def _legacy_action_branch(
+    schema: dict[str, object],
+    *,
+    action: str,
+    constraints: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    base_properties = schema["properties"]
+    required = schema["required"]
+    assert isinstance(base_properties, dict)
+    assert isinstance(required, list)
+    properties = copy.deepcopy(base_properties)
+    action_schema = properties["action"]
+    assert isinstance(action_schema, dict)
+    properties["action"] = {**action_schema, "const": action}
+    for name, overlay in constraints.items():
+        property_schema = properties[name]
+        assert isinstance(property_schema, dict)
+        properties[name] = {**property_schema, **overlay}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(required),
+        "additionalProperties": False,
+    }
+
+
 def _wire_schema(turn) -> dict[str, object]:
     envelope = proof_review_request_envelope(turn, "test-model")
     contract = build_provider_execution_contract(envelope)
@@ -67,9 +94,30 @@ def _wire_schema(turn) -> dict[str, object]:
     return schema
 
 
-def test_root_anyof_canary_shape_is_rejected_before_contract_identity() -> None:
-    schema = _strict_object()
-    schema["anyOf"] = [copy.deepcopy(schema), copy.deepcopy(schema)]
+def test_preserved_readiness_canary_root_anyof_schema_is_rejected_locally() -> None:
+    turn = build_readiness_turn()
+    schema = copy.deepcopy(proof_review_request_envelope(turn, "test-model").response_schema)
+    schema["anyOf"] = [
+        _legacy_action_branch(
+            schema,
+            action="review",
+            constraints={
+                "source_addresses": {"maxItems": 0},
+                "review_items": {"maxItems": 0},
+                "source_review_item_ids": {"maxItems": 0},
+            },
+        ),
+        _legacy_action_branch(
+            schema,
+            action="need_source",
+            constraints={
+                "findings": {"maxItems": 0},
+                "source_addresses": {"minItems": 1},
+                "review_items": {"minItems": 1},
+                "source_review_item_ids": {"minItems": 1},
+            },
+        ),
+    ]
 
     with pytest.raises(
         OpenAIStructuredOutputsSchemaError,
