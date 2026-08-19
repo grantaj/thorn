@@ -81,7 +81,9 @@ def _assert_manifest_freeze(manifest: ProviderExperimentManifest) -> None:
             "frozen repository revision does not identify the manifest src/thorn tree"
         )
     if _git("rev-parse", "HEAD:src/thorn") != manifest.src_tree_sha:
-        raise ExperimentFreezeError("current src/thorn tree differs from frozen experiment manifest")
+        raise ExperimentFreezeError(
+            "current src/thorn tree differs from frozen experiment manifest"
+        )
     if _sha256(RUNNER) != manifest.runner_sha256:
         raise ExperimentFreezeError("manifest-driven experiment runner bytes drifted")
     if _sha256(CONSTRAINTS) != manifest.constraints_sha256:
