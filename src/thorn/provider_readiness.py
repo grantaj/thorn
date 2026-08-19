@@ -33,12 +33,15 @@ from thorn.providers.execution_contract import (
     provider_lock_sha256,
 )
 from thorn.providers.openai import OpenAIProvider
-from thorn.providers.request_envelope import proof_review_request_envelope
+from thorn.providers.request_envelope import (
+    PROOF_REVIEW_MAX_OUTPUT_TOKENS,
+    proof_review_request_envelope,
+)
 
 READINESS_CANARY_FORMAT: Literal["thorn-provider-readiness/2"] = (
     "thorn-provider-readiness/2"
 )
-READINESS_CANARY_MAX_OUTPUT_TOKENS = 512
+READINESS_CANARY_MAX_OUTPUT_TOKENS = PROOF_REVIEW_MAX_OUTPUT_TOKENS
 READINESS_CANARY_SOURCE_ENUM_SIZE = 64
 READINESS_CANARY_CARRIED_ITEMS = DEFAULT_MAX_SOURCE_REQUESTS
 
@@ -121,9 +124,7 @@ def _identity_fields(
     }
 
 
-def build_readiness_turn() -> ProofReviewTurnRequest:
-    """Build a max-cardinality initial schema probe with synthetic content only."""
-
+def _readiness_document(initial: ProofReviewTurnRequest | None = None) -> LLMProofLanguage:
     addresses = tuple(
         f"S{index:02d}" for index in range(1, READINESS_CANARY_SOURCE_ENUM_SIZE + 1)
     )
@@ -148,7 +149,19 @@ def build_readiness_turn() -> ProofReviewTurnRequest:
             for address in addresses
         ),
     )
-    return build_proof_review_turn(ProofLanguageReviewRequest(document=document))
+    if initial is not None and document.fingerprint() != initial.initial_packet_fingerprint:
+        raise ProviderReadinessError(
+            "synthetic readiness document construction is not deterministic"
+        )
+    return document
+
+
+def build_readiness_turn() -> ProofReviewTurnRequest:
+    """Build a max-cardinality initial schema probe with synthetic content only."""
+
+    return build_proof_review_turn(
+        ProofLanguageReviewRequest(document=_readiness_document())
+    )
 
 
 def _synthetic_source_request() -> ProofReviewModelResponse:
@@ -173,39 +186,6 @@ def build_readiness_rescue_turn() -> ProofReviewTurnRequest:
     initial = build_readiness_turn()
     request = ProofLanguageReviewRequest(document=_readiness_document(initial))
     return build_rescue_turn(request, initial, _synthetic_source_request())
-
-
-def _readiness_document(initial: ProofReviewTurnRequest) -> LLMProofLanguage:
-    # Rebuild through the same deterministic constructor without exposing mutable state.
-    addresses = tuple(
-        f"S{index:02d}" for index in range(1, READINESS_CANARY_SOURCE_ENUM_SIZE + 1)
-    )
-    lines = [
-        "THORN-PROOF 1",
-        "T0 SyntheticGoal <- P1 @S01",
-    ]
-    lines.extend(
-        f"P{index} SyntheticStep{index} @S{index:02d}"
-        for index in range(1, READINESS_CANARY_SOURCE_ENUM_SIZE + 1)
-    )
-    lines.append("GOAL G0 T0: SyntheticGoal | ctx P1 | open @S01")
-    document = LLMProofLanguage(
-        result_identifier="thm:provider-readiness-synthetic",
-        lines=tuple(lines),
-        sources=tuple(
-            ProofLanguageSourceHandle(
-                address=address,
-                ir_identifier=f"synthetic:{address}",
-                text=f"Synthetic source {address}.",
-            )
-            for address in addresses
-        ),
-    )
-    if document.fingerprint() != initial.initial_packet_fingerprint:
-        raise ProviderReadinessError(
-            "synthetic readiness document construction is not deterministic"
-        )
-    return document
 
 
 def readiness_execution_contracts(
@@ -336,7 +316,7 @@ def run_live_readiness(
     boundary_source_tree_sha: str = "unversioned",
     run_id: str = "local",
 ) -> ProviderReadinessEvidence:
-    """Run two bounded synthetic calls: max-shape initial and rescue profiles."""
+    """Run two bounded synthetic calls at the production proof-review output cap."""
 
     initial_turn = build_readiness_turn()
     rescue_turn = build_readiness_rescue_turn()
