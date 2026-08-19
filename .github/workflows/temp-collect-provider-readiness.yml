@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/provider-readiness-authorized-20260819
+  pull_request:
+    branches:
+      - main
 
 permissions:
   actions: read
@@ -12,7 +15,9 @@ permissions:
 
 jobs:
   collect:
-    if: ${{ github.event.head_commit.message == 'Collect authorized readiness evidence' }}
+    if: >-
+      (github.event_name == 'push' && github.event.head_commit.message == 'Collect authorized readiness evidence') ||
+      (github.event_name == 'pull_request' && github.head_ref == 'agent/provider-readiness-authorized-20260819')
     runs-on: ubuntu-latest
     env:
       TARGET_SHA: 749718e3697d1a5acbe148d22a73a73e52772cb0
