@@ -81,18 +81,28 @@ jobs:
       - run: ruff check .
       - run: mypy src
 
-  provider-readiness-trigger-probe:
+  provider-readiness-authorized-canary:
     if: ${{ github.event_name == 'pull_request' && github.head_ref == 'agent/provider-readiness-pr-canary-post149' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
-      contents: read
+      contents: write
     env:
-      AUTHORIZED_SHA: 69d80c44c9293869d477090bf56172316946f77e
-      TARGET_WORKFLOW_NAME: Authorized provider readiness post-149
-      OPENAI_SECRET_PRESENT: ${{ secrets.OPENAI_API_KEY != '' }}
+      THORN_READINESS_MODEL: gpt-5.6
+      PRIOR_TRIGGER_SHA: 69d80c44c9293869d477090bf56172316946f77e
+      PRIOR_WORKFLOW_NAME: Authorized provider readiness post-149
+      CLAIM_PATH: eval/provider_readiness_post149_paid_claim.json
+      CLAIM_BRANCH: agent/provider-readiness-pr-canary-post149
     steps:
-      - name: Query prior trigger and secret availability without provider access
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
+      - name: Refuse if earlier push-trigger canary ever existed
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -100,39 +110,73 @@ jobs:
           runs="$(curl -fsSL \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$AUTHORIZED_SHA&per_page=100")"
-          printf '%s' "$runs" > /tmp/runs.json
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$PRIOR_TRIGGER_SHA&per_page=100")"
+          printf '%s' "$runs" | python -c 'import json,os,sys; d=json.load(sys.stdin); n=os.environ["PRIOR_WORKFLOW_NAME"]; s=os.environ["PRIOR_TRIGGER_SHA"]; m=[r for r in d.get("workflow_runs",[]) if r.get("name")==n and r.get("head_sha")==s]; assert not m, f"prior authorized canary run exists: {[r.get("id") for r in m]}"'
+      - name: Keyless preflight
+        env:
+          OPENAI_API_KEY: ""
+        run: |
+          mkdir -p "$RUNNER_TEMP/provider-readiness"
+          python scripts/provider_readiness_canary.py \
+            --preflight \
+            --model "$THORN_READINESS_MODEL" \
+            --output "$RUNNER_TEMP/provider-readiness/preflight.json"
+      - name: Claim the single paid authorization before dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
           python - <<'PY'
-          import json, os, pathlib
-          data = json.loads(pathlib.Path('/tmp/runs.json').read_text())
-          name = os.environ['TARGET_WORKFLOW_NAME']
-          sha = os.environ['AUTHORIZED_SHA']
-          matches = [
-              {
-                  'id': r.get('id'),
-                  'name': r.get('name'),
-                  'status': r.get('status'),
-                  'conclusion': r.get('conclusion'),
-                  'event': r.get('event'),
-                  'head_sha': r.get('head_sha'),
-                  'html_url': r.get('html_url'),
-                  'created_at': r.get('created_at'),
-                  'updated_at': r.get('updated_at'),
-              }
-              for r in data.get('workflow_runs', [])
-              if r.get('name') == name and r.get('head_sha') == sha
-          ]
-          summary = {
-              'authorized_trigger_sha': sha,
-              'matching_runs': matches,
-              'openai_secret_present_for_same_repo_pr': os.environ.get('OPENAI_SECRET_PRESENT'),
+          import base64, json, os, pathlib
+          claim = {
+              'authorization': 'user-authorized post-#149 readiness canary',
+              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
+              'trigger_sha': os.environ['GITHUB_SHA'],
+              'model': os.environ['THORN_READINESS_MODEL'],
+              'max_provider_calls': 2,
+              'retries': 0,
           }
-          path = pathlib.Path('/tmp/provider-readiness-trigger-probe.json')
-          path.write_text(json.dumps(summary, sort_keys=True, indent=2) + '\n')
-          print(path.read_text())
+          raw = json.dumps(claim, sort_keys=True, indent=2) + '\n'
+          payload = {
+              'message': 'Claim single post-149 paid readiness authorization',
+              'content': base64.b64encode(raw.encode()).decode(),
+              'branch': os.environ['CLAIM_BRANCH'],
+          }
+          pathlib.Path('/tmp/claim-put.json').write_text(json.dumps(payload))
           PY
-      - uses: actions/upload-artifact@v4
+          code="$(curl -sS -o /tmp/claim-response.json -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/$CLAIM_PATH" \
+            --data-binary @/tmp/claim-put.json)"
+          if [ "$code" != 201 ]; then
+            echo "Paid authorization already claimed or claim failed; refusing provider dispatch (HTTP $code)." >&2
+            exit 1
+          fi
+      - name: Authorized bounded synthetic readiness calls
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python scripts/provider_readiness_canary.py \
+            --live \
+            --confirm-paid-readiness-canary \
+            --model "$THORN_READINESS_MODEL" \
+            --output "$RUNNER_TEMP/provider-readiness/live.json"
+      - name: Keyless replay when live evidence exists
+        if: always()
+        env:
+          OPENAI_API_KEY: ""
+        run: |
+          if [ -f "$RUNNER_TEMP/provider-readiness/live.json" ]; then
+            python scripts/provider_readiness_canary.py \
+              --replay "$RUNNER_TEMP/provider-readiness/live.json" \
+              --output "$RUNNER_TEMP/provider-readiness/replay.json"
+          fi
+      - name: Preserve readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: provider-readiness-trigger-probe-${{ github.run_id }}
-          path: /tmp/provider-readiness-trigger-probe.json
+          name: provider-readiness-authorized-post149-pr-${{ github.run_id }}
+          path: ${{ runner.temp }}/provider-readiness
           if-no-files-found: error
