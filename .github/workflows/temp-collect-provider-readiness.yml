@@ -1,9 +1,6 @@
 name: Temporary collect authorized readiness evidence
 
 on:
-  push:
-    branches:
-      - agent/provider-readiness-authorized-20260819
   pull_request:
     branches:
       - main
@@ -11,37 +8,28 @@ on:
 permissions:
   actions: read
   contents: read
-  issues: write
 
 jobs:
   collect:
-    if: >-
-      (github.event_name == 'push' && github.event.head_commit.message == 'Collect authorized readiness evidence') ||
-      (github.event_name == 'pull_request' && github.head_ref == 'agent/provider-readiness-authorized-20260819')
+    if: ${{ github.head_ref == 'agent/provider-readiness-authorized-20260819' }}
     runs-on: ubuntu-latest
     env:
       TARGET_SHA: 749718e3697d1a5acbe148d22a73a73e52772cb0
       TARGET_WORKFLOW_NAME: Temporary authorized provider readiness canary
-      TARGET_ISSUE: "146"
     steps:
-      - name: Locate completed canary, parse artifact, and report to issue
+      - name: Report completed canary run and artifact identifiers
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import io
           import json
           import os
-          import time
           import urllib.request
-          import zipfile
 
           repo = os.environ["GITHUB_REPOSITORY"]
           target_sha = os.environ["TARGET_SHA"]
           target_name = os.environ["TARGET_WORKFLOW_NAME"]
-          issue = os.environ["TARGET_ISSUE"]
           token = os.environ["GITHUB_TOKEN"]
-
           headers = {
               "Authorization": f"Bearer {token}",
               "Accept": "application/vnd.github+json",
@@ -53,101 +41,37 @@ jobs:
               with urllib.request.urlopen(req, timeout=30) as response:
                   return json.load(response)
 
-          run = None
-          for _ in range(120):
-              payload = get_json(
-                  f"https://api.github.com/repos/{repo}/actions/runs?head_sha={target_sha}&per_page=100"
-              )
-              matches = [
-                  item for item in payload.get("workflow_runs", [])
-                  if item.get("name") == target_name and item.get("head_sha") == target_sha
-              ]
-              if matches:
-                  run = max(matches, key=lambda item: item["id"])
-                  if run.get("status") == "completed":
-                      break
-              time.sleep(5)
-          if run is None or run.get("status") != "completed":
-              raise SystemExit("authorized readiness canary did not reach completed state")
-
+          payload = get_json(
+              f"https://api.github.com/repos/{repo}/actions/runs?head_sha={target_sha}&per_page=100"
+          )
+          matches = [
+              item for item in payload.get("workflow_runs", [])
+              if item.get("name") == target_name and item.get("head_sha") == target_sha
+          ]
+          if len(matches) != 1:
+              raise SystemExit(f"expected exactly one authorized canary run, found {len(matches)}")
+          run = matches[0]
           artifacts = get_json(
               f"https://api.github.com/repos/{repo}/actions/runs/{run['id']}/artifacts?per_page=100"
           ).get("artifacts", [])
-          matches = [
+          artifact_matches = [
               item for item in artifacts
               if item.get("name", "").startswith("provider-readiness-authorized-")
           ]
-          if len(matches) != 1:
-              raise SystemExit(f"expected one readiness artifact, found {len(matches)}")
-          artifact = matches[0]
-
-          req = urllib.request.Request(
-              f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact['id']}/zip",
-              headers=headers,
-          )
-          with urllib.request.urlopen(req, timeout=60) as response:
-              archive = response.read()
-
-          files = {}
-          with zipfile.ZipFile(io.BytesIO(archive)) as zf:
-              for member in zf.infolist():
-                  if member.is_dir():
-                      continue
-                  name = member.filename.rsplit("/", 1)[-1]
-                  files[name] = zf.read(member)
-
-          def load(name: str):
-              raw = files.get(name)
-              return json.loads(raw.decode("utf-8")) if raw is not None else None
-
-          preflight = load("preflight.json")
-          live = load("live.json")
-          replay = load("replay.json")
-
-          body_lines = [
-              "Authorized provider-readiness canary observation (synthetic, non-scientific):",
-              "",
-              f"- trigger SHA: `{target_sha}`",
-              f"- workflow run: `{run['id']}` (#{run.get('run_number')})",
-              f"- workflow conclusion: `{run.get('conclusion')}`",
-              f"- artifact: `{artifact['id']}` / `{artifact['name']}`",
-              f"- model: `{(live or preflight or {}).get('model')}`",
-              f"- preflight status: `{(preflight or {}).get('status')}`",
-              f"- live status: `{(live or {}).get('status')}`",
-              f"- replay status: `{(replay or {}).get('status')}`",
-              f"- provider attempts: `{(live or {}).get('provider_attempts')}`",
-              f"- responses received: `{(live or {}).get('responses_received')}`",
-              f"- known model generations: `{(live or {}).get('model_generations')}`",
-              f"- input tokens: `{(live or {}).get('input_tokens')}`",
-              f"- output tokens: `{(live or {}).get('output_tokens')}`",
-              f"- total tokens: `{(live or {}).get('total_tokens')}`",
-              f"- initial execution fingerprint: `{(live or preflight or {}).get('execution_fingerprint')}`",
-              f"- rescue execution fingerprint: `{(live or preflight or {}).get('rescue_execution_fingerprint')}`",
-              "- readiness_only: `true`",
-              "- scientific_authorization: `false`",
-          ]
-          if live and live.get("status") != "live-success":
-              body_lines.extend([
-                  f"- failed profile: `{live.get('failed_profile')}`",
-                  f"- response failure type: `{live.get('response_failure_type')}`",
-              ])
-          body = "\n".join(body_lines)
-
-          data = json.dumps({"body": body}).encode("utf-8")
-          req = urllib.request.Request(
-              f"https://api.github.com/repos/{repo}/issues/{issue}/comments",
-              headers={**headers, "Content-Type": "application/json"},
-              data=data,
-              method="POST",
-          )
-          with urllib.request.urlopen(req, timeout=30) as response:
-              posted = json.load(response)
-          print(json.dumps({
-              "comment_id": posted.get("id"),
+          if len(artifact_matches) != 1:
+              raise SystemExit(f"expected exactly one readiness artifact, found {len(artifact_matches)}")
+          artifact = artifact_matches[0]
+          print("THORN_READINESS_OBSERVATION=" + json.dumps({
               "run_id": run["id"],
+              "run_number": run.get("run_number"),
+              "status": run.get("status"),
               "conclusion": run.get("conclusion"),
+              "event": run.get("event"),
+              "head_sha": run.get("head_sha"),
+              "created_at": run.get("created_at"),
+              "updated_at": run.get("updated_at"),
               "artifact_id": artifact["id"],
-              "live_status": (live or {}).get("status"),
-              "replay_status": (replay or {}).get("status"),
-          }, indent=2, sort_keys=True))
+              "artifact_name": artifact["name"],
+              "artifact_size_in_bytes": artifact.get("size_in_bytes"),
+          }, sort_keys=True))
           PY
