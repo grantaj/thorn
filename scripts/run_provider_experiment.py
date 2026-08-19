@@ -29,7 +29,10 @@ from thorn.proof_language_review import (
 from thorn.provider_readiness import ProviderReadinessEvidence
 from thorn.providers.execution_contract import (
     ProviderExecutionContract,
+    ProviderTransportProfile,
     build_provider_execution_contract,
+    provider_adapter_sha256,
+    provider_lock_sha256,
 )
 from thorn.providers.openai import OpenAIProvider
 from thorn.providers.replay import RecordingProvider, ReplayProvider
@@ -87,7 +90,13 @@ def _assert_manifest_freeze(manifest: ProviderExperimentManifest) -> None:
     if _sha256(RUNNER) != manifest.runner_sha256:
         raise ExperimentFreezeError("manifest-driven experiment runner bytes drifted")
     if _sha256(CONSTRAINTS) != manifest.constraints_sha256:
-        raise ExperimentFreezeError("provider runtime constraints drifted")
+        raise ExperimentFreezeError("provider runtime lock drifted")
+    if manifest.readiness.boundary_source_tree_sha != manifest.src_tree_sha:
+        raise ExperimentFreezeError("frozen readiness did not exercise the production source tree")
+    if manifest.readiness.adapter_sha256 != provider_adapter_sha256():
+        raise ExperimentFreezeError("provider adapter differs from frozen readiness identity")
+    if manifest.readiness.provider_lock_sha256 != provider_lock_sha256():
+        raise ExperimentFreezeError("provider lock differs from frozen readiness identity")
     if manifest.representation != FORMAT_VERSION:
         raise ExperimentFreezeError("proof-language representation version drifted")
     if manifest.protocol != PROTOCOL_VERSION:
@@ -138,7 +147,7 @@ def _preflight_payload(
     prepared: tuple[PreparedExperimentCase, ...],
 ) -> dict[str, object]:
     return {
-        "format": "thorn-provider-experiment-preflight/1",
+        "format": "thorn-provider-experiment-preflight/2",
         "status": "preflight-ready",
         "provider_instantiated": False,
         "paid_execution_authorized": False,
@@ -146,12 +155,16 @@ def _preflight_payload(
         "production_revision": manifest.repository_revision,
         "execution_revision": _git("rev-parse", "HEAD"),
         "runtime": manifest.runtime.model_dump(mode="json"),
+        "readiness": manifest.readiness.model_dump(mode="json"),
         "budget": manifest.budget.model_dump(mode="json"),
         "cases": [
             {
                 "id": item.case.id,
                 "source_sha256": item.case.source_sha256,
                 "initial_execution_fingerprint": item.initial_contract.fingerprint(),
+                "initial_transport_profile": item.initial_contract.transport_profile().model_dump(
+                    mode="json"
+                ),
                 "initial_execution_contract": item.initial_contract.model_dump(mode="json"),
             }
             for item in prepared
@@ -163,6 +176,8 @@ def _run_cases(
     manifest: ProviderExperimentManifest,
     prepared: tuple[PreparedExperimentCase, ...],
     provider: Any,
+    *,
+    readiness_profiles: tuple[ProviderTransportProfile, ...] = (),
 ) -> dict[str, object]:
     budget = ProviderBudget(manifest.budget)
     results: list[dict[str, object]] = []
@@ -171,6 +186,7 @@ def _run_cases(
             delegate=provider,
             budget=budget,
             expected_initial_fingerprint=item.initial_contract.fingerprint(),
+            readiness_profiles=readiness_profiles,
         )
         completed = run_proof_review(item.prepared, transport)
         results.append(
@@ -230,6 +246,7 @@ def main() -> int:
         _write_json(args.output, _preflight_payload(manifest, prepared))
         return 0
 
+    readiness_profiles: tuple[ProviderTransportProfile, ...] = ()
     if args.live:
         if args.record_dir is None:
             parser.error("--live requires --record-dir")
@@ -242,9 +259,11 @@ def main() -> int:
         readiness = _load_readiness(args.readiness_evidence)
         assert_readiness_compatible(
             readiness,
+            evidence_sha256=_sha256(args.readiness_evidence),
             manifest=manifest,
-            scientific_contract=prepared[0].initial_contract,
+            scientific_contracts=tuple(item.initial_contract for item in prepared),
         )
+        readiness_profiles = readiness.transport_profiles
         delegate = OpenAIProvider(model=manifest.model)
         provider: Any = RecordingProvider(delegate, args.record_dir)
         mode_name = "live"
@@ -256,12 +275,17 @@ def main() -> int:
         mode_name = "replay"
 
     try:
-        run = _run_cases(manifest, prepared, provider)
+        run = _run_cases(
+            manifest,
+            prepared,
+            provider,
+            readiness_profiles=readiness_profiles,
+        )
     except Exception as exc:
         _write_json(
             args.output,
             {
-                "format": "thorn-provider-experiment-result/1",
+                "format": "thorn-provider-experiment-result/2",
                 "status": "failed",
                 "mode": mode_name,
                 "experiment_id": manifest.experiment_id,
@@ -280,7 +304,7 @@ def main() -> int:
     _write_json(
         args.output,
         {
-            "format": "thorn-provider-experiment-result/1",
+            "format": "thorn-provider-experiment-result/2",
             "status": "completed",
             "mode": mode_name,
             "experiment_id": manifest.experiment_id,
