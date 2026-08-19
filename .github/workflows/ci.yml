@@ -80,3 +80,173 @@ jobs:
             --output /tmp/lean-replay-opportunity.json >/dev/null
       - run: ruff check .
       - run: mypy src
+
+  a3-scientific-authorized:
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'agent/issue-134-a3-scientific-post146-20260819' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      THORN_PRODUCTION_REVISION: f9696daf6ca828f2a25b7d4d921513e057d4e125
+      THORN_MODEL: gpt-5.6
+      THORN_READINESS_RUN_ID: "32232914558"
+      THORN_READINESS_ARTIFACT: provider-readiness-authorized-post149-32232914558
+      THORN_READINESS_LIVE_SHA256: a1de222ac38133c05d638a9329c5652949380bea88497f1749c03b4862f20767
+      THORN_EXPERIMENT_ID: issue-134-a3-post146-pre125-20260819
+      THORN_MANIFEST_REPO_PATH: eval/robustness/issue_134/a3_post146_manifest.json
+      THORN_CLAIM_REPO_PATH: eval/robustness/issue_134/a3_post146_paid_claim.json
+      THORN_EXECUTION_BRANCH: agent/issue-134-a3-scientific-post146-20260819
+    steps:
+      - name: Check out exact production revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.THORN_PRODUCTION_REVISION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
+      - name: Download qualified readiness evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.THORN_READINESS_ARTIFACT }}
+          run-id: ${{ env.THORN_READINESS_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/readiness
+      - name: Verify exact readiness evidence keylessly
+        run: |
+          set -euo pipefail
+          test "$(sha256sum "$RUNNER_TEMP/readiness/live.json" | awk '{print $1}')" = "$THORN_READINESS_LIVE_SHA256"
+          python scripts/provider_readiness_canary.py \
+            --replay "$RUNNER_TEMP/readiness/live.json" \
+            --output "$RUNNER_TEMP/readiness/replay-recheck.json"
+      - name: Build and preflight fresh A3 freeze
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/a3"
+          python scripts/prepare_provider_experiment.py \
+            --experiment-id "$THORN_EXPERIMENT_ID" \
+            --model "$THORN_MODEL" \
+            --readiness-evidence "$RUNNER_TEMP/readiness/live.json" \
+            --case A3 eval/robustness/issue_101/variant_result_applicability.tex thm:uniform-decay \
+            --max-provider-attempts 2 \
+            --max-input-tokens 40000 \
+            --max-output-tokens 8192 \
+            --max-readiness-age-hours 24 \
+            --output "$RUNNER_TEMP/a3/manifest.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          m = json.loads(Path(os.environ['RUNNER_TEMP'] + '/a3/manifest.json').read_text())
+          assert m['repository_revision'] == os.environ['THORN_PRODUCTION_REVISION']
+          assert m['model'] == 'gpt-5.6'
+          assert m['paid_execution_authorized'] is False
+          assert m['budget']['max_cases'] == 1
+          assert m['budget']['max_provider_attempts'] == 2
+          assert m['budget']['max_input_tokens'] == 40000
+          assert m['budget']['max_output_tokens_per_request'] == 4096
+          assert m['budget']['max_output_tokens'] == 8192
+          assert len(m['cases']) == 1 and m['cases'][0]['id'] == 'A3'
+          assert m['cases'][0]['path'] == 'eval/robustness/issue_101/variant_result_applicability.tex'
+          assert m['cases'][0]['target'] == 'thm:uniform-decay'
+          assert m['cases'][0]['source_sha256'] == 'f53d7c5eed1f0145406c3c4dda50680a852b14c2c4cd3705c17940ec5f27f403'
+          assert m['readiness']['run_id'] == '32232914558'
+          print('A3 initial execution fingerprint:', m['cases'][0]['initial_execution_fingerprint'])
+          print('A3 readiness evidence sha256:', m['readiness']['evidence_sha256'])
+          PY
+      - name: Publish immutable A3 freeze before provider dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw = Path(os.environ['RUNNER_TEMP'] + '/a3/manifest.json').read_bytes()
+          payload = {
+              'message': 'Freeze post-canary A3 scientific experiment',
+              'content': base64.b64encode(raw).decode(),
+              'branch': os.environ['THORN_EXECUTION_BRANCH'],
+          }
+          Path('/tmp/manifest-put.json').write_text(json.dumps(payload))
+          PY
+          code="$(curl -sS -o /tmp/manifest-response.json -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/$THORN_MANIFEST_REPO_PATH" \
+            --data-binary @/tmp/manifest-put.json)"
+          if [ "$code" != 201 ]; then
+            cat /tmp/manifest-response.json >&2
+            echo "Failed to publish fresh A3 freeze; refusing provider dispatch (HTTP $code)." >&2
+            exit 1
+          fi
+      - name: Claim this single scientific authorization before dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64, hashlib, json, os
+          from pathlib import Path
+          manifest = Path(os.environ['RUNNER_TEMP'] + '/a3/manifest.json').read_bytes()
+          claim = {
+              'authorization': 'user-authorized A3 scientific test on 2026-08-19',
+              'experiment_id': os.environ['THORN_EXPERIMENT_ID'],
+              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
+              'production_revision': os.environ['THORN_PRODUCTION_REVISION'],
+              'readiness_run_id': os.environ['THORN_READINESS_RUN_ID'],
+              'manifest_sha256': hashlib.sha256(manifest).hexdigest(),
+              'max_provider_attempts': 2,
+              'max_input_tokens': 40000,
+              'max_output_tokens': 8192,
+              'provider_retries': 0,
+              'a1_a2_resampling': False,
+          }
+          raw = (json.dumps(claim, indent=2, sort_keys=True) + '\n').encode()
+          payload = {
+              'message': 'Claim single authorized A3 scientific run',
+              'content': base64.b64encode(raw).decode(),
+              'branch': os.environ['THORN_EXECUTION_BRANCH'],
+          }
+          Path('/tmp/claim-put.json').write_text(json.dumps(payload))
+          PY
+          code="$(curl -sS -o /tmp/claim-response.json -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/$THORN_CLAIM_REPO_PATH" \
+            --data-binary @/tmp/claim-put.json)"
+          if [ "$code" != 201 ]; then
+            cat /tmp/claim-response.json >&2
+            echo "A3 authorization already claimed or claim failed; refusing provider dispatch (HTTP $code)." >&2
+            exit 1
+          fi
+      - name: Run exactly one authorized frozen A3 experiment
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/a3/recordings"
+          python scripts/run_provider_experiment.py \
+            --live \
+            --confirm-paid-scientific-run \
+            --manifest "$RUNNER_TEMP/a3/manifest.json" \
+            --readiness-evidence "$RUNNER_TEMP/readiness/live.json" \
+            --record-dir "$RUNNER_TEMP/a3/recordings" \
+            --output "$RUNNER_TEMP/a3/live.json"
+      - name: Require exact keyless replay after successful live run
+        env:
+          OPENAI_API_KEY: ""
+        run: |
+          python scripts/run_provider_experiment.py \
+            --replay-dir "$RUNNER_TEMP/a3/recordings" \
+            --manifest "$RUNNER_TEMP/a3/manifest.json" \
+            --output "$RUNNER_TEMP/a3/replay.json"
+      - name: Preserve all A3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-134-a3-authorized-${{ github.run_id }}
+          path: ${{ runner.temp }}/a3
+          if-no-files-found: error
