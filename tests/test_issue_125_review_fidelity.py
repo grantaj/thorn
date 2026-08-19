@@ -64,6 +64,61 @@ This follows from the construction.
     assert definition not in prepared.document.render_initial()
 
 
+def test_explicit_ambient_convention_applies_by_scope_without_lexical_use(
+    tmp_path: Path,
+) -> None:
+    paper = tmp_path / "paper.tex"
+    convention = "Throughout, all topological spaces are Hausdorff."
+    _write_paper(
+        paper,
+        rf"""
+{convention}
+
+\begin{{theorem}}\label{{thm:main}}
+Every compact subset is closed.
+\end{{theorem}}
+\begin{{proof}}
+This is the standard compactness argument.
+\end{{proof}}
+""",
+    )
+
+    project, prepared = _prepared(paper)
+    sources = _sources_containing(prepared, "topological spaces are Hausdorff")
+
+    assert "topological spaces" not in project.unit("thm:main").statement
+    assert len(sources) == 1
+    assert sources[0].address in set(advertised_source_addresses(prepared.document))
+    assert convention not in prepared.document.render_initial()
+
+
+def test_explicit_ambient_convention_does_not_apply_backwards(tmp_path: Path) -> None:
+    paper = tmp_path / "paper.tex"
+    convention = "Throughout, all topological spaces are Hausdorff."
+    _write_paper(
+        paper,
+        rf"""
+\begin{{theorem}}\label{{thm:main}}
+Every compact subset is closed.
+\end{{theorem}}
+\begin{{proof}}
+This is the standard compactness argument.
+\end{{proof}}
+
+{convention}
+""",
+    )
+
+    project, prepared = _prepared(paper)
+
+    assert not any(
+        symbol.identifier.startswith("semantic:")
+        and symbol.name.casefold() == "topological spaces"
+        for symbol in project.symbol_table.symbols
+    )
+    assert not _sources_containing(prepared, "topological spaces are Hausdorff")
+
+
 def test_project_semantic_dependency_crosses_input_boundary(tmp_path: Path) -> None:
     main = tmp_path / "main.tex"
     results = tmp_path / "results.tex"
