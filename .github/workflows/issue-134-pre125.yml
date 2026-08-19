@@ -18,9 +18,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.16"
           cache: pip
-      - run: python -m pip install -e .
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
       - name: Verify frozen post-132/pre-125 requests and bounds
         run: |
           python scripts/run_issue_134_pre125.py \
@@ -42,9 +42,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.16"
           cache: pip
-      - run: python -m pip install -e .
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
       - name: Run separately authorized frozen paid A1/A2/A3 batch
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
