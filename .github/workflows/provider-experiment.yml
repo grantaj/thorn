@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       manifest_path:
-        description: Frozen thorn-provider-experiment/1 manifest path
+        description: Frozen thorn-provider-experiment/2 manifest path
         required: true
         type: string
       readiness_run_id:
-        description: Successful Provider readiness canary run ID required for live mode
+        description: Frozen successful Provider readiness run ID required by the manifest
         required: false
         default: ""
         type: string
@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ""
+      THORN_EXPERIMENT_MANIFEST: ${{ inputs.manifest_path }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,11 +36,11 @@ jobs:
           python-version: "3.11.16"
           cache: pip
       - run: python -m pip install -c constraints/provider-runtime.txt -e .
-      - name: Verify frozen manifest keylessly
+      - name: Verify frozen manifest and readiness identity keylessly
         run: |
           python scripts/run_provider_experiment.py \
             --preflight \
-            --manifest '${{ inputs.manifest_path }}' \
+            --manifest "$THORN_EXPERIMENT_MANIFEST" \
             --output "$RUNNER_TEMP/provider-experiment-preflight.json"
       - uses: actions/upload-artifact@v4
         with:
@@ -57,6 +58,8 @@ jobs:
     permissions:
       actions: read
       contents: read
+    env:
+      THORN_EXPERIMENT_MANIFEST: ${{ inputs.manifest_path }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -64,7 +67,7 @@ jobs:
           python-version: "3.11.16"
           cache: pip
       - run: python -m pip install -c constraints/provider-runtime.txt -e .
-      - name: Download separately produced readiness evidence
+      - name: Download the readiness evidence frozen by the manifest
         uses: actions/download-artifact@v4
         with:
           name: provider-readiness-live-${{ inputs.readiness_run_id }}
@@ -79,18 +82,19 @@ jobs:
           python scripts/run_provider_experiment.py \
             --live \
             --confirm-paid-scientific-run \
-            --manifest '${{ inputs.manifest_path }}' \
+            --manifest "$THORN_EXPERIMENT_MANIFEST" \
             --readiness-evidence "$RUNNER_TEMP/readiness/live.json" \
             --record-dir "$RUNNER_TEMP/provider-experiment/recordings" \
             --output "$RUNNER_TEMP/provider-experiment/live.json"
-      - name: Verify every accepted response by exact keyless replay
+      - name: Re-run exact keyless replay over all available evidence
+        if: always()
         env:
           OPENAI_API_KEY: ""
         run: |
           python scripts/run_provider_experiment.py \
             --replay-dir "$RUNNER_TEMP/provider-experiment/recordings" \
-            --manifest '${{ inputs.manifest_path }}' \
-            --output "$RUNNER_TEMP/provider-experiment/replay.json"
+            --manifest "$THORN_EXPERIMENT_MANIFEST" \
+            --output "$RUNNER_TEMP/provider-experiment/replay.json" || true
       - name: Preserve live and replay evidence
         if: always()
         uses: actions/upload-artifact@v4
