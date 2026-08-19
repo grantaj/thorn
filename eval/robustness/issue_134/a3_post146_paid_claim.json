@@ -1,0 +1,13 @@
+{
+  "a1_a2_resampling": false,
+  "authorization": "user-authorized A3 scientific test on 2026-08-19",
+  "experiment_id": "issue-134-a3-post146-pre125-20260819",
+  "manifest_sha256": "203f99eec3ec3c7bc01ee77ea8e714b3e885880ed9a915f35b8ba3a151c40e4f",
+  "max_input_tokens": 40000,
+  "max_output_tokens": 8192,
+  "max_provider_attempts": 2,
+  "production_revision": "f9696daf6ca828f2a25b7d4d921513e057d4e125",
+  "provider_retries": 0,
+  "readiness_run_id": "32232914558",
+  "workflow_run_id": "32246878348"
+}
