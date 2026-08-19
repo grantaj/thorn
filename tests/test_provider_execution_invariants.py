@@ -30,6 +30,9 @@ def _runtime(*, openai: str = "3.3.0") -> ProviderRuntimeIdentity:
         openai=openai,
         pydantic="2.13.4",
         pydantic_core="2.46.4",
+        httpx2="2.12.0",
+        httpcore2="2.12.0",
+        jiter="0.16.0",
     )
 
 
@@ -109,7 +112,8 @@ def test_execution_fingerprint_covers_final_wire_validator_and_runtime(
 
     changed_wire = dict(contract.wire_request)
     changed_wire["store"] = True
-    assert contract.model_copy(update={"wire_request": changed_wire}).fingerprint() != contract.fingerprint()
+    changed_contract = contract.model_copy(update={"wire_request": changed_wire})
+    assert changed_contract.fingerprint() != contract.fingerprint()
 
     changed_runtime = execution_contract.build_provider_execution_contract(
         envelope,
@@ -265,9 +269,11 @@ def test_accepted_recording_is_immutable_and_conflicting_duplicate_is_preserved(
     tmp_path: Path,
 ) -> None:
     first = AttackReport(findings=[]).model_dump_json()
-    second = '{"findings":[{"id":"F1","category":"other","severity":"warning",' \
-        '"title":"Synthetic","explanation":"Synthetic conflict.","evidence":[],' \
+    second = (
+        '{"findings":[{"id":"F1","category":"other","severity":"warning",'
+        '"title":"Synthetic","explanation":"Synthetic conflict.","evidence":[],'
         '"counterexample":null,"confidence":0.5}]}'
+    )
     client = _FakeClient([first, second])
     monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
     provider = openai_provider.OpenAIProvider(model="test-model")
