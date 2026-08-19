@@ -7,17 +7,18 @@ on:
 
 jobs:
   observe:
-    if: ${{ github.event.head_commit.message == 'OBSERVE_PROVIDER_READINESS_CANARY_POST149_20260819' }}
+    if: ${{ github.event.head_commit.message == 'OBSERVE_PROVIDER_READINESS_CANARY_POST149_20260819_V2' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
-      contents: read
-      issues: write
+      contents: write
     env:
       AUTHORIZED_SHA: 69d80c44c9293869d477090bf56172316946f77e
       TARGET_WORKFLOW_NAME: Authorized provider readiness post-149
+      RESULT_PATH: eval/provider_readiness_post149_observer.json
+      RESULT_BRANCH: agent/provider-readiness-canary-post149-20260819
     steps:
-      - name: Find completed authorized canary and report to issue 146
+      - name: Find completed canary, collect artifact evidence, and persist summary
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -42,22 +43,63 @@ jobs:
             exit 1
           fi
           run_id="$(printf '%s' "$run_json" | python -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-          conclusion="$(printf '%s' "$run_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("conclusion",""))')"
-          html_url="$(printf '%s' "$run_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("html_url",""))')"
           artifacts="$(curl -fsSL \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100")"
           artifact_id="$(printf '%s' "$artifacts" | python -c 'import json,sys; a=json.load(sys.stdin).get("artifacts",[]); print(a[0]["id"] if a else "")')"
-          artifact_name="$(printf '%s' "$artifacts" | python -c 'import json,sys; a=json.load(sys.stdin).get("artifacts",[]); print(a[0]["name"] if a else "")')"
-          body="Provider-readiness observer result for authorized post-#149 canary.\n\n- trigger SHA: \`$AUTHORIZED_SHA\`\n- run ID: \`$run_id\`\n- conclusion: **$conclusion**\n- artifact ID: \`${artifact_id:-none}\`\n- artifact: \`${artifact_name:-none}\`\n- run: $html_url\n\nThis observer is keyless and made no provider request. It reports the single already-authorized canary run only."
-          python - "$body" > /tmp/comment.json <<'PY'
-import json, sys
-print(json.dumps({"body": sys.argv[1]}))
+          mkdir -p /tmp/evidence
+          if [ -n "$artifact_id" ]; then
+            curl -fsSL -L \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+              -o /tmp/evidence.zip
+            unzip -q /tmp/evidence.zip -d /tmp/evidence
+          fi
+          printf '%s' "$run_json" > /tmp/run.json
+          printf '%s' "$artifacts" > /tmp/artifacts.json
+          python - <<'PY'
+import base64, json, os, pathlib
+root = pathlib.Path('/tmp/evidence')
+def load(name):
+    matches = list(root.rglob(name))
+    if not matches:
+        return None
+    return json.loads(matches[0].read_text())
+run = json.loads(pathlib.Path('/tmp/run.json').read_text())
+artifacts = json.loads(pathlib.Path('/tmp/artifacts.json').read_text()).get('artifacts', [])
+summary = {
+    'authorized_trigger_sha': os.environ['AUTHORIZED_SHA'],
+    'run': {
+        'id': run.get('id'),
+        'name': run.get('name'),
+        'status': run.get('status'),
+        'conclusion': run.get('conclusion'),
+        'html_url': run.get('html_url'),
+        'created_at': run.get('created_at'),
+        'updated_at': run.get('updated_at'),
+    },
+    'artifacts': [
+        {'id': a.get('id'), 'name': a.get('name'), 'size_in_bytes': a.get('size_in_bytes'), 'expired': a.get('expired')}
+        for a in artifacts
+    ],
+    'preflight': load('preflight.json'),
+    'live': load('live.json'),
+    'replay': load('replay.json'),
+}
+raw = json.dumps(summary, sort_keys=True, indent=2) + '\n'
+pathlib.Path('/tmp/result.json').write_text(raw)
+payload = {
+    'message': 'Preserve post-149 readiness canary observer result',
+    'content': base64.b64encode(raw.encode()).decode(),
+    'branch': os.environ['RESULT_BRANCH'],
+}
+pathlib.Path('/tmp/put.json').write_text(json.dumps(payload))
 PY
-          curl -fsSL -X POST \
+          curl -fsSL -X PUT \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "Content-Type: application/json" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/146/comments" \
-            --data-binary @/tmp/comment.json
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/$RESULT_PATH" \
+            --data-binary @/tmp/put.json
