@@ -1,0 +1,76 @@
+name: Provider readiness canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Exact OpenAI model alias/snapshot to exercise
+        required: true
+        type: string
+      confirm_live:
+        description: Make one bounded paid synthetic readiness call after keyless preflight
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
+      - name: Construct exact synthetic request keylessly
+        run: |
+          python scripts/provider_readiness_canary.py \
+            --preflight \
+            --model '${{ inputs.model }}' \
+            --output "$RUNNER_TEMP/provider-readiness-preflight.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-readiness-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/provider-readiness-preflight.json
+          if-no-files-found: error
+
+  live:
+    if: ${{ inputs.confirm_live }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
+      - name: Make exactly one synthetic readiness request
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/provider-readiness"
+          python scripts/provider_readiness_canary.py \
+            --live \
+            --confirm-paid-readiness-canary \
+            --model '${{ inputs.model }}' \
+            --output "$RUNNER_TEMP/provider-readiness/live.json"
+      - name: Verify readiness evidence keylessly
+        env:
+          OPENAI_API_KEY: ""
+        run: |
+          python scripts/provider_readiness_canary.py \
+            --replay "$RUNNER_TEMP/provider-readiness/live.json" \
+            --output "$RUNNER_TEMP/provider-readiness/replay.json"
+      - name: Preserve readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-readiness-live-${{ github.run_id }}
+          path: ${{ runner.temp }}/provider-readiness
+          if-no-files-found: error
