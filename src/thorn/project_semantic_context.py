@@ -192,7 +192,8 @@ def _declarations(file: FrontendFile, regions: list[ResultRegion]) -> list[_Decl
 
     unique: dict[tuple[int, int, str], _Declaration] = {}
     for candidate in candidates:
-        unique[(candidate.source_start, candidate.source_end, candidate.term.casefold())] = candidate
+        key = (candidate.source_start, candidate.source_end, candidate.term.casefold())
+        unique[key] = candidate
     return sorted(unique.values(), key=lambda item: (item.source_start, item.term.casefold()))
 
 
