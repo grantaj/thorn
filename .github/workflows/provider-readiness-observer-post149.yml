@@ -1,0 +1,63 @@
+name: Observe provider readiness post-149
+
+on:
+  push:
+    branches:
+      - agent/provider-readiness-canary-post149-20260819
+
+jobs:
+  observe:
+    if: ${{ github.event.head_commit.message == 'OBSERVE_PROVIDER_READINESS_CANARY_POST149_20260819' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    env:
+      AUTHORIZED_SHA: 69d80c44c9293869d477090bf56172316946f77e
+      TARGET_WORKFLOW_NAME: Authorized provider readiness post-149
+    steps:
+      - name: Find completed authorized canary and report to issue 146
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json=""
+          for i in $(seq 1 90); do
+            runs="$(curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$AUTHORIZED_SHA&per_page=100")"
+            run_json="$(printf '%s' "$runs" | python -c 'import json,os,sys; data=json.load(sys.stdin); name=os.environ["TARGET_WORKFLOW_NAME"]; sha=os.environ["AUTHORIZED_SHA"]; matches=[r for r in data.get("workflow_runs",[]) if r.get("name")==name and r.get("head_sha")==sha]; print(json.dumps(matches[0]) if matches else "")')"
+            if [ -n "$run_json" ]; then
+              status="$(printf '%s' "$run_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
+              if [ "$status" = completed ]; then
+                break
+              fi
+            fi
+            sleep 10
+          done
+          if [ -z "$run_json" ]; then
+            echo "Authorized canary run not found" >&2
+            exit 1
+          fi
+          run_id="$(printf '%s' "$run_json" | python -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+          conclusion="$(printf '%s' "$run_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("conclusion",""))')"
+          html_url="$(printf '%s' "$run_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("html_url",""))')"
+          artifacts="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100")"
+          artifact_id="$(printf '%s' "$artifacts" | python -c 'import json,sys; a=json.load(sys.stdin).get("artifacts",[]); print(a[0]["id"] if a else "")')"
+          artifact_name="$(printf '%s' "$artifacts" | python -c 'import json,sys; a=json.load(sys.stdin).get("artifacts",[]); print(a[0]["name"] if a else "")')"
+          body="Provider-readiness observer result for authorized post-#149 canary.\n\n- trigger SHA: \`$AUTHORIZED_SHA\`\n- run ID: \`$run_id\`\n- conclusion: **$conclusion**\n- artifact ID: \`${artifact_id:-none}\`\n- artifact: \`${artifact_name:-none}\`\n- run: $html_url\n\nThis observer is keyless and made no provider request. It reports the single already-authorized canary run only."
+          python - "$body" > /tmp/comment.json <<'PY'
+import json, sys
+print(json.dumps({"body": sys.argv[1]}))
+PY
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/146/comments" \
+            --data-binary @/tmp/comment.json
