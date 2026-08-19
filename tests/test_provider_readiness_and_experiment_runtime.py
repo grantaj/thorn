@@ -23,11 +23,11 @@ from thorn.provider_readiness import (
     verify_readiness_evidence,
 )
 from thorn.providers import openai as openai_provider
-from thorn.providers.execution_contract import (
-    ProviderTransportProfile,
-    build_provider_execution_contract,
+from thorn.providers.execution_contract import build_provider_execution_contract
+from thorn.providers.request_envelope import (
+    PROOF_REVIEW_MAX_OUTPUT_TOKENS,
+    proof_review_request_envelope,
 )
-from thorn.providers.request_envelope import proof_review_request_envelope
 
 
 class _ReadinessResponse:
@@ -111,7 +111,8 @@ def test_readiness_preflight_is_keyless_and_covers_initial_and_rescue_profiles(
     assert evidence.status == "preflight-ready"
     assert evidence.provider_instantiated is False
     assert evidence.scientific_authorization is False
-    assert evidence.max_output_tokens == READINESS_CANARY_MAX_OUTPUT_TOKENS
+    assert evidence.max_output_tokens == PROOF_REVIEW_MAX_OUTPUT_TOKENS
+    assert READINESS_CANARY_MAX_OUTPUT_TOKENS == PROOF_REVIEW_MAX_OUTPUT_TOKENS
     assert evidence.boundary_source_tree_sha == "synthetic-tree"
     assert evidence.run_id == "preflight-123"
     assert len(evidence.transport_profiles) == 2
@@ -119,12 +120,17 @@ def test_readiness_preflight_is_keyless_and_covers_initial_and_rescue_profiles(
     initial_profile, rescue_profile = evidence.transport_profiles
     assert initial_profile.message_roles == ("system", "user")
     assert rescue_profile.message_roles == ("system", "user", "assistant", "user")
+    assert initial_profile.max_output_tokens == PROOF_REVIEW_MAX_OUTPUT_TOKENS
+    assert rescue_profile.max_output_tokens == PROOF_REVIEW_MAX_OUTPUT_TOKENS
     assert initial_profile.max_enum_items >= READINESS_CANARY_SOURCE_ENUM_SIZE
     assert rescue_profile.max_enum_items >= READINESS_CANARY_CARRIED_ITEMS
     assert rescue_profile.max_array_bound >= READINESS_CANARY_CARRIED_ITEMS
+    assert initial_profile.literal_set_cardinalities
+    assert rescue_profile.literal_set_cardinalities
+    assert initial_profile.schema_utf8_bytes > 0
 
     wire = evidence.execution_contract.wire_request
-    assert wire["max_output_tokens"] == READINESS_CANARY_MAX_OUTPUT_TOKENS
+    assert wire["max_output_tokens"] == PROOF_REVIEW_MAX_OUTPUT_TOKENS
     text = wire["text"]
     assert isinstance(text, dict)
     response_format = text["format"]
@@ -144,24 +150,35 @@ def test_readiness_preflight_is_keyless_and_covers_initial_and_rescue_profiles(
     ]
 
 
-def test_transport_profile_erases_literal_values_but_preserves_cardinality_bound() -> None:
-    readiness = preflight_readiness("test-model")
-    profile = readiness.transport_profiles[0]
-    smaller = ProviderTransportProfile(
-        provider=profile.provider,
-        endpoint=profile.endpoint,
-        kind=profile.kind,
-        message_roles=profile.message_roles,
-        schema_shape_sha256=profile.schema_shape_sha256,
-        max_enum_items=max(1, profile.max_enum_items - 1),
-        max_array_bound=profile.max_array_bound,
-    )
-    larger = smaller.model_copy(
-        update={"max_enum_items": profile.max_enum_items + 1}
+def test_transport_profile_requires_exact_provider_output_cap() -> None:
+    profile = preflight_readiness("test-model").transport_profiles[0]
+    different_cap = profile.model_copy(
+        update={"max_output_tokens": profile.max_output_tokens + 1}
     )
 
-    assert profile.covers(smaller)
-    assert not profile.covers(larger)
+    assert not profile.covers(different_cap)
+
+
+def test_transport_profile_cardinality_coverage_is_path_sensitive() -> None:
+    profile = preflight_readiness("test-model").transport_profiles[0]
+    paths = sorted(profile.literal_set_cardinalities)
+    assert len(paths) >= 2
+    target, unrelated = paths[:2]
+
+    ready_cardinality = dict(profile.literal_set_cardinalities)
+    ready_cardinality[target] = 5
+    ready_cardinality[unrelated] = 1_000
+    ready = profile.model_copy(
+        update={"literal_set_cardinalities": ready_cardinality}
+    )
+
+    scientific_cardinality = dict(ready_cardinality)
+    scientific_cardinality[target] = 6
+    scientific = ready.model_copy(
+        update={"literal_set_cardinalities": scientific_cardinality}
+    )
+
+    assert not ready.covers(scientific)
 
 
 def test_live_readiness_exercises_both_profiles_and_replays_both(
@@ -199,6 +216,8 @@ def test_live_readiness_exercises_both_profiles_and_replays_both(
     assert len(client.responses.calls) == 2
     assert client.max_retries == 0
     assert client.responses.calls[0]["input"] != client.responses.calls[1]["input"]
+    assert client.responses.calls[0]["max_output_tokens"] == PROOF_REVIEW_MAX_OUTPUT_TOKENS
+    assert client.responses.calls[1]["max_output_tokens"] == PROOF_REVIEW_MAX_OUTPUT_TOKENS
     assert evidence.provider_response is not None
     assert evidence.provider_response["id"] == "resp_readiness_initial"
     assert evidence.rescue_provider_response is not None
@@ -222,12 +241,14 @@ def test_readiness_rescue_contract_is_deterministic_and_multi_message() -> None:
             max_output_tokens=READINESS_CANARY_MAX_OUTPUT_TOKENS,
         )
     )
-    assert contract.transport_profile().message_roles == (
+    profile = contract.transport_profile()
+    assert profile.message_roles == (
         "system",
         "user",
         "assistant",
         "user",
     )
+    assert profile.max_output_tokens == PROOF_REVIEW_MAX_OUTPUT_TOKENS
 
 
 def test_shared_budget_counts_failed_attempts_without_inventing_usage() -> None:
