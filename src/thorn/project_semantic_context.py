@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from thorn.frontend import FrontendFile, ParsedProject, SourceSpan
+from thorn.frontend import FrontendFile, FrontendMath, ParsedProject, SourceSpan
 from thorn.symbol_extract import _span
 from thorn.symbols import (
     Constraint,
@@ -19,8 +19,11 @@ from thorn.symbols import (
 
 # This module recognizes declaration *grammar*, never mathematical vocabulary.
 # A candidate becomes review context only when a theorem statement or proof has
-# a concrete lexical use of the declared term.  Proximity alone is not an edge.
-_STYLE_TERM = r"(?:\\[A-Za-z]+\{[^{}]+\}|[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z][A-Za-z0-9-]*){0,3})"
+# a concrete lexical use of the declared term. Proximity alone is not an edge.
+_STYLE_TERM = (
+    r"(?:\\[A-Za-z]+\{[^{}]+\}|"
+    r"[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z][A-Za-z0-9-]*){0,3})"
+)
 
 _CALLED_RE = re.compile(
     rf"\b(?:is|are|will\s+be|shall\s+be)\s+called\s+"
@@ -53,6 +56,7 @@ _AMBIENT_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _STYLE_WRAPPER_RE = re.compile(r"\\[A-Za-z]+\{(?P<inner>[^{}]+)\}\Z")
+_DOCUMENT_BEGIN = r"\begin{document}"
 
 
 @dataclass(frozen=True)
@@ -65,7 +69,7 @@ class _Declaration:
     source_end: int
 
 
-def _math_containing(file: FrontendFile, offset: int):
+def _math_containing(file: FrontendFile, offset: int) -> FrontendMath | None:
     for math in file.math:
         if math.span.start_offset <= offset < math.span.end_offset:
             return math
@@ -79,9 +83,16 @@ def _math_ends_sentence(raw: str) -> bool:
     )
 
 
+def _document_body_floor(raw: str, cue_offset: int) -> int:
+    start = raw.rfind(_DOCUMENT_BEGIN, 0, cue_offset)
+    return start + len(_DOCUMENT_BEGIN) if start >= 0 else 0
+
+
 def _sentence_bounds(file: FrontendFile, cue_offset: int) -> tuple[int, int]:
     raw = file.raw
-    paragraph_start = raw.rfind("\n\n", 0, cue_offset) + 2
+    body_floor = _document_body_floor(raw, cue_offset)
+    paragraph_marker = raw.rfind("\n\n", body_floor, cue_offset)
+    paragraph_start = paragraph_marker + 2 if paragraph_marker >= body_floor else body_floor
     paragraph_end = raw.find("\n\n", cue_offset)
     if paragraph_end < 0:
         paragraph_end = len(raw)
@@ -91,6 +102,9 @@ def _sentence_bounds(file: FrontendFile, cue_offset: int) -> tuple[int, int]:
     while cursor >= paragraph_start:
         math = _math_containing(file, cursor)
         if math is not None:
+            if _math_ends_sentence(math.raw):
+                start = math.span.end_offset
+                break
             cursor = math.span.start_offset - 1
             continue
         if raw[cursor] in ".!?":
@@ -178,13 +192,34 @@ def _declarations(file: FrontendFile, regions: list[ResultRegion]) -> list[_Decl
 
     unique: dict[tuple[int, int, str], _Declaration] = {}
     for candidate in candidates:
-        unique[(candidate.source_start, candidate.source_end, candidate.term.lower())] = candidate
-    return sorted(unique.values(), key=lambda item: (item.source_start, item.term.lower()))
+        unique[(candidate.source_start, candidate.source_end, candidate.term.casefold())] = candidate
+    return sorted(unique.values(), key=lambda item: (item.source_start, item.term.casefold()))
+
+
+def _term_variants(term: str) -> tuple[str, ...]:
+    """Return mechanically related lexical forms without mathematical vocabulary."""
+
+    variants = [term]
+    words = term.split()
+    if not words:
+        return tuple(variants)
+    final = words[-1]
+    singular: str | None = None
+    if final.lower().endswith("ies") and len(final) > 3:
+        singular = final[:-3] + "y"
+    elif final.lower().endswith("s") and not final.lower().endswith("ss") and len(final) > 1:
+        singular = final[:-1]
+    if singular is not None:
+        variants.append(" ".join([*words[:-1], singular]))
+    return tuple(dict.fromkeys(variants))
 
 
 def _term_pattern(term: str) -> re.Pattern[str]:
-    pieces = [re.escape(piece) for piece in term.split()]
-    body = r"\s+".join(pieces)
+    alternatives: list[str] = []
+    for variant in _term_variants(term):
+        pieces = [re.escape(piece) for piece in variant.split()]
+        alternatives.append(r"\s+".join(pieces))
+    body = "(?:" + "|".join(alternatives) + ")"
     return re.compile(rf"(?<![A-Za-z0-9]){body}(?![A-Za-z0-9])", re.IGNORECASE)
 
 
@@ -283,7 +318,7 @@ def _append_declaration(
                 identifier=f"{identifier}:definition",
                 symbol_identifier=identifier,
                 operator=":=",
-                # The authoritative meaning is ordinary prose.  Deliberately do
+                # The authoritative meaning is ordinary prose. Deliberately do
                 # not fabricate a formula; the canonical source handle is the
                 # semantic payload and thorn-proof/1 may request it.
                 expression_latex="",
@@ -305,6 +340,26 @@ def _append_declaration(
     return symbol
 
 
+def _resolve_semantic_term(
+    table: SymbolTable,
+    *,
+    name: str,
+    source: SourceSpan,
+) -> Symbol | None:
+    variants = {variant.casefold() for variant in _term_variants(name)}
+    candidates = [
+        symbol
+        for symbol in table.symbols
+        if symbol.identifier.startswith("semantic:")
+        and symbol.source.file == source.file
+        and symbol.source.start_offset < source.start_offset
+        and symbol.name.casefold() in variants
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item.source.start_offset)
+
+
 def add_project_semantic_context(
     project: ParsedProject,
     regions: list[ResultRegion],
@@ -314,7 +369,7 @@ def add_project_semantic_context(
 
     Only declaration-shaped prose is eligible, and eligibility is not enough:
     the declared lexical term must be concretely used by a later theorem
-    statement or proof.  This creates a normal resolved SymbolUse dependency,
+    statement or proof. This creates a normal resolved SymbolUse dependency,
     so existing result selection, canonical Proof-IR provenance, source rescue,
     replay, and report navigation remain the sole production path.
     """
@@ -324,52 +379,59 @@ def add_project_semantic_context(
         regions_by_file.setdefault(region.file, []).append(region)
 
     existing_symbols = {
-        (symbol.name.lower(), symbol.source.file, symbol.source.start_offset)
+        (symbol.name.casefold(), symbol.source.file, symbol.source.start_offset)
         for symbol in table.symbols
     }
-    existing_uses = {
-        (use.name.lower(), use.source.file, use.source.start_offset, use.source.end_offset)
-        for use in table.uses
-    }
+    pending_uses: list[
+        tuple[FrontendFile, Symbol, list[tuple[ResultRegion, ScopeKind, int, int]]]
+    ] = []
 
+    # Register all eligible declarations before resolving uses. This preserves
+    # ordinary lexical shadowing when the same term is redefined later.
     for file in project.files:
         file_regions = regions_by_file.get(file.path, [])
         for declaration in _declarations(file, file_regions):
             occurrences = _result_occurrences(file, file_regions, declaration)
             if not occurrences:
                 continue
-            key = (declaration.term.lower(), file.path, declaration.term_start)
+            key = (declaration.term.casefold(), file.path, declaration.term_start)
             if key in existing_symbols:
                 continue
             symbol = _append_declaration(file, table, declaration)
             existing_symbols.add(key)
+            pending_uses.append((file, symbol, occurrences))
 
-            for region, kind, start, end in occurrences:
-                source = _span(file.path, file.raw, start, end)
-                use_key = (symbol.name.lower(), source.file, source.start_offset, source.end_offset)
-                if use_key in existing_uses:
-                    continue
-                scope = _scope_for_use(
-                    table,
-                    result_identifier=region.identifier,
-                    kind=kind,
+    existing_uses = {
+        (use.name.casefold(), use.source.file, use.source.start_offset, use.source.end_offset)
+        for use in table.uses
+    }
+    for file, symbol, occurrences in pending_uses:
+        for region, kind, start, end in occurrences:
+            source = _span(file.path, file.raw, start, end)
+            use_key = (symbol.name.casefold(), source.file, source.start_offset, source.end_offset)
+            if use_key in existing_uses:
+                continue
+            scope = _scope_for_use(
+                table,
+                result_identifier=region.identifier,
+                kind=kind,
+                source=source,
+            )
+            if scope is None:
+                continue
+            resolved = _resolve_semantic_term(table, name=symbol.name, source=source)
+            table.uses.append(
+                SymbolUse(
+                    name=symbol.name,
+                    scope_identifier=scope,
                     source=source,
+                    raw=source.text(file.raw),
+                    resolved_symbol_identifier=(
+                        resolved.identifier if resolved is not None else None
+                    ),
                 )
-                if scope is None:
-                    continue
-                resolved = table.resolve(symbol.name, scope, source)
-                table.uses.append(
-                    SymbolUse(
-                        name=symbol.name,
-                        scope_identifier=scope,
-                        source=source,
-                        raw=source.text(file.raw),
-                        resolved_symbol_identifier=(
-                            resolved.identifier if resolved is not None else None
-                        ),
-                    )
-                )
-                existing_uses.add(use_key)
+            )
+            existing_uses.add(use_key)
 
     table.symbols.sort(key=lambda item: (item.source.file, item.source.start_offset))
     table.definitions.sort(key=lambda item: (item.source.file, item.source.start_offset))
