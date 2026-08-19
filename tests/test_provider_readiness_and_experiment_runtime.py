@@ -31,9 +31,15 @@ from thorn.providers.request_envelope import (
 
 
 class _ReadinessResponse:
-    def __init__(self, output_text: str, *, response_id: str) -> None:
+    def __init__(
+        self,
+        output_text: str,
+        *,
+        response_id: str,
+        status: str = "completed",
+    ) -> None:
         self.output_text = output_text
-        self.status = "completed"
+        self.status = status
         self.response_id = response_id
         self.usage = SimpleNamespace(input_tokens=31, output_tokens=17, total_tokens=48)
 
@@ -227,6 +233,38 @@ def test_live_readiness_exercises_both_profiles_and_replays_both(
     assert initial.action == "review"
     assert rescue.action == "review"
     assert len(rescue.dispositions) == READINESS_CANARY_CARRIED_ITEMS
+
+
+def test_incomplete_valid_proof_review_cannot_make_readiness_green(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _ReadinessClient(
+        [
+            _ReadinessResponse(
+                _initial_review_json(),
+                response_id="resp_incomplete_readiness",
+                status="incomplete",
+            )
+        ]
+    )
+    monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
+
+    evidence = run_live_readiness(
+        "test-model",
+        boundary_source_tree_sha="synthetic-tree",
+        run_id="run-incomplete",
+    )
+
+    assert evidence.status == "live-response-failure"
+    assert evidence.failed_profile == "initial"
+    assert evidence.response_failure_type == "ProviderResponseNotCompleted"
+    assert evidence.provider_attempts == 1
+    assert evidence.responses_received == 1
+    assert evidence.model_generations == 1
+    assert len(client.responses.calls) == 1
+    assert evidence.provider_response is not None
+    assert evidence.provider_response["status"] == "incomplete"
+    assert evidence.provider_response["id"] == "resp_incomplete_readiness"
 
 
 def test_readiness_rescue_contract_is_deterministic_and_multi_message() -> None:
