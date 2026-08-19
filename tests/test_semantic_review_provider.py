@@ -242,21 +242,24 @@ class FakeRawProvider:
 
 
 class FakeResponses:
-    def __init__(self, outputs: list[object | None]) -> None:
+    def __init__(self, outputs: list[AttackReport | None]) -> None:
         self.outputs = iter(outputs)
         self.calls: list[dict[str, object]] = []
 
-    def parse(self, **kwargs: object) -> SimpleNamespace:
+    def create(self, **kwargs: object) -> SimpleNamespace:
         self.calls.append(kwargs)
+        output = next(self.outputs)
         return SimpleNamespace(
-            output_parsed=next(self.outputs),
+            output_text=output.model_dump_json() if output is not None else "",
+            status="completed" if output is not None else "incomplete",
             usage=SimpleNamespace(input_tokens=12, output_tokens=3, total_tokens=15),
         )
 
 
 class FakeClient:
-    def __init__(self, outputs: list[object | None]) -> None:
+    def __init__(self, outputs: list[AttackReport | None]) -> None:
         self.responses = FakeResponses(outputs)
+        self.max_retries = 2
 
 
 def test_semantic_request_rendering_is_deterministic_and_preserves_identity() -> None:
@@ -431,11 +434,21 @@ def test_openai_semantic_adapter_is_keyless_with_fake_client(
 
     assert report.findings == []
     assert provider.requests == 1
+    assert provider.provider_attempts == 1
+    assert provider.responses_received == 1
+    assert provider.model_generations == 1
     assert provider.total_tokens == 15
+    assert client.max_retries == 0
     assert len(client.responses.calls) == 1
     call = client.responses.calls[0]
     assert call["model"] == "fake-model"
-    assert call["text_format"] is AttackReport
+    text = call["text"]
+    assert isinstance(text, dict)
+    response_format = text["format"]
+    assert isinstance(response_format, dict)
+    assert response_format["type"] == "json_schema"
+    assert response_format["name"] == "AttackReport"
+    assert response_format["strict"] is True
     payload = call["input"]
     assert isinstance(payload, list)
     assert "bounded mathematical neighbourhood" in payload[0]["content"]
