@@ -143,6 +143,8 @@ class OpenAIProvider:
         self.input_tokens = 0
         self.output_tokens = 0
         self.total_tokens = 0
+        self.last_execution_contract: ProviderExecutionContract | None = None
+        self.last_response_payload: dict[str, object] | None = None
 
     def execution_contract(
         self,
@@ -165,6 +167,8 @@ class OpenAIProvider:
         envelope: ProviderRequestEnvelope,
     ) -> tuple[object, ProviderExecutionContract]:
         contract = self.execution_contract(envelope)
+        self.last_execution_contract = contract
+        self.last_response_payload = None
 
         # The attempt exists before network dispatch. Any exception after this point
         # therefore leaves an auditable provider-attempt count.
@@ -183,6 +187,7 @@ class OpenAIProvider:
             ) from exc
 
         self.responses_received += 1
+        self.last_response_payload = _response_payload(response)
         if _generation_known(response):
             self.model_generations += 1
         self._record_usage(response)
