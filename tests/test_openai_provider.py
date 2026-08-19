@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from pydantic import BaseModel
 
 from thorn.audit import audit_unit
 from thorn.models import (
@@ -17,28 +18,32 @@ from thorn.models import (
     TheoremUnit,
 )
 from thorn.providers import openai as openai_provider
+from thorn.providers.base import ProviderResponseValidationError
 
 
 class FakeResponses:
-    def __init__(self, outputs: list[object | None]) -> None:
+    def __init__(self, outputs: list[BaseModel | None]) -> None:
         self.outputs = iter(outputs)
         self.calls: list[dict[str, object]] = []
 
-    def parse(self, **kwargs: object) -> SimpleNamespace:
+    def create(self, **kwargs: object) -> SimpleNamespace:
         self.calls.append(kwargs)
+        output = next(self.outputs)
         return SimpleNamespace(
-            output_parsed=next(self.outputs),
+            output_text=output.model_dump_json() if output is not None else "",
+            status="completed" if output is not None else "incomplete",
             usage=SimpleNamespace(
                 input_tokens=100,
-                output_tokens=20,
-                total_tokens=120,
+                output_tokens=20 if output is not None else 0,
+                total_tokens=120 if output is not None else 100,
             ),
         )
 
 
 class FakeClient:
-    def __init__(self, outputs: list[object | None]) -> None:
+    def __init__(self, outputs: list[BaseModel | None]) -> None:
         self.responses = FakeResponses(outputs)
+        self.max_retries = 2
 
 
 def _unit() -> TheoremUnit:
@@ -99,7 +104,9 @@ def test_openai_provider_attack_defend_pipeline_is_keyless(monkeypatch: pytest.M
     assert result.findings[0].defender_verdict == DefenseVerdict.SURVIVES
     assert result.findings[0].confidence == 0.85
 
-    assert provider.requests == 2
+    assert client.max_retries == 0
+    assert provider.requests == provider.live_requests == provider.provider_attempts == 2
+    assert provider.responses_received == provider.model_generations == 2
     assert provider.input_tokens == 200
     assert provider.output_tokens == 40
     assert provider.total_tokens == 240
@@ -108,7 +115,18 @@ def test_openai_provider_attack_defend_pipeline_is_keyless(monkeypatch: pytest.M
     attacker_call, defender_call = client.responses.calls
 
     assert attacker_call["model"] == "fake-model"
-    assert attacker_call["text_format"] is AttackReport
+    assert attacker_call["store"] is False
+    attacker_text = attacker_call["text"]
+    assert isinstance(attacker_text, dict)
+    attacker_format = attacker_text["format"]
+    assert isinstance(attacker_format, dict)
+    assert attacker_format["type"] == "json_schema"
+    assert attacker_format["name"] == "AttackReport"
+    assert attacker_format["strict"] is True
+    attacker_schema = attacker_format["schema"]
+    assert isinstance(attacker_schema, dict)
+    assert attacker_schema["additionalProperties"] is False
+
     attacker_input = attacker_call["input"]
     assert isinstance(attacker_input, list)
     attacker_system = attacker_input[0]["content"]
@@ -123,7 +141,11 @@ def test_openai_provider_attack_defend_pipeline_is_keyless(monkeypatch: pytest.M
     assert "Finite-dimensional widgets are bounded." in attacker_packet
 
     assert defender_call["model"] == "fake-model"
-    assert defender_call["text_format"] is DefenseReport
+    defender_text = defender_call["text"]
+    assert isinstance(defender_text, dict)
+    defender_format = defender_text["format"]
+    assert isinstance(defender_format, dict)
+    assert defender_format["name"] == "DefenseReport"
     defender_input = defender_call["input"]
     assert isinstance(defender_input, list)
     defender_system = defender_input[0]["content"]
@@ -143,7 +165,9 @@ def test_empty_attack_skips_defender_call(monkeypatch: pytest.MonkeyPatch) -> No
     result = audit_unit(_unit(), provider, use_defender=True, cache=None)
 
     assert result.findings == []
-    assert provider.requests == 1
+    assert provider.provider_attempts == 1
+    assert provider.responses_received == 1
+    assert provider.model_generations == 1
     assert provider.total_tokens == 120
     assert len(client.responses.calls) == 1
 
@@ -153,8 +177,12 @@ def test_missing_structured_attacker_result_fails_closed(monkeypatch: pytest.Mon
     monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
     provider = openai_provider.OpenAIProvider(model="fake-model")
 
-    with pytest.raises(RuntimeError, match="attacker returned no structured result"):
+    with pytest.raises(ProviderResponseValidationError, match="attacker returned no structured result"):
         provider.attack(_unit())
 
-    assert provider.requests == 1
-    assert provider.total_tokens == 120
+    assert provider.provider_attempts == 1
+    assert provider.responses_received == 1
+    assert provider.model_generations == 0
+    assert provider.input_tokens == 100
+    assert provider.output_tokens == 0
+    assert provider.total_tokens == 100
