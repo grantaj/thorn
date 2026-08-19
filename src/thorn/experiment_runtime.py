@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -16,16 +17,20 @@ from thorn.provider_readiness import ProviderReadinessEvidence, verify_readiness
 from thorn.providers.execution_contract import (
     ProviderExecutionContract,
     ProviderRuntimeIdentity,
+    ProviderTransportProfile,
     build_provider_execution_contract,
     current_provider_runtime,
+    provider_adapter_sha256,
+    provider_lock_sha256,
+    provider_runtime_matches_lock,
 )
 from thorn.providers.request_envelope import (
     PROOF_REVIEW_MAX_OUTPUT_TOKENS,
     proof_review_request_envelope,
 )
 
-EXPERIMENT_MANIFEST_FORMAT: Literal["thorn-provider-experiment/1"] = (
-    "thorn-provider-experiment/1"
+EXPERIMENT_MANIFEST_FORMAT: Literal["thorn-provider-experiment/2"] = (
+    "thorn-provider-experiment/2"
 )
 SERIALIZATION_FRAMING_RESERVE_BYTES = 2_048
 
@@ -101,12 +106,27 @@ class ProviderExperimentCase(BaseModel):
     initial_execution_fingerprint: str
 
 
+class ProviderReadinessFreeze(BaseModel):
+    """Successful live readiness evidence frozen into a scientific manifest."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    evidence_sha256: str
+    run_id: str
+    generated_at: datetime
+    boundary_source_tree_sha: str
+    adapter_sha256: str
+    provider_lock_sha256: str
+    transport_profile_fingerprints: tuple[str, ...]
+    max_age_hours: int = Field(default=24, ge=1, le=168)
+
+
 class ProviderExperimentManifest(BaseModel):
     """Data-only freeze surface for new provider-backed experiments."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    format: Literal["thorn-provider-experiment/1"] = EXPERIMENT_MANIFEST_FORMAT
+    format: Literal["thorn-provider-experiment/2"] = EXPERIMENT_MANIFEST_FORMAT
     experiment_id: str
     repository_revision: str
     src_tree_sha: str
@@ -119,6 +139,7 @@ class ProviderExperimentManifest(BaseModel):
     provider_retries: Literal[0] = 0
     paid_execution_authorized: Literal[False] = False
     runtime: ProviderRuntimeIdentity
+    readiness: ProviderReadinessFreeze
     budget: ProviderBudgetSpec
     cases: tuple[ProviderExperimentCase, ...]
 
@@ -221,6 +242,18 @@ def _execution_contract(
     return build_provider_execution_contract(envelope)
 
 
+def assert_contract_profile_covered(
+    contract: ProviderExecutionContract,
+    readiness_profiles: tuple[ProviderTransportProfile, ...],
+) -> None:
+    scientific_profile = contract.transport_profile()
+    if not any(profile.covers(scientific_profile) for profile in readiness_profiles):
+        raise ExperimentFreezeError(
+            "provider transport profile was not exercised by frozen readiness evidence: "
+            f"{scientific_profile.fingerprint()}"
+        )
+
+
 @dataclass
 class GuardedProofReviewTransport:
     """Budget/freeze wrapper shared by manifest-driven live and replay runs."""
@@ -228,6 +261,7 @@ class GuardedProofReviewTransport:
     delegate: ProofReviewTransport
     budget: ProviderBudget
     expected_initial_fingerprint: str
+    readiness_profiles: tuple[ProviderTransportProfile, ...] = ()
     model: str = field(init=False)
     contracts: list[ProviderExecutionContract] = field(default_factory=list)
 
@@ -244,6 +278,8 @@ class GuardedProofReviewTransport:
             and contract.fingerprint() != self.expected_initial_fingerprint
         ):
             raise ExperimentFreezeError("frozen initial provider execution fingerprint drifted")
+        if self.readiness_profiles:
+            assert_contract_profile_covered(contract, self.readiness_profiles)
         self.budget.reserve(contract)
         before = ProviderUsageSnapshot.capture(self.delegate)
         try:
@@ -256,9 +292,13 @@ class GuardedProofReviewTransport:
 
 def assert_manifest_runtime(manifest: ProviderExperimentManifest) -> None:
     current = current_provider_runtime()
+    if not provider_runtime_matches_lock(current):
+        raise ExperimentFreezeError(
+            "installed provider dependency closure does not match committed runtime lock"
+        )
     if current != manifest.runtime:
         raise ExperimentFreezeError(
-            "provider-sensitive runtime differs from experiment manifest: "
+            "provider runtime differs from experiment manifest: "
             f"current={current.model_dump(mode='json')!r} "
             f"frozen={manifest.runtime.model_dump(mode='json')!r}"
         )
@@ -267,22 +307,53 @@ def assert_manifest_runtime(manifest: ProviderExperimentManifest) -> None:
 def assert_readiness_compatible(
     evidence: ProviderReadinessEvidence,
     *,
+    evidence_sha256: str,
     manifest: ProviderExperimentManifest,
-    scientific_contract: ProviderExecutionContract,
+    scientific_contracts: tuple[ProviderExecutionContract, ...],
 ) -> None:
-    """Require current, keylessly replayable readiness for the same provider seam."""
+    """Require fresh, frozen readiness coverage for every scientific profile."""
 
     verify_readiness_evidence(evidence)
-    readiness = evidence.execution_contract
+    frozen = manifest.readiness
+    if evidence_sha256 != frozen.evidence_sha256:
+        raise ExperimentFreezeError("readiness evidence bytes differ from the frozen manifest")
     if evidence.model != manifest.model:
         raise ExperimentFreezeError("readiness model does not match scientific manifest")
-    if readiness.runtime != manifest.runtime or scientific_contract.runtime != manifest.runtime:
-        raise ExperimentFreezeError(
-            "readiness/scientific provider runtime does not match manifest"
-        )
-    if readiness.provider != scientific_contract.provider:
-        raise ExperimentFreezeError("readiness and scientific provider identities differ")
-    if readiness.endpoint != scientific_contract.endpoint:
-        raise ExperimentFreezeError("readiness and scientific provider endpoints differ")
-    if readiness.acceptance_contract != scientific_contract.acceptance_contract:
-        raise ExperimentFreezeError("readiness and scientific validator contracts differ")
+    if evidence.run_id != frozen.run_id:
+        raise ExperimentFreezeError("readiness run identity differs from the frozen manifest")
+    if evidence.generated_at != frozen.generated_at:
+        raise ExperimentFreezeError("readiness generation time differs from the frozen manifest")
+    if evidence.boundary_source_tree_sha != frozen.boundary_source_tree_sha:
+        raise ExperimentFreezeError("readiness provider source-tree identity drifted")
+    if frozen.boundary_source_tree_sha != manifest.src_tree_sha:
+        raise ExperimentFreezeError("readiness did not exercise the frozen provider source tree")
+    if evidence.adapter_sha256 != frozen.adapter_sha256:
+        raise ExperimentFreezeError("readiness adapter identity differs from the manifest")
+    if evidence.adapter_sha256 != provider_adapter_sha256():
+        raise ExperimentFreezeError("current provider adapter differs from readiness evidence")
+    if evidence.provider_lock_sha256 != frozen.provider_lock_sha256:
+        raise ExperimentFreezeError("readiness provider lock differs from the manifest")
+    if evidence.provider_lock_sha256 != provider_lock_sha256():
+        raise ExperimentFreezeError("current provider lock differs from readiness evidence")
+
+    evidence_profiles = tuple(profile.fingerprint() for profile in evidence.transport_profiles)
+    if evidence_profiles != frozen.transport_profile_fingerprints:
+        raise ExperimentFreezeError("readiness transport profiles differ from the manifest")
+
+    generated = evidence.generated_at
+    if generated.tzinfo is None:
+        generated = generated.replace(tzinfo=timezone.utc)
+    age_hours = (datetime.now(timezone.utc) - generated).total_seconds() / 3600
+    if age_hours < 0 or age_hours > frozen.max_age_hours:
+        raise ExperimentFreezeError("readiness evidence is outside the frozen freshness window")
+
+    for contract in scientific_contracts:
+        if contract.runtime != manifest.runtime:
+            raise ExperimentFreezeError("scientific contract runtime differs from manifest")
+        if contract.provider != evidence.execution_contract.provider:
+            raise ExperimentFreezeError("readiness and scientific provider identities differ")
+        if contract.endpoint != evidence.execution_contract.endpoint:
+            raise ExperimentFreezeError("readiness and scientific provider endpoints differ")
+        if contract.acceptance_contract != evidence.execution_contract.acceptance_contract:
+            raise ExperimentFreezeError("readiness and scientific validator contracts differ")
+        assert_contract_profile_covered(contract, evidence.transport_profiles)
