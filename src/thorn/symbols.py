@@ -214,9 +214,11 @@ def extract_symbol_table(
     # introductions and then record their uses through the existing scope IR.
     from thorn.project_context import add_project_authoritative_context
     from thorn.project_context_source import preserve_project_authoritative_source
+    from thorn.project_semantic_context import add_project_semantic_context
 
     add_project_authoritative_context(project, regions, table)
     preserve_project_authoritative_source(project, table)
+    add_project_semantic_context(project, regions, table)
 
     if linguistic_frontend is not None:
         from thorn.linguistic_symbols import add_linguistic_symbol_candidates
