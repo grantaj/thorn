@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       confirm_live:
-        description: Make one bounded paid synthetic readiness call after keyless preflight
+        description: Make two bounded paid synthetic readiness calls after keyless preflight
         required: true
         default: false
         type: boolean
@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ""
+      THORN_READINESS_MODEL: ${{ inputs.model }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,11 +26,11 @@ jobs:
           python-version: "3.11.16"
           cache: pip
       - run: python -m pip install -c constraints/provider-runtime.txt -e .
-      - name: Construct exact synthetic request keylessly
+      - name: Construct max-shape initial and rescue requests keylessly
         run: |
           python scripts/provider_readiness_canary.py \
             --preflight \
-            --model '${{ inputs.model }}' \
+            --model "$THORN_READINESS_MODEL" \
             --output "$RUNNER_TEMP/provider-readiness-preflight.json"
       - uses: actions/upload-artifact@v4
         with:
@@ -43,6 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      THORN_READINESS_MODEL: ${{ inputs.model }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -50,7 +53,7 @@ jobs:
           python-version: "3.11.16"
           cache: pip
       - run: python -m pip install -c constraints/provider-runtime.txt -e .
-      - name: Make exactly one synthetic readiness request
+      - name: Make bounded synthetic initial and rescue readiness requests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -58,9 +61,9 @@ jobs:
           python scripts/provider_readiness_canary.py \
             --live \
             --confirm-paid-readiness-canary \
-            --model '${{ inputs.model }}' \
+            --model "$THORN_READINESS_MODEL" \
             --output "$RUNNER_TEMP/provider-readiness/live.json"
-      - name: Verify readiness evidence keylessly
+      - name: Verify both readiness responses keylessly
         env:
           OPENAI_API_KEY: ""
         run: |
