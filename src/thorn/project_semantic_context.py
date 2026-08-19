@@ -743,21 +743,22 @@ def add_project_semantic_context(
             continue
 
         if candidate.result_identifier is None:
-            scope_identifier: str | None = "project"
+            resolved_scope_identifier = "project"
         else:
-            scope_identifier = _scope_for_use(
+            maybe_scope_identifier = _scope_for_use(
                 table,
                 result_identifier=candidate.result_identifier,
                 kind=candidate.scope_kind,
                 source=source,
             )
-            if scope_identifier is None:
+            if maybe_scope_identifier is None:
                 continue
+            resolved_scope_identifier = maybe_scope_identifier
 
         table.uses.append(
             SymbolUse(
                 name=name,
-                scope_identifier=scope_identifier,
+                scope_identifier=resolved_scope_identifier,
                 source=source,
                 raw=source.text(file.raw),
                 resolved_symbol_identifier=(
