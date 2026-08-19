@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, TypeVar, cast
+from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
@@ -34,8 +34,6 @@ from thorn.providers.request_envelope import (
     semantic_request_envelope,
 )
 from thorn.semantic_review_render import SemanticReviewRequest
-
-TResponse = TypeVar("TResponse", bound=BaseModel)
 
 
 class ReplayError(RuntimeError):
@@ -261,11 +259,15 @@ class RecordingProvider:
         method_name: str,
         contract: ProviderExecutionContract,
         *args: object,
-    ) -> TResponse:
+    ) -> BaseModel:
         method = getattr(self._delegate, method_name)
         if bool(getattr(self._delegate, "accepts_execution_contract", False)):
-            return cast(TResponse, method(*args, execution_contract=contract))
-        return cast(TResponse, method(*args))
+            result = method(*args, execution_contract=contract)
+        else:
+            result = method(*args)
+        if not isinstance(result, BaseModel):
+            raise TypeError("provider delegate returned a non-model structured response")
+        return result
 
     def _assert_dispatched_contract(self, contract: ProviderExecutionContract) -> None:
         dispatched = getattr(self._delegate, "last_execution_contract", None)
@@ -373,8 +375,8 @@ class RecordingProvider:
     def _invoke(
         self,
         envelope: ProviderRequestEnvelope,
-        callback: Callable[[ProviderExecutionContract], TResponse],
-    ) -> tuple[TResponse, RecordedUsage, ProviderExecutionContract]:
+        callback: Callable[[ProviderExecutionContract], BaseModel],
+    ) -> tuple[BaseModel, RecordedUsage, ProviderExecutionContract]:
         contract = self.execution_contract(envelope)
         before = RecordedUsage.snapshot(self._delegate)
         try:
@@ -438,10 +440,13 @@ class RecordingProvider:
 
     def attack(self, unit: TheoremUnit) -> AttackReport:
         envelope = attack_request_envelope(unit, self.model)
-        response, usage, contract = self._invoke(
+        raw_response, usage, contract = self._invoke(
             envelope,
             lambda exact: self._call_with_contract("attack", exact, unit),
         )
+        if not isinstance(raw_response, AttackReport):
+            raise TypeError("attack delegate returned the wrong structured response type")
+        response = raw_response
         self._write(envelope, contract, response, usage)
         if self.verify_after_write:
             if self._replay().attack(unit) != response:
@@ -453,10 +458,13 @@ class RecordingProvider:
 
     def review_semantic(self, request: SemanticReviewRequest) -> AttackReport:
         envelope = semantic_request_envelope(request, self.model)
-        response, usage, contract = self._invoke(
+        raw_response, usage, contract = self._invoke(
             envelope,
             lambda exact: self._call_with_contract("review_semantic", exact, request),
         )
+        if not isinstance(raw_response, AttackReport):
+            raise TypeError("semantic delegate returned the wrong structured response type")
+        response = raw_response
         self._write(envelope, contract, response, usage)
         if self.verify_after_write:
             if self._replay().review_semantic(request) != response:
@@ -475,7 +483,7 @@ class RecordingProvider:
             self.model,
             max_output_tokens=self.proof_review_max_output_tokens,
         )
-        response, usage, contract = self._invoke(
+        raw_response, usage, contract = self._invoke(
             envelope,
             lambda exact: self._call_with_contract(
                 "review_proof_turn",
@@ -483,6 +491,9 @@ class RecordingProvider:
                 request,
             ),
         )
+        if not isinstance(raw_response, ProofReviewModelResponse):
+            raise TypeError("proof-review delegate returned the wrong structured response type")
+        response = raw_response
         try:
             normalized = validate_proof_review_response(request, response)
         except ProofReviewProtocolError as exc:
@@ -515,7 +526,7 @@ class RecordingProvider:
         findings: list[CandidateFinding],
     ) -> DefenseReport:
         envelope = defense_request_envelope(unit, findings, self.model)
-        response, usage, contract = self._invoke(
+        raw_response, usage, contract = self._invoke(
             envelope,
             lambda exact: self._call_with_contract(
                 "defend",
@@ -524,6 +535,9 @@ class RecordingProvider:
                 findings,
             ),
         )
+        if not isinstance(raw_response, DefenseReport):
+            raise TypeError("defense delegate returned the wrong structured response type")
+        response = raw_response
         self._write(envelope, contract, response, usage)
         if self.verify_after_write:
             if self._replay().defend(unit, findings) != response:
