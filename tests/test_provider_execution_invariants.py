@@ -11,6 +11,7 @@ from thorn.models import AttackReport, SourceRange, TheoremUnit
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
     ProofReviewModelResponse,
+    ProofReviewTurnRequest,
     build_proof_review_turn,
 )
 from thorn.providers import execution_contract
@@ -50,7 +51,7 @@ def _unit() -> TheoremUnit:
     )
 
 
-def _proof_turn():
+def _proof_turn() -> ProofReviewTurnRequest:
     document = LLMProofLanguage(
         result_identifier="thm:synthetic",
         lines=(
