@@ -189,22 +189,46 @@ def provider_runtime_matches_lock(runtime: ProviderRuntimeIdentity | None = None
 
 
 def strict_json_schema(schema: dict[str, object]) -> dict[str, object]:
-    """Return Thorn's final strict Structured Outputs schema."""
+    """Return Thorn's final provider-visible strict Structured Outputs schema.
+
+    Pydantic defaults are local parsing behavior, not provider-side optionality.
+    Strip them from every schema node before the provider-subset gate and execution
+    identity are computed, while preserving properties or definitions actually named
+    ``default``.
+    """
 
     strict = copy.deepcopy(schema)
 
     def visit(value: object) -> None:
-        if isinstance(value, dict):
-            if value.get("type") == "object":
-                value["additionalProperties"] = False
-                properties = value.get("properties")
-                if isinstance(properties, dict):
-                    value["required"] = list(properties)
-            for child in value.values():
+        if not isinstance(value, dict):
+            return
+
+        value.pop("default", None)
+        if value.get("type") == "object":
+            value["additionalProperties"] = False
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                value["required"] = list(properties)
+
+        properties = value.get("properties")
+        if isinstance(properties, dict):
+            for child in properties.values():
                 visit(child)
-        elif isinstance(value, list):
-            for child in value:
+
+        definitions = value.get("$defs")
+        if isinstance(definitions, dict):
+            for child in definitions.values():
                 visit(child)
+
+        items = value.get("items")
+        if isinstance(items, dict):
+            visit(items)
+
+        for keyword in ("anyOf", "oneOf", "allOf"):
+            branches = value.get(keyword)
+            if isinstance(branches, list):
+                for child in branches:
+                    visit(child)
 
     visit(strict)
     return strict
