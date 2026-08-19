@@ -57,7 +57,13 @@ class ProviderReadinessEvidence(BaseModel):
 
 
 def build_readiness_turn() -> ProofReviewTurnRequest:
-    """Return the tiny synthetic turn used only to exercise provider machinery."""
+    """Return the tiny synthetic initial turn used to exercise provider machinery.
+
+    The normal one-time source-rescue state is advertised so the canary exercises the
+    production initial-turn action schema. The readiness runner deliberately executes
+    only this initial turn: a valid ``need_source`` response is readiness success and
+    never causes a second paid canary request.
+    """
 
     document = LLMProofLanguage(
         result_identifier="thm:provider-readiness-synthetic",
@@ -80,12 +86,7 @@ def build_readiness_turn() -> ProofReviewTurnRequest:
             ),
         ),
     )
-    return build_proof_review_turn(
-        ProofLanguageReviewRequest(
-            document=document,
-            allow_source_rescue=False,
-        )
-    )
+    return build_proof_review_turn(ProofLanguageReviewRequest(document=document))
 
 
 def readiness_execution_contract(model: str) -> ProviderExecutionContract:
