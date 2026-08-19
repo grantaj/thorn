@@ -26,7 +26,10 @@ from thorn.providers.replay import (
     ReplayMissError,
     ReplayProvider,
 )
-from thorn.providers.request_envelope import attack_request_envelope, proof_review_request_envelope
+from thorn.providers.request_envelope import (
+    attack_request_envelope,
+    proof_review_request_envelope,
+)
 
 
 def _runtime(*, lock: str = "lock-a") -> ProviderRuntimeIdentity:
@@ -247,7 +250,8 @@ def test_transport_evidence_never_persists_arbitrary_exception_secrets(
     secret = "sk-test-super-secret Authorization: Bearer top-secret"
     client = _FakeClient([_FakeHTTPError(secret)])
     monkeypatch.setattr(openai_provider, "OpenAI", lambda: client)
-    recorder = RecordingProvider(openai_provider.OpenAIProvider(model="test-model"), tmp_path)
+    provider = openai_provider.OpenAIProvider(model="test-model")
+    recorder = RecordingProvider(provider, tmp_path)
 
     with pytest.raises(ProviderTransportError) as caught:
         recorder.attack(_unit())
@@ -308,7 +312,9 @@ def test_recording_provider_passes_and_records_exact_nondefault_proof_contract(
 
     accepted = list(tmp_path.glob("*.json"))
     assert len(accepted) == 1
-    exchange = RecordedExchange.model_validate_json(accepted[0].read_text(encoding="utf-8"))
+    exchange = RecordedExchange.model_validate_json(
+        accepted[0].read_text(encoding="utf-8")
+    )
     assert exchange.request.max_output_tokens == 256
     assert exchange.execution_contract is not None
     assert exchange.execution_contract.wire_request["max_output_tokens"] == 256
@@ -375,7 +381,11 @@ def test_v2_replay_is_exact_and_runtime_change_invalidates_it(
     def changed_runtime(envelope: Any):
         return original_builder(envelope, runtime=_runtime(lock="changed-lock"))
 
-    monkeypatch.setattr(replay_module, "build_provider_execution_contract", changed_runtime)
+    monkeypatch.setattr(
+        replay_module,
+        "build_provider_execution_contract",
+        changed_runtime,
+    )
     stale_runtime_replay = ReplayProvider(model="test-model", directory=tmp_path)
     with pytest.raises(ReplayMissError, match="provider runtime lock"):
         stale_runtime_replay.attack(_unit())
