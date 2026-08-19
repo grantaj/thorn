@@ -1,79 +1,66 @@
 name: Provider readiness canary
 
 on:
-  workflow_dispatch:
-    inputs:
-      model:
-        description: Exact OpenAI model alias/snapshot to exercise
-        required: true
-        type: string
-      confirm_live:
-        description: Make two bounded paid synthetic readiness calls after keyless preflight
-        required: true
-        default: false
-        type: boolean
+  push:
+    branches:
+      - agent/provider-readiness-canary-post149-20260819
 
 jobs:
-  preflight:
-    runs-on: ubuntu-latest
-    env:
-      OPENAI_API_KEY: ""
-      THORN_READINESS_MODEL: ${{ inputs.model }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11.16"
-          cache: pip
-      - run: python -m pip install -c constraints/provider-runtime.txt -e .
-      - name: Construct max-shape initial and rescue requests keylessly
-        run: |
-          python scripts/provider_readiness_canary.py \
-            --preflight \
-            --model "$THORN_READINESS_MODEL" \
-            --output "$RUNNER_TEMP/provider-readiness-preflight.json"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: provider-readiness-preflight-${{ github.run_id }}
-          path: ${{ runner.temp }}/provider-readiness-preflight.json
-          if-no-files-found: error
-
-  live:
-    if: ${{ inputs.confirm_live }}
-    needs: preflight
+  observe-existing-trigger:
+    if: ${{ github.event.head_commit.message == 'OBSERVE_EXISTING_PROVIDER_READINESS_TRIGGER_POST149' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      actions: read
+      contents: write
     env:
-      THORN_READINESS_MODEL: ${{ inputs.model }}
+      AUTHORIZED_SHA: 69d80c44c9293869d477090bf56172316946f77e
+      TARGET_WORKFLOW_NAME: Authorized provider readiness post-149
+      RESULT_BRANCH: agent/provider-readiness-canary-post149-20260819
+      RESULT_PATH: eval/provider_readiness_post149_trigger_probe.json
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11.16"
-          cache: pip
-      - run: python -m pip install -c constraints/provider-runtime.txt -e .
-      - name: Make bounded synthetic initial and rescue readiness requests
+      - name: Probe exact authorized SHA without provider access
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p "$RUNNER_TEMP/provider-readiness"
-          python scripts/provider_readiness_canary.py \
-            --live \
-            --confirm-paid-readiness-canary \
-            --model "$THORN_READINESS_MODEL" \
-            --output "$RUNNER_TEMP/provider-readiness/live.json"
-      - name: Verify both readiness responses keylessly
-        env:
-          OPENAI_API_KEY: ""
-        run: |
-          python scripts/provider_readiness_canary.py \
-            --replay "$RUNNER_TEMP/provider-readiness/live.json" \
-            --output "$RUNNER_TEMP/provider-readiness/replay.json"
-      - name: Preserve readiness evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: provider-readiness-live-${{ github.run_id }}
-          path: ${{ runner.temp }}/provider-readiness
-          if-no-files-found: error
+          set -euo pipefail
+          runs="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$AUTHORIZED_SHA&per_page=100")"
+          printf '%s' "$runs" > /tmp/runs.json
+          python - <<'PY'
+import base64, json, os, pathlib
+runs = json.loads(pathlib.Path('/tmp/runs.json').read_text())
+name = os.environ['TARGET_WORKFLOW_NAME']
+sha = os.environ['AUTHORIZED_SHA']
+matches = [
+    {
+        'id': r.get('id'),
+        'name': r.get('name'),
+        'status': r.get('status'),
+        'conclusion': r.get('conclusion'),
+        'event': r.get('event'),
+        'head_sha': r.get('head_sha'),
+        'html_url': r.get('html_url'),
+        'created_at': r.get('created_at'),
+        'updated_at': r.get('updated_at'),
+    }
+    for r in runs.get('workflow_runs', [])
+    if r.get('name') == name and r.get('head_sha') == sha
+]
+summary = {'authorized_trigger_sha': sha, 'matching_runs': matches}
+raw = json.dumps(summary, sort_keys=True, indent=2) + '\n'
+pathlib.Path('/tmp/result.json').write_text(raw)
+payload = {
+    'message': 'Probe post-149 readiness canary trigger',
+    'content': base64.b64encode(raw.encode()).decode(),
+    'branch': os.environ['RESULT_BRANCH'],
+}
+pathlib.Path('/tmp/put.json').write_text(json.dumps(payload))
+PY
+          curl -fsSL -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/$RESULT_PATH" \
+            --data-binary @/tmp/put.json
