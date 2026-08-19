@@ -1,4 +1,4 @@
-"""Review regressions for dependency closure, project order, and source fidelity."""
+"""End-to-end regressions for dependency closure, project order, and source fidelity."""
 
 from __future__ import annotations
 
