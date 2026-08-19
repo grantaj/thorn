@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -342,8 +342,8 @@ def assert_readiness_compatible(
 
     generated = evidence.generated_at
     if generated.tzinfo is None:
-        generated = generated.replace(tzinfo=timezone.utc)
-    age_hours = (datetime.now(timezone.utc) - generated).total_seconds() / 3600
+        generated = generated.replace(tzinfo=UTC)
+    age_hours = (datetime.now(UTC) - generated).total_seconds() / 3600
     if age_hours < 0 or age_hours > frozen.max_age_hours:
         raise ExperimentFreezeError("readiness evidence is outside the frozen freshness window")
 
