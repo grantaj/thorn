@@ -27,6 +27,7 @@ from thorn.providers.request_envelope import (
 from thorn.semantic_review_render import SemanticReviewRequest
 
 TModel = TypeVar("TModel", bound=BaseModel)
+_SAFE_TRANSPORT_MESSAGE = "provider request failed before a response was returned"
 
 
 def _json_safe(value: object) -> Any:
@@ -42,7 +43,7 @@ def _json_safe(value: object) -> Any:
             return _json_safe(model_dump(mode="json"))
         except (TypeError, ValueError):
             pass
-    return str(value)
+    return None
 
 
 def _transport_evidence(exc: Exception) -> ProviderTransportEvidence:
@@ -77,15 +78,31 @@ def _transport_evidence(exc: Exception) -> ProviderTransportEvidence:
         value = error_dict.get(name)
         return str(value) if value is not None else None
 
+    error_type = text_field("type")
+    code = text_field("code")
+    param = text_field("param")
+    sanitized_body: dict[str, object] | None = None
+    structured_error = {
+        key: value
+        for key, value in {
+            "type": error_type,
+            "code": code,
+            "param": param,
+        }.items()
+        if value is not None
+    }
+    if structured_error:
+        sanitized_body = {"error": structured_error}
+
     return ProviderTransportEvidence(
         exception_type=type(exc).__name__,
-        message=str(exc),
+        message=_SAFE_TRANSPORT_MESSAGE,
         status_code=status_code,
         request_id=str(request_id) if request_id is not None else None,
-        error_type=text_field("type"),
-        code=text_field("code"),
-        param=text_field("param"),
-        body=safe_body,
+        error_type=error_type,
+        code=code,
+        param=param,
+        body=sanitized_body,
         retry_after=header("retry-after"),
     )
 
@@ -121,6 +138,8 @@ def _generation_known(response: object) -> bool:
 
 class OpenAIProvider:
     """OpenAI transport with one explicit, fingerprintable execution boundary."""
+
+    accepts_execution_contract = True
 
     def __init__(
         self,
@@ -162,16 +181,10 @@ class OpenAIProvider:
         self.output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
         self.total_tokens += int(getattr(usage, "total_tokens", 0) or 0)
 
-    def _execute(
-        self,
-        envelope: ProviderRequestEnvelope,
-    ) -> tuple[object, ProviderExecutionContract]:
-        contract = self.execution_contract(envelope)
+    def _execute_contract(self, contract: ProviderExecutionContract) -> object:
         self.last_execution_contract = contract
         self.last_response_payload = None
 
-        # The attempt exists before network dispatch. Any exception after this point
-        # therefore leaves an auditable provider-attempt count.
         self.requests += 1
         self.live_requests += 1
         self.provider_attempts += 1
@@ -182,7 +195,7 @@ class OpenAIProvider:
         except Exception as exc:
             evidence = _transport_evidence(exc)
             raise ProviderTransportError(
-                "OpenAI provider request failed before a response was returned",
+                _SAFE_TRANSPORT_MESSAGE,
                 evidence=evidence,
             ) from exc
 
@@ -191,6 +204,19 @@ class OpenAIProvider:
         if _generation_known(response):
             self.model_generations += 1
         self._record_usage(response)
+        return response
+
+    def _execute(
+        self,
+        envelope: ProviderRequestEnvelope,
+        *,
+        execution_contract: ProviderExecutionContract | None = None,
+    ) -> tuple[object, ProviderExecutionContract]:
+        expected = self.execution_contract(envelope)
+        contract = execution_contract or expected
+        if contract.canonical_json() != expected.canonical_json():
+            raise ValueError("supplied provider execution contract does not match request envelope")
+        response = self._execute_contract(contract)
         return response, contract
 
     def _validate_structured_response(
@@ -216,14 +242,24 @@ class OpenAIProvider:
                 validation_exception_type=type(exc).__name__,
             ) from exc
 
-    def attack(self, unit: TheoremUnit) -> AttackReport:
+    def attack(
+        self,
+        unit: TheoremUnit,
+        *,
+        execution_contract: ProviderExecutionContract | None = None,
+    ) -> AttackReport:
         envelope = attack_request_envelope(unit, self.model)
-        response, _ = self._execute(envelope)
+        response, _ = self._execute(envelope, execution_contract=execution_contract)
         return self._validate_structured_response(response, AttackReport, label="attacker")
 
-    def review_semantic(self, request: SemanticReviewRequest) -> AttackReport:
+    def review_semantic(
+        self,
+        request: SemanticReviewRequest,
+        *,
+        execution_contract: ProviderExecutionContract | None = None,
+    ) -> AttackReport:
         envelope = semantic_request_envelope(request, self.model)
-        response, _ = self._execute(envelope)
+        response, _ = self._execute(envelope, execution_contract=execution_contract)
         return self._validate_structured_response(
             response,
             AttackReport,
@@ -233,13 +269,15 @@ class OpenAIProvider:
     def review_proof_turn(
         self,
         request: ProofReviewTurnRequest,
+        *,
+        execution_contract: ProviderExecutionContract | None = None,
     ) -> ProofReviewModelResponse:
         envelope = proof_review_request_envelope(
             request,
             self.model,
             max_output_tokens=self.proof_review_max_output_tokens,
         )
-        response, _ = self._execute(envelope)
+        response, _ = self._execute(envelope, execution_contract=execution_contract)
         parsed = self._validate_structured_response(
             response,
             request.response_model(),
@@ -247,7 +285,13 @@ class OpenAIProvider:
         )
         return ProofReviewModelResponse.model_validate(parsed.model_dump(mode="python"))
 
-    def defend(self, unit: TheoremUnit, findings: list[CandidateFinding]) -> DefenseReport:
+    def defend(
+        self,
+        unit: TheoremUnit,
+        findings: list[CandidateFinding],
+        *,
+        execution_contract: ProviderExecutionContract | None = None,
+    ) -> DefenseReport:
         envelope = defense_request_envelope(unit, findings, self.model)
-        response, _ = self._execute(envelope)
+        response, _ = self._execute(envelope, execution_contract=execution_contract)
         return self._validate_structured_response(response, DefenseReport, label="defender")
