@@ -4,10 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from thorn.llm_proof_language import LLMProofLanguage
+from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
     ProofReviewModelResponse,
+    ProofReviewTurnRequest,
     build_proof_review_turn,
     validate_proof_review_response,
 )
@@ -55,7 +56,7 @@ class ProviderReadinessEvidence(BaseModel):
     transport_failure: ProviderTransportEvidence | None = None
 
 
-def build_readiness_turn():
+def build_readiness_turn() -> ProofReviewTurnRequest:
     """Return the tiny synthetic turn used only to exercise provider machinery."""
 
     document = LLMProofLanguage(
@@ -66,7 +67,18 @@ def build_readiness_turn():
             "P1 SyntheticGoal @P1",
             "GOAL G0 T0: SyntheticGoal | ctx P1 | open @T0",
         ),
-        sources=(),
+        sources=(
+            ProofLanguageSourceHandle(
+                address="P1",
+                ir_identifier="proof:P1",
+                text="Synthetic proof step.",
+            ),
+            ProofLanguageSourceHandle(
+                address="T0",
+                ir_identifier="result:T0",
+                text="Synthetic theorem statement.",
+            ),
+        ),
     )
     return build_proof_review_turn(
         ProofLanguageReviewRequest(
