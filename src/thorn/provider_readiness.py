@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -99,11 +99,19 @@ class ProviderReadinessEvidence(BaseModel):
         return any(readiness.covers(profile) for readiness in self.transport_profiles)
 
 
+class _ReadinessIdentityFields(TypedDict):
+    generated_at: datetime
+    run_id: str
+    boundary_source_tree_sha: str
+    adapter_sha256: str
+    provider_lock_sha256: str
+
+
 def _identity_fields(
     *,
     boundary_source_tree_sha: str,
     run_id: str,
-) -> dict[str, object]:
+) -> _ReadinessIdentityFields:
     return {
         "generated_at": datetime.now(UTC),
         "run_id": run_id,
