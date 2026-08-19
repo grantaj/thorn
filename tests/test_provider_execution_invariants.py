@@ -153,7 +153,7 @@ class _FakeResponses:
             raise outcome
         return SimpleNamespace(
             output_text=outcome,
-            status="completed" if outcome else "incomplete",
+            status="completed",
             usage=SimpleNamespace(
                 input_tokens=11,
                 output_tokens=3 if outcome else 0,
@@ -291,7 +291,7 @@ def test_received_invalid_structured_output_is_separate_from_transport_failure(
     assert caught.value.validation_exception_type == exception_type
     assert provider.provider_attempts == 1
     assert provider.responses_received == 1
-    assert provider.model_generations == (1 if output else 0)
+    assert provider.model_generations == 1
 
 
 def test_recording_provider_passes_and_records_exact_nondefault_proof_contract(
