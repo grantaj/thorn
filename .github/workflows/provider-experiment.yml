@@ -1,0 +1,100 @@
+name: Provider experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_path:
+        description: Frozen thorn-provider-experiment/1 manifest path
+        required: true
+        type: string
+      readiness_run_id:
+        description: Successful Provider readiness canary run ID required for live mode
+        required: false
+        default: ""
+        type: string
+      confirm_scientific_authorization:
+        description: Confirm this specific frozen scientific paid run is authorized
+        required: true
+        default: false
+        type: boolean
+      confirm_pricing_checked:
+        description: Confirm current provider pricing was checked for this authorization
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
+      - name: Verify frozen manifest keylessly
+        run: |
+          python scripts/run_provider_experiment.py \
+            --preflight \
+            --manifest '${{ inputs.manifest_path }}' \
+            --output "$RUNNER_TEMP/provider-experiment-preflight.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-experiment-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/provider-experiment-preflight.json
+          if-no-files-found: error
+
+  live:
+    if: >-
+      ${{ inputs.confirm_scientific_authorization &&
+          inputs.confirm_pricing_checked &&
+          inputs.readiness_run_id != '' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e .
+      - name: Download separately produced readiness evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: provider-readiness-live-${{ inputs.readiness_run_id }}
+          run-id: ${{ inputs.readiness_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/readiness
+      - name: Run authorized frozen experiment
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/provider-experiment/recordings"
+          python scripts/run_provider_experiment.py \
+            --live \
+            --confirm-paid-scientific-run \
+            --manifest '${{ inputs.manifest_path }}' \
+            --readiness-evidence "$RUNNER_TEMP/readiness/live.json" \
+            --record-dir "$RUNNER_TEMP/provider-experiment/recordings" \
+            --output "$RUNNER_TEMP/provider-experiment/live.json"
+      - name: Verify every accepted response by exact keyless replay
+        env:
+          OPENAI_API_KEY: ""
+        run: |
+          python scripts/run_provider_experiment.py \
+            --replay-dir "$RUNNER_TEMP/provider-experiment/recordings" \
+            --manifest '${{ inputs.manifest_path }}' \
+            --output "$RUNNER_TEMP/provider-experiment/replay.json"
+      - name: Preserve live and replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-experiment-live-${{ github.run_id }}
+          path: ${{ runner.temp }}/provider-experiment
+          if-no-files-found: error
