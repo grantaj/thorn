@@ -8,15 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from thorn.latex import extract_project
-from thorn.llm_proof_language import FORMAT_VERSION
-from thorn.proof_language_review import (
-    PROMPT_VERSION,
-    PROTOCOL_VERSION,
-    ProofLanguageReviewRequest,
-    build_proof_review_turn,
-)
-from thorn.provider_readiness import ProviderReadinessEvidence
 from thorn.experiment_runtime import (
     ExperimentFreezeError,
     GuardedProofReviewTransport,
@@ -27,6 +18,15 @@ from thorn.experiment_runtime import (
     assert_manifest_runtime,
     assert_readiness_compatible,
 )
+from thorn.latex import extract_project
+from thorn.llm_proof_language import FORMAT_VERSION
+from thorn.proof_language_review import (
+    PROMPT_VERSION,
+    PROTOCOL_VERSION,
+    ProofLanguageReviewRequest,
+    build_proof_review_turn,
+)
+from thorn.provider_readiness import ProviderReadinessEvidence
 from thorn.providers.execution_contract import (
     ProviderExecutionContract,
     build_provider_execution_contract,
@@ -74,10 +74,14 @@ def _write_json(path: Path, payload: object) -> None:
 def _assert_manifest_freeze(manifest: ProviderExperimentManifest) -> None:
     if manifest.paid_execution_authorized:
         raise ExperimentFreezeError("experiment manifest must never authorize paid execution")
-    if _git("rev-parse", "HEAD") != manifest.repository_revision:
-        raise ExperimentFreezeError("repository revision differs from frozen experiment manifest")
+
+    frozen_src_tree = _git("rev-parse", f"{manifest.repository_revision}:src/thorn")
+    if frozen_src_tree != manifest.src_tree_sha:
+        raise ExperimentFreezeError(
+            "frozen repository revision does not identify the manifest src/thorn tree"
+        )
     if _git("rev-parse", "HEAD:src/thorn") != manifest.src_tree_sha:
-        raise ExperimentFreezeError("src/thorn tree differs from frozen experiment manifest")
+        raise ExperimentFreezeError("current src/thorn tree differs from frozen experiment manifest")
     if _sha256(RUNNER) != manifest.runner_sha256:
         raise ExperimentFreezeError("manifest-driven experiment runner bytes drifted")
     if _sha256(CONSTRAINTS) != manifest.constraints_sha256:
@@ -89,7 +93,9 @@ def _assert_manifest_freeze(manifest: ProviderExperimentManifest) -> None:
     if manifest.prompt_version != PROMPT_VERSION:
         raise ExperimentFreezeError("proof-review prompt version drifted")
     if manifest.budget.max_output_tokens_per_request != PROOF_REVIEW_MAX_OUTPUT_TOKENS:
-        raise ExperimentFreezeError("scientific runner requires the production proof-review output cap")
+        raise ExperimentFreezeError(
+            "scientific runner requires the production proof-review output cap"
+        )
     if len(manifest.cases) > manifest.budget.max_cases:
         raise ExperimentFreezeError("manifest contains more cases than its frozen case budget")
     assert_manifest_runtime(manifest)
@@ -135,7 +141,8 @@ def _preflight_payload(
         "provider_instantiated": False,
         "paid_execution_authorized": False,
         "experiment_id": manifest.experiment_id,
-        "repository_revision": manifest.repository_revision,
+        "production_revision": manifest.repository_revision,
+        "execution_revision": _git("rev-parse", "HEAD"),
         "runtime": manifest.runtime.model_dump(mode="json"),
         "budget": manifest.budget.model_dump(mode="json"),
         "cases": [
@@ -264,7 +271,9 @@ def main() -> int:
         return 2
 
     if mode_name == "replay" and int(getattr(provider, "legacy_replay_hits", 0)):
-        raise ExperimentFreezeError("new scientific experiments may not use legacy v1 replay evidence")
+        raise ExperimentFreezeError(
+            "new scientific experiments may not use legacy v1 replay evidence"
+        )
 
     _write_json(
         args.output,
@@ -273,7 +282,8 @@ def main() -> int:
             "status": "completed",
             "mode": mode_name,
             "experiment_id": manifest.experiment_id,
-            "repository_revision": manifest.repository_revision,
+            "production_revision": manifest.repository_revision,
+            "execution_revision": _git("rev-parse", "HEAD"),
             "runtime": manifest.runtime.model_dump(mode="json"),
             **run,
         },
