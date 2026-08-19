@@ -28,6 +28,7 @@ from thorn.providers.replay import (
     ReplayProvider,
 )
 from thorn.providers.request_envelope import (
+    ProviderRequestEnvelope,
     attack_request_envelope,
     proof_review_request_envelope,
 )
@@ -379,7 +380,7 @@ def test_v2_replay_is_exact_and_runtime_change_invalidates_it(
 
     original_builder = replay_module.build_provider_execution_contract
 
-    def changed_runtime(envelope: Any):
+    def changed_runtime(envelope: ProviderRequestEnvelope) -> ProviderExecutionContract:
         return original_builder(envelope, runtime=_runtime(lock="changed-lock"))
 
     monkeypatch.setattr(
