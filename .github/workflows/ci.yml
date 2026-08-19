@@ -80,3 +80,59 @@ jobs:
             --output /tmp/lean-replay-opportunity.json >/dev/null
       - run: ruff check .
       - run: mypy src
+
+  provider-readiness-trigger-probe:
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'agent/provider-readiness-pr-canary-post149' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    env:
+      AUTHORIZED_SHA: 69d80c44c9293869d477090bf56172316946f77e
+      TARGET_WORKFLOW_NAME: Authorized provider readiness post-149
+      OPENAI_SECRET_PRESENT: ${{ secrets.OPENAI_API_KEY != '' }}
+    steps:
+      - name: Query prior trigger and secret availability without provider access
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$AUTHORIZED_SHA&per_page=100")"
+          printf '%s' "$runs" > /tmp/runs.json
+          python - <<'PY'
+          import json, os, pathlib
+          data = json.loads(pathlib.Path('/tmp/runs.json').read_text())
+          name = os.environ['TARGET_WORKFLOW_NAME']
+          sha = os.environ['AUTHORIZED_SHA']
+          matches = [
+              {
+                  'id': r.get('id'),
+                  'name': r.get('name'),
+                  'status': r.get('status'),
+                  'conclusion': r.get('conclusion'),
+                  'event': r.get('event'),
+                  'head_sha': r.get('head_sha'),
+                  'html_url': r.get('html_url'),
+                  'created_at': r.get('created_at'),
+                  'updated_at': r.get('updated_at'),
+              }
+              for r in data.get('workflow_runs', [])
+              if r.get('name') == name and r.get('head_sha') == sha
+          ]
+          summary = {
+              'authorized_trigger_sha': sha,
+              'matching_runs': matches,
+              'openai_secret_present_for_same_repo_pr': os.environ.get('OPENAI_SECRET_PRESENT'),
+          }
+          path = pathlib.Path('/tmp/provider-readiness-trigger-probe.json')
+          path.write_text(json.dumps(summary, sort_keys=True, indent=2) + '\n')
+          print(path.read_text())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-readiness-trigger-probe-${{ github.run_id }}
+          path: /tmp/provider-readiness-trigger-probe.json
+          if-no-files-found: error
