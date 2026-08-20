@@ -11,8 +11,8 @@ justifies changing them.
 | Phase | Status | Evidence or next gate |
 | --- | --- | --- |
 | Phase 0: baseline | Complete | 530 tests passed and 1 skipped, with one cache-sensitive test run separately from a clean working directory; ruff and mypy passed |
-| #157 ownership audit | Ready for review | Adversarial review findings addressed in `docs/semantic-dependency-architecture.md` on `issue-157-semantic-dependency-audit` |
-| #162 conformance contract | Not started | Next PR-sized chunk after #157 review/landing |
+| #157 ownership audit | Complete | Landed in PR #163 |
+| #162 conformance contract | In progress | Initial backend/capability harness and six-case matrix implemented on `issue-162-semantic-dependency-contract`; remaining matrix is recorded in `docs/semantic-dependency-contract.md` |
 | #158 Tree-sitter evaluation | Not started | Requires #157 boundary and evaluation dependency approval |
 | #159 workspace evaluation | Not started | Requires #157 boundary and external-tool approval |
 | #160 linguistic evaluation | Not started | Requires #157 boundary and #125 baseline freeze |
@@ -162,6 +162,24 @@ Build the backend-independent contract before replacing production machinery.
 
 Do not introduce a second semantic IR. The contract observes canonical Thorn state and
 the `thorn-proof/1` projection.
+
+Initial #162 slice:
+
+- added one capability-aware harness over Regex and pylatexenc structural modes plus a
+  deterministic linguistic-candidate configuration;
+- centralized Thorn-owned assertions for semantic authority, exact provenance,
+  observed result-level source reachability, bounded rescue, and explicit absence;
+- covered a held-out flag-complex predicate, forward ambient scope, negative
+  comment/verbatim/exposition controls, cross-file shadowing, transitive closure with a
+  structured lemma dependency, and ambiguity remaining non-authoritative;
+- recorded same-file/include variants, malformed partiality, report navigation,
+  targeted-selector characterization, and real Local NLP wiring as the next #162 slice.
+
+Initial-slice validation: the focused contract and surrounding regression surface
+passed 52 tests with 1 intentional reduced-capability skip. The full suite passed 540
+tests with 2 skips and reproduced the documented root-cache-sensitive CLI failure; that
+test passed separately from a clean working directory, for an effective 541 passed and
+2 skipped. `ruff check .` and `mypy src` passed. No provider/model calls were made.
 
 ## Phase 3: run the empirical evaluations
 

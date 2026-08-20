@@ -33,6 +33,10 @@ proof tooling  LLM review     proof handoff
 
 See [`positioning.md`](positioning.md) for the user-facing project contract. This document describes the technical separation between evidence recovery, canonical semantics and downstream projections.
 
+The backend-independent fidelity properties that source and linguistic substrates must
+preserve before review are specified by the executable
+[`semantic-dependency contract`](semantic-dependency-contract.md).
+
 ## Math IR and Proof IR have different jobs
 
 - **Math IR** records recoverable document, dependency, symbol, support, linguistic, uncertainty and provenance evidence.

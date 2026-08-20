@@ -37,6 +37,10 @@ LaTeX frontend facts
 
 The purpose of the support layer is to make the author's visible argument structure addressable, source-located, queryable and available as evidence for elaboration. Once Thorn can safely identify a stronger mathematical operation, that operation belongs in canonical Proof IR rather than being left permanently as a generic support annotation.
 
+The [`semantic-dependency contract`](semantic-dependency-contract.md) tests the
+backend-independent authority, ambiguity, provenance, closure, and bounded-reachability
+properties that this evidence must preserve through canonical Proof IR.
+
 ## Claims
 
 A `Claim` records a proof-local mathematical move with exact source provenance. The extractor distinguishes prose and display source forms. This is presentation metadata, not mathematical status: either can be load-bearing proof content.
