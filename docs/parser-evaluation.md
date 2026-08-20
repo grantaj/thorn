@@ -62,9 +62,17 @@ The review-followup evaluation run produced:
 - Lean contract and Local NLP contract: green on the review-fix head;
 - provider/model requests: **0**.
 
-The strict xfail is deliberately part of the evaluation evidence rather than a compatibility workaround. For malformed direct source `\\input{{chapter}`, the evaluated grammar loses the command identity inside an undifferentiated parse `ERROR`. The #162 project-partiality contract requires Thorn to know that this is an indeterminate project boundary. Recovering that fact in the adapter would require rescanning the raw LaTeX for an include command, exactly the parallel-parser pattern #158 prohibits.
+The strict xfail is deliberately part of the evaluation evidence rather than a compatibility workaround. For malformed direct source `\\input{{chapter}`, the evaluated grammar loses the command identity inside an undifferentiated parse `ERROR`. Recovering that command identity in the adapter would require rescanning raw LaTeX, exactly the parallel-parser pattern #158 prohibits.
 
-This is therefore a **genuine assurance blocker for default/production use of this backend**, not a request to add a Thorn regex special case. The xfail is strict so an upstream grammar improvement that restores enough structure becomes visible immediately.
+This malformed-input case is **not evidence against Tree-sitter's production candidacy by itself**. Thorn is expected to be robust to unusual but valid LaTeX; it is not expected to repair invalid LaTeX or infer what an author probably intended. The appropriate assurance behavior for structurally invalid input is generic fail-closed partiality: if the frontend cannot establish reliable source or project structure, Thorn should stop analysis that depends on that structure and report the source problem for the author to correct.
+
+Accordingly, future conformance should distinguish three cases:
+
+- **valid but unusual syntax:** a real robustness requirement; systematic failures count against the backend;
+- **valid but unsupported syntax or TeX dynamics:** an explicit capability limit to investigate with mature tooling or represent as unresolved/unsupported;
+- **invalid or malformed syntax:** an input error that Thorn may reject rather than repair heuristically.
+
+None of these cases justifies growing a parallel Thorn LaTeX parser to guess missing structure.
 
 ## Source/provenance observations
 
@@ -154,16 +162,25 @@ The #16 CI run used a generated two-file project containing 40 lemma/theorem pai
 
 ## #158 disposition
 
-**Disposition: retain Tree-sitter as an experimental development/differential oracle and source-structure prototype; do not promote it to Thorn's default or production assurance frontend.**
+**Disposition: Tree-sitter is the preferred structural-source substrate candidate for Thorn. Keep it optional until the generic fail-closed partiality boundary and packaging path are mature enough for a production-default switch; do not relegate it merely because it rejects malformed or unsupported source.**
 
-The positive evidence is substantial: conventional mathematical LaTeX conformance is strong, provenance normalizes exactly, grammar-native opaque/comment/math regions can be excluded without repeated whole-document raw scanning, and parser-neutral `FrontendRegion` facts look like the right long-term ownership boundary.
+The positive evidence is strong: conventional mathematical LaTeX conformance is good, exact provenance normalizes correctly, grammar-native opaque/comment/math regions can be excluded without repeated whole-document raw scanning, and parser-neutral `FrontendRegion` facts provide the right direction for moving generic source eligibility below Thorn's mathematical semantics.
 
-The negative evidence is also decisive for this tranche: at least one completed #162 project-partiality case loses the syntactic identity required to fail closed at the project boundary; repairing that in Thorn would recreate generic LaTeX scanning. The evaluated grammar source also requires generated-parser build tooling for this installation path. Thorn's selected 0.26.0 runtime/binding combination emits an API deprecation warning, but this evaluation does not claim that the grammar's advertised older runtime range is itself defective.
+The evaluation does **not** require Tree-sitter to recover author intent from malformed LaTeX. In particular, the malformed `\\input{{chapter}` case should be treated as an author-correctable structural input error, provided Thorn can fail closed generically rather than deriving guessed project order. It is not a reason to preserve or extend a bespoke Thorn parser.
+
+Production candidacy should instead be judged on:
+
+1. robustness across unusual but valid mathematical LaTeX;
+2. exact provenance and conservative source-role recovery;
+3. explicit failure/partiality for structurally indeterminate input;
+4. a workable packaging/runtime path;
+5. evidence from #159 about project/workspace facts that lie beyond a source CST.
 
 Accordingly:
 
-1. keep the adapter, corpus, differential lane, measurement script, and normalized-region experiment as useful architectural evidence;
-2. keep `current` as `regex`;
-3. do **not** add bespoke source scanning to make Tree-sitter satisfy the malformed-include or unknown-optional-macro cases;
-4. revisit production candidacy only if the upstream grammar preserves enough error structure, or a later generic source-partiality design can fail closed without identifying constructs by rescanning raw LaTeX;
-5. use the `FrontendRegion` result as input to #161 substrate consolidation, without pre-empting #159 project/workspace evaluation.
+1. keep the Tree-sitter adapter, corpus, differential lane, measurement script, and normalized-region contract as architectural building blocks;
+2. keep `current` as `regex` for now because #158 was an evaluation tranche, not a migration PR;
+3. carry Tree-sitter forward into #161 as the leading source-structure substrate candidate rather than an oracle-only backend;
+4. use #159 to determine how project/workspace ordering and valid dynamic TeX structure should be supplied or marked unresolved;
+5. fail closed on malformed source and report it to the author; do not add Thorn-specific parsing to repair or guess invalid input;
+6. treat valid-but-unsupported syntax as a capability boundary to improve or document, not as malformed input and not as justification for heuristic repair.
