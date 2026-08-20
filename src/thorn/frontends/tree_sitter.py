@@ -137,8 +137,8 @@ def _surface_groups(
 
 def _load_parser() -> Any:
     try:
-        from tree_sitter import Language, Parser  # type: ignore
         import tree_sitter_latex  # type: ignore
+        from tree_sitter import Language, Parser  # type: ignore
     except ModuleNotFoundError as exc:
         raise RuntimeError(
             "tree-sitter frontend requires tree-sitter plus the tree-sitter-latex grammar; "
@@ -180,10 +180,7 @@ def _group_argument(
 ) -> FrontendArgument:
     raw = coordinates.byte_slice(source_bytes, node)
     optional = raw.startswith("[") and raw.endswith("]")
-    if (raw.startswith("{") and raw.endswith("}")) or optional:
-        value = raw[1:-1]
-    else:
-        value = raw
+    value = raw[1:-1] if (raw.startswith("{") and raw.endswith("}")) or optional else raw
     return FrontendArgument(
         raw=raw,
         value=value,
@@ -338,7 +335,9 @@ def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return merged
 
 
-def _span_from_characters(path: Path, coordinates: _Coordinates, start: int, end: int) -> SourceSpan:
+def _span_from_characters(
+    path: Path, coordinates: _Coordinates, start: int, end: int
+) -> SourceSpan:
     start_line, start_column = coordinates.line_column(start)
     end_line, end_column = coordinates.line_column(end)
     return SourceSpan(
@@ -510,7 +509,11 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
         )
     ]
 
-    math = [_math(path, source_bytes, coordinates, node) for node in nodes if node.type in _MATH_TYPES]
+    math = [
+        _math(path, source_bytes, coordinates, node)
+        for node in nodes
+        if node.type in _MATH_TYPES
+    ]
     math.sort(key=lambda item: item.span.start_offset)
 
     return (
