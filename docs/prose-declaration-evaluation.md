@@ -35,52 +35,103 @@ unsafe to promote mechanically.
    unchanged: `called`, `said to be`, `we say`, `by ... we mean`, and ambient-cue syntax.
 2. **Dependency structure.** Three small lexical-light structural rules over
    `LinguisticDocument`: conditional predicate, preposed `mean`, and scoped copular subject.
-   Ambiguous structural proposals remain explicitly marked.
+   Broad structural proposals remain explicitly marked ambiguous.
 3. **Small hybrid.** The same dependency structure plus two intentionally small lexical guard
    families: definitional-verb lemmas and explicit ambient-scope prefixes. It also rejects
-   dependency-visible negation/third-person `say`/active third-party `call` evidence.
+   dependency-visible negation and obvious third-party attribution.
 
 No strategy creates authority. The benchmark does not perform scope resolution, term-use
-closure, shadowing, or truth assessment.
+closure, shadowing, relevance, or truth assessment.
 
 ## Evidence
 
-The frozen phrase baseline can be run without an NLP model and currently scores 13/21
-expected candidates, with 3 negative-control collisions: precision 0.812, recall 0.619,
-lexical-challenge recall 0.125, zero provenance failures, and 1/2 transitive cases exposing
-both declaration candidates.
+Measurements use the repository's pinned keyless local-NLP path (spaCy 3.8.14 with
+`en_core_web_sm` 3.8.0). The frozen phrase baseline itself needs no NLP model.
 
-The dependency and hybrid figures are intentionally produced by the existing heavier local
-NLP CI path against pinned spaCy 3.8.14 + `en_core_web_sm`, rather than by a checked-in model
-or a provider call. The final measured table is recorded below after that keyless run.
-
-<!-- ISSUE160_METRICS_START -->
 | strategy | precision | recall | false-authority risk | lexical-challenge recall | provenance failures | transitive cases |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | frozen #125 phrase | 0.812 | 0.619 | 3 | 0.125 | 0 | 1/2 |
-| dependency structure | pending CI measurement | pending | pending | pending | pending | pending |
-| small hybrid | pending CI measurement | pending | pending | pending | pending | pending |
-<!-- ISSUE160_METRICS_END -->
+| dependency structure | 0.396 | 0.905 | 29 | 0.750 | 0 | 1/2 |
+| small hybrid | 0.750 | 0.857 | 6 | 0.625 | 0 | 1/2 |
 
-## Hand-written grammar inventory and disposition
+The phrase recognizer is conservative but lexically brittle: it finds 13/21 expected
+candidates and only one eighth of the deliberately held-out lexical variants. Its three
+negative-control collisions also show that matching declaration-shaped phrasing is not the
+same thing as establishing mathematical authority.
 
-The evaluation is specifically intended to reduce handwritten phrase grammar, not move it.
-The current production inventory and proposed #161 disposition are:
+The broad dependency recognizer finds 19/21 expected candidates, but emits 29 false candidates
+and marks all 48 proposals structurally ambiguous. Its 0.905 recall is useful as evidence that
+dependency structure generalizes across paraphrase, but its 0.396 precision makes it unsuitable
+as an authority-like recognizer or as an unguarded candidate boundary.
 
-- **`called` / `said to be` / `we say` / `by ... we mean` phrase families:** do **not** grow
-  these. If the hybrid evidence holds, #161 should replace them behind the existing boundary
-  with dependency evidence plus the minimal definitional-anchor family.
-- **Ambient convention cues:** retain one small explicit family. “Throughout”, “unless stated
-  otherwise”, and section-wide language assert document scope; dependency structure alone
-  cannot safely distinguish that from local exposition. Thorn must still own the resulting
-  scope semantics.
-- **Negation / grammatical subject guards:** retain as structural safety checks, not lexical
-  mathematical grammar. They prevent obvious evidence inversion/third-party attribution.
-- **Custom singular/plural term morphology in #125:** do not treat it as durable grammar.
-  Mature linguistic lemmatization is a better candidate for #161, while Thorn keeps exact
-  surface occurrences and identity/provenance.
-- **Source exclusions (comments, verbatim, preamble):** retain at the source frontend/project
-  fact layer. These are source-structure responsibilities, not linguistic grammar.
+The small hybrid finds 18/21 expected candidates. Relative to the phrase baseline, recall rises
+from 0.619 to 0.857 and lexical-challenge recall rises from 0.125 to 0.625. Relative to broad
+dependency structure, false-authority risk falls from 29 candidates to 6. The remaining six
+collisions are informative rather than invitations to grow grammar:
 
-The migration itself is out of scope here. #160 should leave #161 a measured candidate
-boundary and a finite grammar inventory, while production #125 behavior remains unchanged.
+- `negative-useful` is first-person declaration-shaped exposition (`We say that balanced maps
+  are useful ...`);
+- `negative-display-label` and `negative-called-metaphor` are valid passive `called ... when`
+  constructions whose subjects are not mathematically authoritative dependencies;
+- `negative-quotation` quotes declaration syntax from another paper;
+- `named-math-before` and `transitive-hybrid` expose dependency-sensitive term selection and
+  therefore produce a wrong candidate while also missing the expected occurrence.
+
+The three hybrid misses are `named-deemed`, `named-math-before`, and `transitive-hybrid`.
+`named-deemed` is the deliberate cost of not turning the lexical anchor family into a synonym
+list. The other two show that exact candidate identity still needs Thorn-owned provenance and
+ambiguity handling even when a parser supplies useful syntax.
+
+All three strategies have zero provenance failures on the corpus. Typed placeholders before
+and after declaration terms map back to the exact source occurrence, and source-excluded
+comment/verbatim material remains excluded. Neither dependency parsing nor the hybrid improves
+the 1/2 transitive-chain score enough to justify moving semantic closure or dependency identity
+into NLP.
+
+## Disposition
+
+**Recommend the small hybrid as concrete input to #161, but do not migrate production behavior
+in #160.** The evidence rejects both extremes:
+
+- do not grow the #125 phrase grammar to chase paraphrase recall;
+- do not treat broad dependency-parser proposals as authoritative declaration candidates.
+
+A #161 consolidation should instead consider a dependency-backed candidate-evidence layer
+behind the existing `LinguisticFrontend`, with a deliberately small Thorn-owned guard surface.
+Its output must remain non-authoritative evidence carrying exact occurrence provenance and
+explicit ambiguity. Thorn continues to decide mathematical authority, relevance, scope,
+visibility/shadowing, dependency identity/closure, and truth.
+
+Production #125 behavior remains unchanged by this tranche.
+
+## Hand-written grammar inventory and justification
+
+The evaluation supports keeping only the following bounded hand-written families as possible
+#161 inputs:
+
+1. **Definitional-anchor family.** A small lemma category such as `call` / `term` / `say` /
+   `mean`, used to guard dependency structure rather than encode sentence templates. The 29
+   broad-dependency collisions justify a lexical guard; the `deemed` miss is evidence against
+   expanding it into an open-ended synonym grammar.
+2. **Ambient-scope anchor family.** A small explicit family for document/section-scoping cues
+   such as `throughout`, `in what follows`, `unless stated otherwise`, `for the remainder`, and
+   `henceforth`. Generic dependency structure cannot safely distinguish these from local
+   exposition, and the eventual scope semantics remain Thorn-owned.
+3. **Negation and grammatical-attribution guards.** Structural safety checks for negation and
+   obvious third-party attribution. These are bounded grammatical checks, not mathematical
+   authority rules.
+4. **Source exclusions/projection rules.** Comments, verbatim-like regions, preamble material,
+   quotation/source context where available, and typed math/reference placeholders belong at
+   the source/projection boundary. They should remain explicit because the linguistic parser
+   must never be asked to reconstruct excluded source or provenance.
+
+The following should **not** be preserved as architectural grammar families:
+
+- the four named #125 phrase-regex templates (`called`, `said to be`, `we say`, `by ... we
+  mean`) as independently growing patterns;
+- custom singular/plural term morphology as a substitute for mature linguistic lemmatization;
+- broad dependency structure as an authority decision;
+- lexical lists intended to decide whether a declaration is mathematically relevant or true.
+
+If #161 adopts a parser-backed candidate layer, exact surface text and occurrence provenance
+must still be retained even where mature linguistic lemmatization is used for matching.
