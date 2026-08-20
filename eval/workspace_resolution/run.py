@@ -22,6 +22,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from thorn.frontends.regex import RegexLatexFrontend  # noqa: E402
+from thorn.project_partiality import normalize_project_structure  # noqa: E402
 
 CASES = Path(__file__).with_name("cases.json")
 
@@ -48,7 +49,9 @@ def _digest(value: Any) -> str:
 
 def run_thorn(fixture: Path) -> dict[str, Any]:
     start = time.perf_counter()
-    parsed = RegexLatexFrontend().parse_project(fixture / "main.tex")
+    parsed = normalize_project_structure(
+        RegexLatexFrontend().parse_project(fixture / "main.tex")
+    )
     includes: list[dict[str, Any]] = []
     labels: list[dict[str, Any]] = []
     refs: list[dict[str, Any]] = []
@@ -258,24 +261,24 @@ def run_texlab(fixture: Path, expected: dict[str, Any]) -> dict[str, Any]:
             )
             definitions.append({"probe": probe, "result": _normalise_locations(result, fixture)})
         client.drain()
-        diagnostics = []
+        diagnostics_by_file: dict[str, list[dict[str, Any]]] = {}
         for notification in client.notifications:
             if notification.get("method") != "textDocument/publishDiagnostics":
                 continue
             params = notification.get("params", {})
-            diagnostics.append(
+            file = _rel(_uri_to_path(params["uri"]), fixture)
+            diagnostics_by_file[file] = [
                 {
-                    "file": _rel(_uri_to_path(params["uri"]), fixture),
-                    "diagnostics": [
-                        {
-                            "message": d.get("message"),
-                            "severity": d.get("severity"),
-                            "code": d.get("code"),
-                        }
-                        for d in params.get("diagnostics", [])
-                    ],
+                    "message": d.get("message"),
+                    "severity": d.get("severity"),
+                    "code": d.get("code"),
                 }
-            )
+                for d in params.get("diagnostics", [])
+            ]
+        diagnostics = [
+            {"file": file, "diagnostics": diagnostics_by_file[file]}
+            for file in sorted(diagnostics_by_file)
+        ]
         return {
             "backend": "texlab",
             "available": True,
