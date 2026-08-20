@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import Protocol
+
+from test_semantic_review import make_project
+
 from thorn.eval_review import build_result_review_context
 from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
 from thorn.semantic_review import SemanticReviewItem, build_review_context
 
-from test_semantic_review import make_project
+
+class _Identified(Protocol):
+    identifier: str
 
 
-def _canonical_by_identifier(items: list[object]) -> dict[str, object]:
-    return {getattr(item, "identifier"): item for item in items}
+def _canonical_by_identifier(items: Iterable[_Identified]) -> dict[str, _Identified]:
+    return {item.identifier: item for item in items}
 
 
 def _source_key(span: SourceSpan) -> tuple[str, int, int, int, int, int, int]:
