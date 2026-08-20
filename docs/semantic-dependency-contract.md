@@ -121,7 +121,7 @@ candidate assertions without exposing spaCy-native objects.
 | Child declaration before parent continuation | Child authority remains visible after returning to the parent | Regex, pylatexenc |
 | Child redefinition followed by child and parent theorems | Child authority shadows the earlier parent declaration at both results | Regex, pylatexenc |
 | Parent declaration after a child include | Later parent source does not leak backward into the child result | Regex, pylatexenc |
-| Recovered authoritative source projected to report navigation | File, line range, excerpt, address, and file URI remain exact | Regex, pylatexenc |
+| Recovered authoritative source projected to report navigation | Canonical declaration provenance preserves exact file, line range, excerpt, and file URI | Regex, pylatexenc |
 | Base-field convention, regular-matrix definition, and cited lemma | Transitive semantic closure composes with result dependency | Regex, pylatexenc |
 | Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative | Deterministic NLP fixture; structural-only explicitly skipped |
 
@@ -129,7 +129,10 @@ The initial slice generalized the #125 seed beyond convergence vocabulary and ma
 same semantic assertions reusable across both supported LaTeX frontends. The second
 bounded slice extends the contract across source-occurrence order and report navigation
 without asserting private identifier spelling, declaration storage multiplicity, or
-whether authoritative prose is initially rendered versus source-rescued.
+whether authoritative prose is initially rendered versus source-rescued. The
+report-navigation fixture derives navigation from canonical declaration provenance and
+asserts review reachability separately, so it does not require a proof-language source
+handle to exist.
 
 The source-rescue response bound is already enforced by the shared closed-world
 proof-language contract in
