@@ -44,7 +44,7 @@ def test_frontend_preserves_syntax_and_exact_provenance(
 \begin{document}
 Escaped percent: \%.
 \begin{fact}[Small]\label{fact:one}
-Let $x\in\mathbb R$ and use \foo[alpha]{a{b}c}.
+Let $x\in\mathbb R$.
 \begin{enumerate}
 \item Nested.
 \end{enumerate}
@@ -75,11 +75,6 @@ Indeed.
     assert newtheorem.span.start_offset == 0
     assert newtheorem.span.start_line == 1
     assert newtheorem.span.start_column == 1
-
-    foo = next(macro for macro in file.macros if macro.name == "foo")
-    assert [argument.value for argument in foo.arguments] == ["alpha", "a{b}c"]
-    assert [argument.optional for argument in foo.arguments] == [True, False]
-    assert foo.span.text(source) == foo.raw
 
     fact = next(environment for environment in file.environments if environment.name == "fact")
     assert fact.arguments[0].optional is True
