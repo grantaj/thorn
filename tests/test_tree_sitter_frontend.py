@@ -53,14 +53,23 @@ Hidden minted declaration: let MintedShadow mean bad.
 \begin{asy}
 Hidden Asymptote declaration: let AsyShadow mean bad.
 \end{asy}
+\begin{asydef}
+Hidden Asymptote definition: let AsyDefShadow mean bad.
+\end{asydef}
 \begin{pycode}
 Hidden Python declaration: let PyShadow mean bad.
 \end{pycode}
+\begin{luacode}
+Hidden Lua declaration: let LuaPlainShadow mean bad.
+\end{luacode}
 \begin{luacode*}
-Hidden Lua declaration: let LuaShadow mean bad.
+Hidden starred Lua declaration: let LuaStarShadow mean bad.
 \end{luacode*}
+\begin{sagesilent}
+Hidden silent Sage declaration: let SageSilentShadow mean bad.
+\end{sagesilent}
 \begin{sageblock}
-Hidden Sage declaration: let SageShadow mean bad.
+Hidden Sage declaration: let SageBlockShadow mean bad.
 \end{sageblock}
 \begin{fact}[Small]\label{fact:one}
 Let $x\in\mathbb R$ and use \foo{a{b}c}.
@@ -103,6 +112,13 @@ Indeed, by \ref{fact:one}.
         "verbatim*",
         "lstlisting",
         "minted",
+        "asy",
+        "asydef",
+        "pycode",
+        "luacode",
+        "luacode*",
+        "sagesilent",
+        "sageblock",
         "fact",
         "proof",
     } <= env_names
@@ -136,9 +152,12 @@ Indeed, by \ref{fact:one}.
     assert "ListingShadow" not in eligible
     assert "MintedShadow" not in eligible
     assert "AsyShadow" not in eligible
+    assert "AsyDefShadow" not in eligible
     assert "PyShadow" not in eligible
-    assert "LuaShadow" not in eligible
-    assert "SageShadow" not in eligible
+    assert "LuaPlainShadow" not in eligible
+    assert "LuaStarShadow" not in eligible
+    assert "SageSilentShadow" not in eligible
+    assert "SageBlockShadow" not in eligible
     assert "x\\in\\mathbb" not in eligible
 
 
