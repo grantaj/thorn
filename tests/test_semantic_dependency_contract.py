@@ -355,6 +355,217 @@ The map $f$ is fibre-regular.
     STRUCTURAL_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
+def test_same_file_redefinition_shadows_earlier_authority(
+    tmp_path: Path,
+    configuration: ContractConfiguration,
+) -> None:
+    first = "A map is called fibre-regular when every fibre contains two points."
+    second = "A map is called fibre-regular when every fibre contains three points."
+    run = _write_project(
+        tmp_path,
+        configuration,
+        rf"""
+{first}
+{second}
+
+\begin{{theorem}}\label{{thm:main}}
+The map $f$ is fibre-regular.
+\end{{theorem}}
+\begin{{proof}}Inspect the fibres.\end{{proof}}
+""",
+    )
+
+    symbol = run.assert_authoritative("thm:main", "fibre-regular", second)
+    assert Path(symbol.introduction_source.file).name == "main.tex"
+    run.assert_observed_result_context("thm:main", second)
+    run.assert_not_observed_result_source("thm:main", "every fibre contains two points")
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    STRUCTURAL_CONFIGURATIONS,
+    ids=lambda configuration: configuration.name,
+)
+def test_parent_declaration_is_visible_inside_included_child(
+    tmp_path: Path,
+    configuration: ContractConfiguration,
+) -> None:
+    definition = "A graph is called edge-rigid when every edge lies in a triangle."
+    run = _write_project(
+        tmp_path,
+        configuration,
+        rf"""
+{definition}
+\input{{child}}
+""",
+        includes={
+            "child.tex": r"""
+\begin{theorem}\label{thm:child}
+The graph $G$ is edge-rigid.
+\end{theorem}
+\begin{proof}Inspect the edges.\end{proof}
+""",
+        },
+    )
+
+    symbol = run.assert_authoritative("thm:child", "edge-rigid", definition)
+    assert Path(symbol.introduction_source.file).name == "main.tex"
+    run.assert_observed_result_context("thm:child", definition)
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    STRUCTURAL_CONFIGURATIONS,
+    ids=lambda configuration: configuration.name,
+)
+def test_child_declaration_is_visible_after_returning_to_parent(
+    tmp_path: Path,
+    configuration: ContractConfiguration,
+) -> None:
+    definition = "A cover is called star-finite when each member meets finitely many others."
+    run = _write_project(
+        tmp_path,
+        configuration,
+        r"""
+\input{declarations}
+
+\begin{theorem}\label{thm:parent}
+The cover $\mathcal U$ is star-finite.
+\end{theorem}
+\begin{proof}Inspect the intersections.\end{proof}
+""",
+        includes={"declarations.tex": definition},
+    )
+
+    symbol = run.assert_authoritative("thm:parent", "star-finite", definition)
+    assert Path(symbol.introduction_source.file).name == "declarations.tex"
+    run.assert_observed_result_context("thm:parent", definition)
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    STRUCTURAL_CONFIGURATIONS,
+    ids=lambda configuration: configuration.name,
+)
+def test_child_shadowing_applies_inside_child_and_after_return_to_parent(
+    tmp_path: Path,
+    configuration: ContractConfiguration,
+) -> None:
+    first = "A cover is called star-finite when each member meets at most four others."
+    second = "A cover is called star-finite when each member meets at most five others."
+    run = _write_project(
+        tmp_path,
+        configuration,
+        rf"""
+{first}
+\input{{child}}
+
+\begin{{theorem}}\label{{thm:parent}}
+The cover $\mathcal U$ is star-finite.
+\end{{theorem}}
+\begin{{proof}}Inspect the intersections.\end{{proof}}
+""",
+        includes={
+            "child.tex": rf"""
+{second}
+\begin{{theorem}}\label{{thm:child}}
+The cover $\mathcal V$ is star-finite.
+\end{{theorem}}
+\begin{{proof}}Inspect the intersections.\end{{proof}}
+""",
+        },
+    )
+
+    for result_identifier in ("thm:child", "thm:parent"):
+        symbol = run.assert_authoritative(result_identifier, "star-finite", second)
+        assert Path(symbol.introduction_source.file).name == "child.tex"
+        run.assert_observed_result_context(result_identifier, second)
+        run.assert_not_observed_result_source(
+            result_identifier,
+            "each member meets at most four others",
+        )
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    STRUCTURAL_CONFIGURATIONS,
+    ids=lambda configuration: configuration.name,
+)
+def test_parent_declaration_after_include_does_not_leak_backward_into_child(
+    tmp_path: Path,
+    configuration: ContractConfiguration,
+) -> None:
+    later = "A graph is called edge-rigid when every edge lies in two triangles."
+    run = _write_project(
+        tmp_path,
+        configuration,
+        rf"""
+\input{{child}}
+{later}
+""",
+        includes={
+            "child.tex": r"""
+\begin{theorem}\label{thm:child}
+The graph $G$ is edge-rigid.
+\end{theorem}
+\begin{proof}Inspect the edges.\end{proof}
+""",
+        },
+    )
+
+    run.assert_not_observed_result_source("thm:child", later)
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    STRUCTURAL_CONFIGURATIONS,
+    ids=lambda configuration: configuration.name,
+)
+def test_authoritative_context_preserves_exact_report_navigation(
+    tmp_path: Path,
+    configuration: ContractConfiguration,
+) -> None:
+    from thorn.report import report_source
+
+    definition = "A complex is called shell-rigid when every facet meets a prior facet."
+    run = _write_project(
+        tmp_path,
+        configuration,
+        rf"""
+{definition}
+
+\begin{{theorem}}\label{{thm:main}}
+The complex $K$ is shell-rigid.
+\end{{theorem}}
+\begin{{proof}}Inspect the facets.\end{{proof}}
+""",
+    )
+
+    run.assert_authoritative("thm:main", "shell-rigid", definition)
+    document = run.document_for("thm:main")
+    source = next(item for item in document.sources if item.text == definition)
+    assert source.source_span is not None
+    assert source.source_range is not None
+
+    navigation = report_source(
+        source.source_range,
+        excerpt=source.text,
+        source_addresses=(source.address,),
+    )
+    expected = source.source_span.source_range()
+    assert navigation.file == expected.file
+    assert navigation.start_line == expected.start_line
+    assert navigation.end_line == expected.end_line
+    assert navigation.excerpt == definition
+    assert navigation.source_addresses == (source.address,)
+    assert navigation.uri == Path(expected.file).resolve().as_uri()
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    STRUCTURAL_CONFIGURATIONS,
+    ids=lambda configuration: configuration.name,
+)
 def test_transitive_semantics_compose_with_structured_dependencies(
     tmp_path: Path,
     configuration: ContractConfiguration,
