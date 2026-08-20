@@ -8,16 +8,17 @@ change under issues #158-#161. It observes Thorn-owned state and behavior rather
 backend-native syntax trees, dependency parses, regex matches, private identifier
 schemes, or module layout.
 
-The executable contract starts in
-`tests/test_semantic_dependency_contract.py`. Its fixtures are ordinary LaTeX projects
-and its assertions inspect:
+The executable contract starts in `tests/test_semantic_dependency_contract.py` and is
+extended by the partiality, selector, and Local NLP contract tests. Its assertions
+inspect:
 
 - result-visible mathematical authority and exact declaration provenance;
-- structured theorem/result dependencies;
+- structured theorem/result dependencies and transitive semantic closure;
 - canonical `thorn-proof/1` review context;
 - exact bounded source handles where rescue is required;
 - explicit ambiguity and capability state;
-- explicit source/dependency partiality without invented authority or targets.
+- explicit source/dependency partiality without invented authority or targets; and
+- both current review selectors as projections of canonical Thorn state.
 
 Passing this contract does not prove a theorem correct. It establishes that the
 mathematical context Thorn claims to have recovered remains faithful, source-addressed,
@@ -35,19 +36,26 @@ advertised frontend / linguistic capabilities
 Thorn Symbol IR + result dependency graph
         |
         v
+review-context selection (policy, not authority)
+        |
+        v
 canonical Proof IR -> thorn-proof/1 review context
         |
         +--> canonical initial representation, when sufficient
         `--> bounded exact NEED_SOURCE rescue, when required
 ```
 
-Backend implementations may recover different intermediate evidence. They conform
-when every capability they advertise satisfies the same Thorn-owned assertions. A
-reduced configuration must omit the capability explicitly and the corresponding test
-must skip or fail for that named reason; silently exercising a weaker path is not
-conformance.
+Source and NLP machinery propose normalized facts or candidates. Thorn owns mathematical
+authority, scope, dependency identity and materiality, ambiguity, provenance, transitive
+semantic closure, and bounded review reachability. A selector may choose a bounded view
+of those facts; it does not acquire a second authority graph by doing so.
 
-## Stable invariants
+Backend implementations may recover different intermediate evidence. They conform when
+every capability they advertise satisfies the same Thorn-owned assertions. A reduced
+configuration must omit a capability explicitly and the corresponding test must skip or
+fail for that named reason; silently exercising a weaker path is not conformance.
+
+## Stable Thorn-owned invariants
 
 The contract is organized around these assurance properties:
 
@@ -69,178 +77,255 @@ The contract is organized around these assurance properties:
    source rescue accepts only the finite advertised handle set.
 10. `thorn-proof/1` remains a projection over canonical state, not a second semantic
     store or a whole-paper fallback.
-11. When a required source fact, project edge, or dependency is unavailable or
+11. Selector-visible results, dependencies, support relations, symbols, definitions,
+    constraints, candidates, and source context must correspond to canonical Thorn-owned
+    state. Selection may prune canonical state according to policy; it may not invent a
+    dependency target, authority, source, ambiguity resolution, or shadow graph.
+12. When a required source fact, project edge, or dependency is unavailable or
     ambiguous, Thorn must preserve that partiality explicitly or fail closed; it must
     not invent a result, child source, expanded project ordering, declaration,
     dependency target, or review source. Declaration-shaped prose without a substantive
     defining complement is partial evidence only and must not become an authoritative
-    definition, constraint, or resolved semantic dependency. Whether a selector exposes
-    exact partial source as non-authoritative evidence is a separate review-policy
-    question.
+    definition, constraint, or resolved semantic dependency.
 
-These properties concern fidelity, provenance, closure, and bounded reachability. They
-do not decide which review-context selector should govern normal review.
+These are fidelity, provenance, closure, ambiguity, and bounded-reachability guarantees.
+They do **not** choose which current review selector should govern normal review.
 
-The contract deliberately does **not** require authoritative prose to remain absent
-from the initial packet. PR #155 currently keeps this prose behind source handles, but a
-future contract-equivalent projection may render semantically sufficient canonical
-context directly. Conversely, if the initial representation is not sufficient, the
-exact source must remain available through the bounded closed-world rescue mechanism.
+The contract deliberately does not require authoritative prose to remain absent from the
+initial packet. A future contract-equivalent projection may render semantically
+sufficient canonical context directly. Conversely, if the initial representation is not
+sufficient, exact relevant source must remain available through bounded closed-world
+rescue. Review availability is therefore placement-neutral.
 
-## Review-selector status
+## Current review selectors
 
-The production `review_workflow` currently uses result-level selection from
-`eval_review`, while `semantic_review` provides targeted uncertainty-triggered
-selection. Their materiality and escalation policies differ.
+Thorn currently has two review-context policies. #162 characterizes both so later
+architecture work can compare them without treating either policy as mathematical
+authority.
 
-The conformance helper `assert_observed_result_context` deliberately names its current
-result-level behavior as an observation. It accepts either canonical initial context or
-bounded exact rescue and does not declare the current packet-placement choice
-normative. Later #162 work must characterize targeted selection separately while
-sharing the stable provenance, closure, and reachability assertions above. The
-architecture decision gate must then choose the intended normal-review policy before
-#161.
+### Result-level selection (`review_workflow` / `eval_review`)
+
+The result-level path is called by `review_workflow` through the `eval_review` seam. For
+a requested result it currently emits exactly one bounded item regardless of whether an
+uncertainty trigger exists. It includes all claims and support relations belonging to
+the selected result, result-visible symbol context, candidate evidence, and all resolved
+direct structured dependencies of that result. Project-scope semantic declarations
+selected by actual result use are closed transitively over declaration-to-declaration
+uses before projection.
+
+This path is wired into the canonical review workflow: its Thorn-owned review item feeds
+the established semantic transformation / Proof IR path and ultimately `thorn-proof/1`.
+Exact source rescue is therefore advertised by the canonical proof-language projection,
+not by a selector-private source mechanism.
+
+Observed policy, not a stable architecture choice:
+
+- selection is result-wide rather than trigger-relative;
+- escalation is decided by its caller, not by the selector itself;
+- deterministic result context is included by default;
+- all resolved direct structured dependencies are retained rather than trigger-pruned;
+- ambiguous and unresolved support relations are preserved and listed as trigger
+  identifiers, but their presence does not gate item creation;
+- result-owned partial/candidate evidence may be present without becoming authority; and
+- a no-trigger result still has a result-level review item available.
+
+### Targeted uncertainty-triggered selection (`semantic_review`)
+
+The targeted path emits items only for ambiguous or unresolved support relations. It
+groups nearby uncertainty triggers into bounded local regions, carries confident support
+relations only where they provide local structure, selects symbol/declaration context
+relevant to those regions, and prunes structured dependencies to resolved canonical
+result dependencies implicated by selected support labels. Selected project-scope
+semantic declarations use the same transitive declaration closure as the result-level
+path.
+
+The targeted item carries Thorn-owned claims, relations, source spans, symbol state, and
+dependency nodes directly. It does not advertise a separate NEED_SOURCE universe or
+maintain a second dependency graph. Any later proof-language projection or rescue must
+continue to derive from canonical Thorn state and exact provenance.
+
+Observed policy, not a stable architecture choice:
+
+- selection is uncertainty-triggered and trigger-relative;
+- ambiguous/unresolved support relations are the escalation triggers;
+- deterministic context is admitted only where it is structurally local to a trigger;
+- claims, symbol context, and structured dependencies are pruned to the local region;
+- unresolved support evidence remains unresolved even when a canonical structured
+  dependency with the same label exists;
+- ambiguous linguistic candidates can accompany a triggered item but cannot create one
+  by themselves or become authority;
+- nearby partial evidence may be exposed as exact non-authoritative context when it is
+  attached to selected canonical evidence; and
+- if there is no uncertainty trigger, no targeted item is emitted.
+
+### Shared selector correspondence
+
+`tests/test_semantic_dependency_selector_contract.py` exercises both selectors against
+the same canonical project fixture. The shared assertions are intentionally phrased in
+Thorn-owned terms:
+
+- result and dependency identity correspond to the canonical dependency graph;
+- selected structured dependencies lie inside canonical semantic reachability;
+- selected support relations preserve canonical ambiguity/unresolved status and exact
+  evidence provenance;
+- selected symbols, definitions, constraints, and candidates are canonical Symbol IR
+  objects rather than selector-owned copies of mathematical authority;
+- structured dependencies and prose/symbol context compose in the same review item;
+- nearby context must originate in exact evidence already attached to selected support;
+- candidates remain non-authoritative after selection; and
+- selection may prune canonical context but cannot invent source or dependency identity.
+
+The result-level and targeted policies intentionally differ on trigger gating, context
+breadth, pruning, direct dependency inclusion, and rescue advertisement. Those
+differences are observations for a future selector-policy decision before #161, not
+normative conclusions of #162.
 
 ## Configuration matrix
-
-The initial ordinary-CI matrix is:
 
 | Configuration | Project semantics | Linguistic candidates | Execution |
 | --- | --- | --- | --- |
 | Regex frontend, structural-only | Required | Not advertised | Ordinary CI |
 | pylatexenc frontend, structural-only | Required | Not advertised | Ordinary CI |
 | Regex frontend, deterministic NLP fixture | Required | Required | Ordinary CI |
+| Regex frontend, real local spaCy (`en_core_web_sm`) | Required | Required | Mandatory Local NLP workflow |
 
-Structural-only semantic declarations are supported because the current explicit prose
-recognizer is unconditional. Structural-only does not advertise linguistic candidates;
-the executable matrix records that limitation as an intentional skip. Real spaCy
-coverage remains in the mandatory Local NLP contract and must later consume the same
-candidate assertions without exposing spaCy-native objects.
+Structural-only semantic declarations remain supported because the current explicit
+prose recognizer is unconditional. Structural-only deliberately does not advertise the
+linguistic-candidate capability; this is an explicit reduced-capability mode rather than
+a silent fallback.
+
+The real spaCy configuration remains isolated to `.github/workflows/nlp.yml`, which
+installs `en_core_web_sm` locally and runs with `OPENAI_API_KEY` empty. Ordinary CI does
+not gain a model download. `tests/test_semantic_dependency_local_nlp_contract.py` runs
+the deterministic fixture and real spaCy adapter through the same normalized candidate
+helper. The helper verifies that:
+
+- `LinguisticFrontend.parse()` returns only Thorn-owned `LinguisticDocument` and
+  `LinguisticToken` values at the adapter boundary;
+- candidate evidence retains exact reversible source provenance;
+- backend evidence is normalized into Thorn-owned candidate/evidence models;
+- ambiguous linguistic evidence stays ambiguous and cannot become a definition,
+  constraint, resolved dependency, or other mathematical authority merely because spaCy
+  proposed it; and
+- the serialized candidate boundary contains no spaCy-native objects.
+
+This is conformance of the existing Local NLP adapter, not the prose-recognition
+experiment in #160. The contract does not extend `_CALLED_RE`, `_SAID_TO_BE_RE`,
+`_WE_SAY_RE`, `_BY_MEAN_RE`, `_AMBIENT_RE`, or any other hand-written English grammar.
+Unsupported paraphrases remain future empirical work.
 
 ## Current fixture matrix
 
-| Mathematical shape | Assertions | Frontends |
-| --- | --- | --- |
-| Held-out flag-complex predicate | Result-visible authority, exact provenance, review availability, closed world | Regex, pylatexenc |
-| Ambient Hausdorff convention between results | Forward application and no backward leakage | Regex, pylatexenc |
-| Comment, verbatim, and nearby historical prose | No false authority or reachability | Regex, pylatexenc |
-| Cross-file predicate redefinition | Later included authority resolves at the result; earlier authority does not | Regex, pylatexenc |
-| Same-file predicate redefinition | Later authority resolves at the result; shadowed source is not review-reachable | Regex, pylatexenc |
-| Parent declaration before child include | Parent authority is visible to a theorem inside the child | Regex, pylatexenc |
-| Child declaration before parent continuation | Child authority remains visible after returning to the parent | Regex, pylatexenc |
-| Child redefinition followed by child and parent theorems | Child authority shadows the earlier parent declaration at both results | Regex, pylatexenc |
-| Parent declaration after a child include | Later parent source does not leak backward into the child result | Regex, pylatexenc |
-| Recovered authoritative source projected to report navigation | Canonical declaration provenance preserves exact file, line range, excerpt, and file URI | Regex, pylatexenc |
-| Base-field convention, regular-matrix definition, and cited lemma | Transitive semantic closure composes with result dependency | Regex, pylatexenc |
-| Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative | Deterministic NLP fixture; structural-only explicitly skipped |
-| Truncated theorem environment | Parse partiality is explicit; no theorem/result is invented | Regex, pylatexenc |
-| Missing included file | Exact `MISSING_FILE` include-site provenance; unavailable source does not become authority by guess | Regex, pylatexenc |
-| Malformed/incomplete direct include | Exact normalized project-partiality provenance; no guessed child, expansion order, or later authority | Regex, pylatexenc |
-| Direct include target requiring TeX expansion | Explicit project partiality rather than guessing a static child | Regex, pylatexenc |
-| Include-like text in comments/verbatim | No child source or project edge is fabricated from literal source | Regex, pylatexenc |
-| Unused macro definition containing include syntax | Definition site alone is not treated as an executed project boundary; invocation semantics are deferred to #159 | Regex, pylatexenc |
-| Static non-ASCII/punctuated include target | No Thorn-owned ASCII filename grammar is imposed on workspace evidence | Regex, pylatexenc |
-| Missing structured result reference | Dependency remains `MISSING`; no target or referenced review source is invented | Regex, pylatexenc |
-| Duplicate structured result label | Dependency remains `AMBIGUOUS`; no arbitrary target or referenced review source is selected | Regex, pylatexenc |
-| Truncated named declarations and ambient conventions | Exact available source is preserved; no definition, constraint, or resolved semantic dependency is invented; complete neighbouring declarations remain authoritative with exact provenance | Regex, pylatexenc |
+| Mathematical/source shape | Contract assertion |
+| --- | --- |
+| Held-out flag-complex predicate | Result-visible authority, exact provenance, review availability, closed world |
+| Ambient Hausdorff convention between results | Forward application and no backward leakage |
+| Comment, verbatim, and nearby historical prose | No false authority or reachability |
+| Same-file and cross-file predicate redefinition | Source-order and include-order shadowing select justified authority |
+| Parent/child include ordering variants | Authority respects project occurrence order in both directions |
+| Recovered authoritative source projected to report navigation | Exact file, line range, excerpt, and file URI |
+| Base-field convention, regular-matrix definition, and cited lemma | Transitive semantic closure composes with structured dependency |
+| Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative |
+| Real local spaCy linguistic introduction | Same Thorn-owned candidate contract and normalized adapter boundary |
+| Result-level and targeted selector projections | Canonical authority/dependency correspondence; uncertainty preserved; policy differences explicit |
+| Truncated theorem environment | Parse partiality explicit; no theorem/result invented |
+| Missing included file | Exact missing-file provenance; unavailable source does not become guessed authority |
+| Malformed/incomplete direct include | Exact project partiality; no guessed child or expansion order |
+| Include-like text in comments/verbatim or unused macro definitions | No fabricated executed project boundary |
+| Static non-ASCII/punctuated include target | No Thorn-owned ASCII filename grammar imposed |
+| Missing structured result reference | Dependency remains missing; no target or review source invented |
+| Duplicate structured result label | Dependency remains ambiguous; no arbitrary target selected |
+| Truncated named declarations and ambient conventions | Exact available source preserved; no authority fabricated |
 
-The initial slice generalized the #125 seed beyond convergence vocabulary and made the
-same semantic assertions reusable across both supported LaTeX frontends. The second
-bounded slice extends the contract across source-occurrence order and report navigation
-without asserting private identifier spelling, declaration storage multiplicity, or
-whether authoritative prose is initially rendered versus source-rescued. The
-report-navigation fixture derives navigation from canonical declaration provenance and
-asserts review reachability separately, so it does not require a proof-language source
-handle to exist.
-
-The source-rescue response bound is already enforced by the shared closed-world
-proof-language contract in
-`tests/test_issue_88_closed_world_source_selection.py`: the selectable universe may be
-larger, but one request is schema-bounded and an over-limit response is rejected. #162
-therefore relies on that shared proof-language guarantee rather than freezing a second
-copy of the current numeric limit. Its own fixtures continue to require that semantic
-source handles belong to the finite advertised set and resolve to exact source.
+The source-rescue response bound remains enforced by the shared closed-world
+proof-language contract in `tests/test_issue_88_closed_world_source_selection.py`. The
+selectable universe may be larger, but one request is schema-bounded and an over-limit
+response is rejected. #162 relies on that shared guarantee rather than freezing a second
+copy of the current numeric limit.
 
 ## Explicit partiality boundary
 
-The first partiality slice makes four already-supported failure modes part of the
-backend-independent guardrail. A malformed theorem environment is a source fact that is
-unavailable: the frontend must report normalized parse partiality and Thorn must not
-synthesize a mathematical result from the malformed source. A frontend may still retain
-a partial or error syntax node internally; #162 does not make that CST representation
-normative.
+Malformed theorem source is an unavailable source fact: the frontend reports normalized
+parse partiality and Thorn must not synthesize a mathematical result. A backend may
+retain a partial/error syntax node internally; #162 does not make that CST normative.
 
 A missing include is explicit source/project unavailability with exact include-site
-provenance. The stable contract is the normalized `MISSING_FILE` fact and the requirement
-that unavailable source never turns into invented mathematical authority. The current
-extractor happens to fail closed with an exception, but neither `FileNotFoundError` nor
-any particular exception/partial-project mechanism is normative. #159 may replace that
-mechanism with a Thorn-owned partial project state while preserving the same source and
-semantic consequences.
+provenance. The stable contract is the normalized missing-file fact and the requirement
+that unavailable source never becomes invented authority. The current failure mechanism
+is not normative; #159 may replace it while preserving the same semantic consequences.
 
-Missing and duplicate result references remain `MISSING` and `AMBIGUOUS` dependency
-edges respectively, with no fabricated target and no fabricated referenced-result
-source in review context.
+Missing and duplicate result references remain missing and ambiguous dependency edges
+respectively, with no fabricated target and no fabricated referenced-result source in
+review context. Parser disagreement is likewise observable rather than normalized away;
+#162 constrains the Thorn-owned semantic consequences, not parser-native evidence.
 
-Parser disagreement itself is also already observable rather than normalized away by
-`tests/test_frontend_ab.py`; #162 relies on that source-fact boundary while asserting only
-Thorn-owned semantic consequences.
+The #167 guard extends this rule to incomplete prose declarations. A recognizer may
+observe a declaration-shaped cue, but Thorn's authority layer must not promote it unless
+substantive defining content is available. Exact partial source may later be exposed as
+non-authoritative review evidence; that is selector policy, not mathematical authority.
 
-The #167 tranche extends that boundary to incomplete prose declarations. A recognizer
-may still observe a declaration-shaped cue, but Thorn's authority layer must not promote
-it unless defining content is actually available. The exact source that was available
-remains source provenance; it is not converted into a definition, ambient constraint,
-or resolved semantic dependency by guess. The authority guard treats non-math macro-only or macro-leading
-material conservatively as insufficient payload, so syntax such as labels or empty
-formatting wrappers cannot manufacture authority or bridge into unrelated later prose. A future selector may still expose
-the exact partial source as non-authoritative evidence; #162 deliberately leaves that
-policy open. Complete neighbouring declarations continue to resolve normally. This rule
-is vocabulary-independent and applies equally across the regex and pylatexenc structural
-configurations.
+The #169 guard applies the same fail-closed rule to direct project structure. Complete
+static direct includes are project evidence; incomplete/mismatched/directly dynamic
+include targets become normalized project partiality with exact provenance. Unsafe
+children are not guessed into project order. Comment/verbatim include-shaped text is not
+project evidence, and macro invocation semantics are deferred to #159 rather than
+approximated by a Thorn-specific TeX expansion engine.
 
-The #169 tranche applies the same fail-closed rule to direct project structure. A
-complete direct static `\\input`/`\\include` remains ordinary project evidence. An
-incomplete target, mismatched group, or direct target that visibly requires TeX
-expansion becomes normalized `PROJECT_PARTIALITY` with exact available source
-provenance. Files reached only through unsafe direct include evidence are excluded from
-the normalized project, and extraction currently fails closed rather than allowing
-later results to inherit guessed ordering or authority. Conversely, include-shaped text
-that is demonstrably comment or closed verbatim content is not project evidence at all.
-An include token appearing inside a macro definition is likewise not treated as an
-executed boundary merely because it is present in source. Determining whether and how a
-custom macro invocation expands the project requires generic TeX/workspace semantics and
-is deliberately deferred to #159 rather than approximated in this temporary guard.
-Static filenames are not restricted by a Thorn-owned ASCII whitelist. The current
-exception mechanism and the temporary normalization layer are not normative; #159 may
-replace both with mature workspace/project-resolution tooling while preserving these
-semantic consequences.
+## Projection correspondence exposed by #162
 
-## Remaining #162 matrix
+The selector and Local NLP slices expose three correspondence rules worth making
+explicit; no broader projection redesign is implied:
 
-After the project-partiality tranche, remaining acceptance work is:
+1. Selector-visible mathematical authority and dependency identity must correspond to
+   canonical Symbol IR and dependency-graph state. A selector may filter but not resolve
+   ambiguity or create a parallel semantic graph.
+2. Ambiguity survives projection. Uncertain support or linguistic candidate evidence
+   cannot become deterministic authority because it was selected, normalized by spaCy,
+   or rendered for review.
+3. Source navigation and rescue use canonical exact provenance. Where `thorn-proof/1`
+   advertises a source address, the existing closed-world contract requires exact
+   resolution; targeted selector context carries exact canonical spans rather than an
+   independent source-address namespace.
 
-- targeted-selector characterization without choosing its production role;
-- the real Local NLP configuration in its mandatory workflow;
-- any additional projection-correspondence assertion exposed by those selector/NLP
-  slices.
-
-These are remaining acceptance work, not optional robustness ideas. #162 is complete
-only when the public matrix covers them and the focused selector decision has enough
-evidence to proceed.
+These are the projection-correspondence assertions directly exposed by the final #162
+slices. They do not prescribe future prompt shape, packet placement, selector policy, or
+IR structure.
 
 ## Running the contract
 
-The keyless contract runs with:
+The ordinary keyless semantic-dependency contract runs with:
 
 ```bash
 pytest -q tests/test_semantic_dependency_contract.py \
   tests/test_semantic_dependency_partiality_contract.py \
-  tests/test_semantic_dependency_project_partiality_contract.py
+  tests/test_semantic_dependency_project_partiality_contract.py \
+  tests/test_semantic_dependency_selector_contract.py
 ```
 
-No provider credentials, provider calls, or model fixtures are permitted. Backend and
-Local NLP lanes may add dependencies needed for their advertised capability, but the
-asserted semantic vocabulary remains Thorn-owned.
+The mandatory Local NLP workflow additionally installs its existing local spaCy model
+and runs:
+
+```bash
+pytest -q tests/test_semantic_dependency_contract.py \
+  tests/test_semantic_dependency_local_nlp_contract.py
+```
+
+No provider credentials, provider calls, readiness probes, paid evaluations, or
+provider-backed model measurements are part of this contract.
+
+## #162 completion boundary
+
+The public conformance matrix now covers named prose authority, ambient scope,
+scope/shadowing/include order, transitive closure, negative exposition,
+comments/verbatim, ambiguity, exact provenance, bounded reachability, structured
+result dependencies, source/project partiality, exact report/source navigation,
+explicit reduced-capability modes, real Local NLP conformance, and characterization of
+both current review selectors.
+
+Accordingly there is no remaining #162 matrix. The future selector-policy decision is
+architecture work after this conformance issue; #162 does not choose it. The empirical
+backend evaluations in #158, #159, and #160 and eventual consolidation in #161 remain
+separate work under #156.
 
 ## Non-goals
 
@@ -248,9 +333,11 @@ asserted semantic vocabulary remains Thorn-owned.
 - recovering all implicit cultural mathematical knowledge;
 - freezing parser- or NLP-native evidence paths;
 - defining a Thorn-specific TeX filename grammar or macro-expansion engine;
-- freezing private symbol identifier conventions or storage multiplicity;
+- freezing private symbol identifier conventions or declaration storage multiplicity;
 - freezing whether authoritative prose is initially rendered or source-rescued;
-- making both current review selectors normative;
+- choosing either current review selector as the future production policy;
+- redesigning review prompts;
+- extending hand-written prose grammar to unsupported paraphrases;
 - exposing nearby or whole-paper prose as fallback context;
-- introducing a second semantic IR;
-- using paid or model-backed tests.
+- introducing a second semantic IR; or
+- using provider/model calls in the conformance tranche.
