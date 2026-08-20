@@ -5,17 +5,17 @@
 This contract defines the mathematical dependency and source-reachability properties
 that Thorn must preserve while LaTeX, workspace, linguistic, and graph substrates
 change under issues #158-#161. It observes Thorn-owned state and behavior rather than
-backend-native syntax trees, dependency parses, regex matches, or module layout.
+backend-native syntax trees, dependency parses, regex matches, private identifier
+schemes, or module layout.
 
 The executable contract starts in
 `tests/test_semantic_dependency_contract.py`. Its fixtures are ordinary LaTeX projects
 and its assertions inspect:
 
-- authoritative project symbols, definitions, and constraints;
+- result-visible mathematical authority and exact declaration provenance;
 - structured theorem/result dependencies;
-- exact source provenance;
-- canonical `thorn-proof/1` source handles;
-- bounded closed-world source rescue;
+- canonical `thorn-proof/1` review context;
+- exact bounded source handles where rescue is required;
 - explicit ambiguity and capability state.
 
 Passing this contract does not prove a theorem correct. It establishes that the
@@ -34,10 +34,10 @@ advertised frontend / linguistic capabilities
 Thorn Symbol IR + result dependency graph
         |
         v
-canonical Proof IR -> thorn-proof/1 exact source handles
+canonical Proof IR -> thorn-proof/1 review context
         |
-        v
-bounded NEED_SOURCE rescue
+        +--> canonical initial representation, when sufficient
+        `--> bounded exact NEED_SOURCE rescue, when required
 ```
 
 Backend implementations may recover different intermediate evidence. They conform
@@ -50,8 +50,10 @@ conformance.
 
 The contract is organized around these assurance properties:
 
-1. An activated prose definition or ambient convention has one canonical Thorn symbol
-   identity and exact authoritative source.
+1. At a result, an activated prose definition or ambient convention resolves to the
+   mathematically authoritative declaration with exact source provenance. The contract
+   does not constrain private symbol identifier spelling or require shadowed historical
+   declarations to be discarded from internal state.
 2. Authority follows mathematical use and scope, not textual proximity.
 3. Ambient authority applies forward and does not leak backward.
 4. Comments and verbatim-like source do not create authority.
@@ -60,13 +62,21 @@ The contract is organized around these assurance properties:
    theorem/result dependencies.
 7. Ambiguous linguistic evidence remains a candidate and never becomes deterministic
    authority merely because a parser proposed it.
-8. Every advertised semantic source handle resolves to exact manuscript text.
-9. Source rescue accepts only the finite advertised handle set.
+8. Review-relevant semantic context is available either as a semantically sufficient
+   canonical initial representation or through an advertised exact source handle.
+9. Every advertised semantic source handle resolves to exact manuscript text, and
+   source rescue accepts only the finite advertised handle set.
 10. `thorn-proof/1` remains a projection over canonical state, not a second semantic
     store or a whole-paper fallback.
 
 These properties concern fidelity, provenance, closure, and bounded reachability. They
 do not decide which review-context selector should govern normal review.
+
+The contract deliberately does **not** require authoritative prose to remain absent
+from the initial packet. PR #155 currently keeps this prose behind source handles, but a
+future contract-equivalent projection may render semantically sufficient canonical
+context directly. Conversely, if the initial representation is not sufficient, the
+exact source must remain available through the bounded closed-world rescue mechanism.
 
 ## Review-selector status
 
@@ -74,11 +84,13 @@ The production `review_workflow` currently uses result-level selection from
 `eval_review`, while `semantic_review` provides targeted uncertainty-triggered
 selection. Their materiality and escalation policies differ.
 
-The conformance helper `assert_observed_result_source` deliberately names its current
-result-level behavior as an observation. It does not declare that wiring normative.
-Later #162 work must characterize targeted selection separately while sharing the
-stable provenance, closure, and reachability assertions above. The architecture
-decision gate must then choose the intended normal-review policy before #161.
+The conformance helper `assert_observed_result_context` deliberately names its current
+result-level behavior as an observation. It accepts either canonical initial context or
+bounded exact rescue and does not declare the current packet-placement choice
+normative. Later #162 work must characterize targeted selection separately while
+sharing the stable provenance, closure, and reachability assertions above. The
+architecture decision gate must then choose the intended normal-review policy before
+#161.
 
 ## Configuration matrix
 
@@ -100,10 +112,10 @@ candidate assertions without exposing spaCy-native objects.
 
 | Mathematical shape | Assertions | Frontends |
 | --- | --- | --- |
-| Held-out flag-complex predicate | Authority, exact provenance, advertised rescue, closed world | Regex, pylatexenc |
+| Held-out flag-complex predicate | Result-visible authority, exact provenance, review availability, closed world | Regex, pylatexenc |
 | Ambient Hausdorff convention between results | Forward application and no backward leakage | Regex, pylatexenc |
 | Comment, verbatim, and nearby historical prose | No false authority or reachability | Regex, pylatexenc |
-| Cross-file predicate redefinition | Later included authority shadows earlier source | Regex, pylatexenc |
+| Cross-file predicate redefinition | Later included authority resolves at the result; earlier authority does not | Regex, pylatexenc |
 | Base-field convention, regular-matrix definition, and cited lemma | Transitive semantic closure composes with result dependency | Regex, pylatexenc |
 | Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative | Deterministic NLP fixture; structural-only explicitly skipped |
 
@@ -143,6 +155,8 @@ asserted semantic vocabulary remains Thorn-owned.
 - proving mathematical correctness;
 - recovering all implicit cultural mathematical knowledge;
 - freezing parser- or NLP-native evidence paths;
+- freezing private symbol identifier conventions or storage multiplicity;
+- freezing whether authoritative prose is initially rendered or source-rescued;
 - making both current review selectors normative;
 - exposing nearby or whole-paper prose as fallback context;
 - introducing a second semantic IR;
