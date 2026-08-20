@@ -28,6 +28,7 @@ class FrontendRegionKind(StrEnum):
     VERBATIM = "verbatim"
     LISTING = "listing"
     MINTED = "minted"
+    OPAQUE = "opaque"
     MATH = "math"
 
 
