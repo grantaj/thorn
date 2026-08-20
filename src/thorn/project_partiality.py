@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,7 +14,6 @@ from thorn.frontend import (
 
 _INCLUDE_NAMES = {"include", "input"}
 _LITERAL_ENVIRONMENTS = {"Verbatim", "comment", "lstlisting", "minted", "verbatim"}
-_STATIC_TARGET_RE = re.compile(r"[A-Za-z0-9._/ -]+")
 
 
 @dataclass(frozen=True)
@@ -103,34 +101,44 @@ def _partiality(file: FrontendFile, macro: FrontendMacro, reason: str) -> Fronte
     )
 
 
+def _requires_tex_expansion(target: str) -> bool:
+    """Recognize only obvious expansion syntax, not a Thorn filename grammar."""
+
+    return "\\" in target or "#" in target
+
+
 def classify_includes(
     file: FrontendFile,
 ) -> tuple[list[IncludeTarget], list[FrontendDiagnostic]]:
-    """Return statically safe includes and explicit project partiality.
+    """Return safe direct includes and explicit direct-include partiality.
 
-    This is a narrow authority-boundary check, not a general TeX expander. Include
-    commands are traversable only when the frontend exposes one complete static path
-    and the command is not demonstrably literal content or nested in another macro,
-    where execution semantics would require macro expansion to determine safely.
+    This is a narrow authority-boundary check, not a TeX expander or workspace
+    implementation. An include token inside another macro's argument is source at a
+    macro definition/use site, not by itself an executed project boundary, so this
+    temporary guard leaves macro-expansion semantics to #159.
     """
 
     targets: list[IncludeTarget] = []
     diagnostics: list[FrontendDiagnostic] = []
     for macro in file.macros:
-        if macro.name not in _INCLUDE_NAMES or _inside_literal_environment(file, macro):
-            continue
-        if _inside_macro_argument(file, macro):
-            diagnostics.append(_partiality(file, macro, "include occurs inside another macro"))
+        if (
+            macro.name not in _INCLUDE_NAMES
+            or _inside_literal_environment(file, macro)
+            or _inside_macro_argument(file, macro)
+        ):
             continue
 
         required = [argument for argument in macro.arguments if not argument.optional]
         if len(required) != 1 or not _complete_braced_argument(required[0].raw):
-            diagnostics.append(_partiality(file, macro, "complete static target is unavailable"))
+            diagnostics.append(_partiality(file, macro, "complete direct target is unavailable"))
             continue
 
         target = required[0].value.strip()
-        if not target or _STATIC_TARGET_RE.fullmatch(target) is None:
-            diagnostics.append(_partiality(file, macro, "target is not a static file path"))
+        if not target:
+            diagnostics.append(_partiality(file, macro, "direct target is empty"))
+            continue
+        if _requires_tex_expansion(target):
+            diagnostics.append(_partiality(file, macro, "direct target requires TeX expansion"))
             continue
 
         targets.append(IncludeTarget(value=target, source=macro.span))
@@ -152,12 +160,13 @@ def _target_path(file: FrontendFile, target: IncludeTarget) -> Path:
 
 
 def normalize_project_structure(project: ParsedProject) -> ParsedProject:
-    """Normalize the safely reachable project without trusting guessed traversal.
+    """Normalize the safely reachable direct-include project.
 
     Existing frontends currently perform their own include traversal. Until #159
-    decides the long-term workspace substrate, this guard re-derives only the safety
-    boundary from normalized source facts: unsafe include-like evidence is explicit
-    partiality, and files reached only through that evidence are not semantic input.
+    decides the long-term workspace substrate, this guard re-derives only a narrow
+    safety boundary from normalized source facts: unsafe direct include evidence is
+    explicit partiality, files reached only through literal or nested include-like text
+    are not semantic input, and macro-expansion semantics are deliberately not inferred.
     """
 
     files_by_path = {str(Path(file.path).resolve()): file for file in project.files}
