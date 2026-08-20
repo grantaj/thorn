@@ -61,7 +61,11 @@ Indeed, by \ref{fact:one}.
     tex.write_text(source, encoding="utf-8")
 
     parsed = _frontend().parse_project(tex)
-    assert not [item for item in parsed.diagnostics if item.kind == FrontendDiagnosticKind.MISSING_FILE]
+    assert not [
+        item
+        for item in parsed.diagnostics
+        if item.kind == FrontendDiagnosticKind.MISSING_FILE
+    ]
     file = parsed.files[0]
 
     names = [macro.name for macro in file.macros]
@@ -77,7 +81,16 @@ Indeed, by \ref{fact:one}.
     assert [argument.optional for argument in foo.arguments] == [True, False]
 
     env_names = {environment.name for environment in file.environments}
-    assert {"document", "comment", "verbatim", "verbatim*", "lstlisting", "minted", "fact", "proof"} <= env_names
+    assert {
+        "document",
+        "comment",
+        "verbatim",
+        "verbatim*",
+        "lstlisting",
+        "minted",
+        "fact",
+        "proof",
+    } <= env_names
     fact = next(environment for environment in file.environments if environment.name == "fact")
     assert fact.arguments[0].value == "Small"
     assert fact.body(source).startswith(r"\label{fact:one}")
@@ -120,7 +133,11 @@ def test_tree_sitter_follows_real_includes_but_not_opaque_fake_includes(tmp_path
 
     parsed = _frontend().parse_project(main)
     assert {Path(file.path).name for file in parsed.files} == {"main.tex", "child.tex"}
-    assert not [item for item in parsed.diagnostics if item.kind == FrontendDiagnosticKind.MISSING_FILE]
+    assert not [
+        item
+        for item in parsed.diagnostics
+        if item.kind == FrontendDiagnosticKind.MISSING_FILE
+    ]
     include = next(macro for macro in parsed.files[0].macros if macro.name == "input")
     assert include.span.start_line == 1
     assert include.arguments[0].value == "child"
@@ -134,9 +151,16 @@ def test_tree_sitter_malformed_environment_fails_closed(tmp_path: Path) -> None:
     )
 
     parsed = _frontend().parse_project(tex)
-    errors = [item for item in parsed.diagnostics if item.kind == FrontendDiagnosticKind.PARSE_ERROR]
+    errors = [
+        item
+        for item in parsed.diagnostics
+        if item.kind == FrontendDiagnosticKind.PARSE_ERROR
+    ]
     assert errors
-    assert any("proof" in item.message or item.source and item.source.start_line == 2 for item in errors)
+    assert any(
+        "proof" in item.message or (item.source is not None and item.source.start_line == 2)
+        for item in errors
+    )
     assert not any(environment.name == "proof" for environment in parsed.files[0].environments)
 
 
