@@ -176,15 +176,15 @@ def normalize_project_structure(project: ParsedProject) -> ParsedProject:
             continue
         reachable.add(path)
 
-        targets, diagnostics = classify_includes(file)
-        partiality.extend(diagnostics)
+        targets, include_diagnostics = classify_includes(file)
+        partiality.extend(include_diagnostics)
         for target in targets:
             safe_source_keys.add(_source_key(target.source))
             child = str(_target_path(file, target))
             if child in files_by_path:
                 pending.append(child)
 
-    diagnostics: list[FrontendDiagnostic] = []
+    normalized_diagnostics: list[FrontendDiagnostic] = []
     for diagnostic in project.diagnostics:
         if (
             diagnostic.kind == FrontendDiagnosticKind.MISSING_FILE
@@ -196,8 +196,8 @@ def normalize_project_structure(project: ParsedProject) -> ParsedProject:
             and str(Path(diagnostic.source.file).resolve()) not in reachable
         ):
             continue
-        diagnostics.append(diagnostic)
-    diagnostics.extend(partiality)
+        normalized_diagnostics.append(diagnostic)
+    normalized_diagnostics.extend(partiality)
 
     return project.model_copy(
         update={
@@ -206,6 +206,6 @@ def normalize_project_structure(project: ParsedProject) -> ParsedProject:
                 for file in project.files
                 if str(Path(file.path).resolve()) in reachable
             ],
-            "diagnostics": diagnostics,
+            "diagnostics": normalized_diagnostics,
         }
     )
