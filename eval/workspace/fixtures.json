@@ -113,6 +113,28 @@
       ]
     },
     {
+      "name": "custom_reference_macro",
+      "purpose": "A custom macro wraps a standard cross-file reference; resolution or explicit capability limitation is acceptable.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\newcommand{\\myref}[1]{\\ref{#1}}\n\\begin{document}\n\\input{child}\nSee Equation~\\myref{eq:child}.\n\\end{document}\n",
+        "child.tex": "\\begin{equation}x=x\\label{eq:child}\\end{equation}\n"
+      },
+      "markers": {},
+      "expected": {
+        "status": "resolved_or_explicit_partial",
+        "reference_target": "child.tex"
+      },
+      "definition_queries": [
+        {
+          "file": "main.tex",
+          "needle": "eq:child",
+          "occurrence": 1,
+          "kind": "definition"
+        }
+      ]
+    },
+    {
       "name": "fake_syntax_in_comment_and_verbatim",
       "purpose": "Include/reference-looking text in comments and verbatim is not project structure.",
       "main": "main.tex",
