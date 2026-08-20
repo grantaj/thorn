@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
+from test_semantic_dependency_contract import (
+    LINGUISTIC_CONFIGURATIONS,
+    ContractCapability,
+    ContractConfiguration,
+    _write_project,
+)
+
 from thorn.evidence import InferenceStatus
 from thorn.frontends import RegexLatexFrontend
 from thorn.linguistic import LinguisticDocument, LinguisticFrontend, LinguisticToken
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
-
-from test_semantic_dependency_contract import (
-    ContractCapability,
-    ContractConfiguration,
-    LINGUISTIC_CONFIGURATIONS,
-    _write_project,
-)
 
 
 def _spacy_frontend_or_skip() -> SpacyLinguisticFrontend:
