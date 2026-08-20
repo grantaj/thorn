@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
@@ -11,10 +12,21 @@ from thorn.latex import extract_project, extract_units
 
 FrontendFactory = Callable[[], LatexFrontend]
 
+if find_spec("tree_sitter") is not None and find_spec("tree_sitter_latex") is not None:
+    from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
+
+    _TREE_SITTER_FRONTENDS: tuple[FrontendFactory, ...] = (TreeSitterLatexFrontend,)
+else:
+    _TREE_SITTER_FRONTENDS = ()
+
 # Every serious backend must satisfy this source/provenance and structural
 # contract. Backend-specific disagreements belong in test_frontend_ab.py rather
 # than being silently normalized here.
-_FRONTENDS: tuple[FrontendFactory, ...] = (RegexLatexFrontend, PylatexencLatexFrontend)
+_FRONTENDS: tuple[FrontendFactory, ...] = (
+    RegexLatexFrontend,
+    PylatexencLatexFrontend,
+    *_TREE_SITTER_FRONTENDS,
+)
 
 
 def _frontend_id(factory: FrontendFactory) -> str:
@@ -54,8 +66,6 @@ Indeed.
     assert file.path == str(tex.resolve())
     assert file.raw == source
 
-    # A commented-out include is not syntax. Escaped percent remains visible as
-    # a control-symbol macro rather than starting a comment.
     assert not any(macro.name == "input" for macro in file.macros)
     assert any(macro.name == "%" for macro in file.macros)
 
@@ -134,7 +144,6 @@ def test_frontend_reports_missing_include_with_source(
     assert missing[0].source.start_line == 2
     assert "missing.tex" in missing[0].message
 
-    # The compatibility theorem-extraction API retains the old failure behavior.
     with pytest.raises(FileNotFoundError):
         extract_units(main, frontend=frontend_factory())
 
