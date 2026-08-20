@@ -85,8 +85,9 @@ def test_issue_160_spacy_measurement_probe() -> None:
         name: module._evaluate_strategy(name, payload["cases"], frontend)
         for name in ("dependency", "hybrid")
     }
-    summary = {
-        name: {
+    summary = {}
+    for name, report in reports.items():
+        summary[name] = {
             key: report[key]
             for key in (
                 "true_positive_candidates",
@@ -100,6 +101,6 @@ def test_issue_160_spacy_measurement_probe() -> None:
                 "transitive_cases_satisfied",
             )
         }
-        for name, report in reports.items()
-    }
+        summary[name]["fp_ids"] = [row["id"] for row in report["rows"] if row["fp"]]
+        summary[name]["fn_ids"] = [row["id"] for row in report["rows"] if row["fn"]]
     raise AssertionError("ISSUE160_MEASUREMENT=" + json.dumps(summary, sort_keys=True))
