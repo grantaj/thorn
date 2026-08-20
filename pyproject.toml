@@ -63,7 +63,5 @@ strict = true
 packages = ["thorn"]
 
 [[tool.mypy.overrides]]
-module = "thorn.frontends.tree_sitter"
-# These ignores are required when optional Tree-sitter packages are absent but
-# become unused when the dedicated evaluation lane installs them.
-warn_unused_ignores = false
+module = ["tree_sitter", "tree_sitter_latex"]
+ignore_missing_imports = true
