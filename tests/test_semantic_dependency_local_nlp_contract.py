@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from test_semantic_dependency_contract import (
     LINGUISTIC_CONFIGURATIONS,
     ContractCapability,
