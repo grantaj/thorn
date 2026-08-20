@@ -1,0 +1,40 @@
+name: workspace-resolution-eval
+on:
+  pull_request:
+    paths:
+      - 'src/thorn/workspace.py'
+      - 'eval/workspace_resolution/**'
+      - 'tests/test_workspace*.py'
+      - '.github/workflows/workspace-resolution-eval.yml'
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Thorn test environment
+        run: uv sync --extra dev
+      - name: Install LaTeXML 0.8.8
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends latexml
+          latexml --VERSION
+      - name: Install TexLab v5.26.0
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/latex-lsp/texlab/releases/download/v5.26.0/texlab-x86_64-linux.tar.gz \
+            -o /tmp/texlab.tar.gz
+          tar -xzf /tmp/texlab.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/texlab /usr/local/bin/texlab
+          texlab --version
+      - name: Run workspace differential evaluation
+        run: uv run python eval/workspace_resolution/run.py --backend all --output workspace-evidence.json
+      - name: Run focused tests
+        run: uv run pytest tests/test_workspace.py tests/test_workspace_eval.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workspace-resolution-evidence
+          path: workspace-evidence.json

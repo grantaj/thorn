@@ -1,0 +1,272 @@
+{
+  "child_parent_return": {
+    "expectation": {
+      "expanded": [
+        "main.tex",
+        "child.tex"
+      ],
+      "file_names": [
+        "main.tex",
+        "child.tex"
+      ],
+      "markers": [
+        "CHILD-DECL",
+        "PARENT-THEOREM"
+      ],
+      "status": "resolved"
+    },
+    "files": {
+      "child.tex": "CHILD-DECL Definition child.\n",
+      "main.tex": "\\documentclass{article}\\begin{document}\n\\input{child}\nPARENT-THEOREM Theorem parent.\n\\end{document}\n"
+    }
+  },
+  "cross_file_reference": {
+    "expectation": {
+      "definition_probes": [
+        {
+          "character": 20,
+          "file": "main.tex",
+          "line": 3
+        }
+      ],
+      "expanded": [
+        "main.tex",
+        "defs.tex"
+      ],
+      "file_names": [
+        "main.tex",
+        "defs.tex"
+      ],
+      "markers": [
+        "CROSS-LABEL",
+        "CROSS-REF"
+      ],
+      "status": "resolved"
+    },
+    "files": {
+      "defs.tex": "\\section{CROSS-LABEL}\\label{thm:cross}\n",
+      "main.tex": "\\documentclass{article}\\begin{document}\n\\input{defs}\nCROSS-REF See \\ref{thm:cross}.\n\\end{document}\n"
+    }
+  },
+  "cycle": {
+    "expectation": {
+      "expanded": null,
+      "file_names": [
+        "main.tex",
+        "a.tex",
+        "b.tex"
+      ],
+      "markers": [
+        "CYCLE-A",
+        "CYCLE-B"
+      ],
+      "status": "partial"
+    },
+    "files": {
+      "a.tex": "CYCLE-A\n\\input{b}\n",
+      "b.tex": "CYCLE-B\n\\input{a}\n",
+      "main.tex": "\\documentclass{article}\\begin{document}\n\\input{a}\n\\end{document}\n"
+    }
+  },
+  "fake_syntax": {
+    "expectation": {
+      "expanded": [
+        "main.tex"
+      ],
+      "file_names": [
+        "main.tex",
+        "ghost.tex"
+      ],
+      "markers": [
+        "FAKE-SAFE"
+      ],
+      "status": "resolved"
+    },
+    "files": {
+      "main.tex": "\\documentclass{article}\\begin{document}\n% \\input{ghost}\n\\begin{verbatim}\n\\input{ghost}\n\\ref{ghost}\n\\end{verbatim}\nFAKE-SAFE\n\\end{document}\n"
+    }
+  },
+  "macro_dynamic": {
+    "expectation": {
+      "expanded": null,
+      "file_names": [
+        "main.tex",
+        "part.tex"
+      ],
+      "markers": [
+        "MACRO-DYNAMIC",
+        "PART-DYNAMIC"
+      ],
+      "status": "partial"
+    },
+    "files": {
+      "main.tex": "\\documentclass{article}\n\\def\\pick#1{#1}\n\\begin{document}\nMACRO-DYNAMIC\n\\input{\\pick{part}}\n\\end{document}\n",
+      "part.tex": "PART-DYNAMIC\n"
+    }
+  },
+  "macro_static": {
+    "expectation": {
+      "expanded": null,
+      "file_names": [
+        "main.tex",
+        "part.tex"
+      ],
+      "markers": [
+        "MACRO-STATIC",
+        "PART-MACRO"
+      ],
+      "status": "partial"
+    },
+    "files": {
+      "main.tex": "\\documentclass{article}\n\\newcommand{\\partfile}{part}\n\\begin{document}\nMACRO-STATIC\n\\input{\\partfile}\n\\end{document}\n",
+      "part.tex": "PART-MACRO\n"
+    }
+  },
+  "malformed": {
+    "expectation": {
+      "expanded": null,
+      "file_names": [
+        "main.tex",
+        "part.tex"
+      ],
+      "markers": [
+        "MALFORMED"
+      ],
+      "status": "source_error"
+    },
+    "files": {
+      "main.tex": "\\documentclass{article}\\begin{document}\nMALFORMED\n\\input{{part}\n\\end{document}\n",
+      "part.tex": "PART-MALFORMED\n"
+    }
+  },
+  "missing": {
+    "expectation": {
+      "expanded": null,
+      "file_names": [
+        "main.tex",
+        "absent.tex"
+      ],
+      "markers": [
+        "MISSING-BEFORE",
+        "MISSING-AFTER"
+      ],
+      "status": "partial"
+    },
+    "files": {
+      "main.tex": "\\documentclass{article}\\begin{document}\nMISSING-BEFORE\n\\input{absent}\nMISSING-AFTER\n\\end{document}\n"
+    }
+  },
+  "nested": {
+    "expectation": {
+      "expanded": [
+        "main.tex",
+        "a.tex",
+        "b.tex"
+      ],
+      "file_names": [
+        "main.tex",
+        "a.tex",
+        "b.tex"
+      ],
+      "markers": [
+        "ROOT-BEFORE",
+        "A-BEFORE",
+        "B-MARK",
+        "A-AFTER",
+        "ROOT-AFTER"
+      ],
+      "status": "resolved"
+    },
+    "files": {
+      "a.tex": "A-BEFORE\n\\input{b}\nA-AFTER\n",
+      "b.tex": "B-MARK\n",
+      "main.tex": "\\documentclass{article}\\begin{document}\nROOT-BEFORE\n\\input{a}\nROOT-AFTER\n\\end{document}\n"
+    }
+  },
+  "one_level": {
+    "expectation": {
+      "expanded": [
+        "main.tex",
+        "part.tex"
+      ],
+      "file_names": [
+        "main.tex",
+        "part.tex"
+      ],
+      "markers": [
+        "MAIN-BEFORE",
+        "PART-MARK",
+        "MAIN-AFTER"
+      ],
+      "status": "resolved"
+    },
+    "files": {
+      "main.tex": "\\documentclass{article}\n\\begin{document}\nMAIN-BEFORE\n\\input{part}\nMAIN-AFTER\n\\end{document}\n",
+      "part.tex": "PART-MARK\n"
+    }
+  },
+  "parent_child_scope": {
+    "expectation": {
+      "expanded": [
+        "main.tex",
+        "child.tex"
+      ],
+      "file_names": [
+        "main.tex",
+        "child.tex"
+      ],
+      "markers": [
+        "PARENT-DECL",
+        "CHILD-THEOREM"
+      ],
+      "status": "resolved"
+    },
+    "files": {
+      "child.tex": "CHILD-THEOREM Theorem child.\n",
+      "main.tex": "\\documentclass{article}\\begin{document}\nPARENT-DECL Definition parent.\n\\input{child}\n\\end{document}\n"
+    }
+  },
+  "repeated": {
+    "expectation": {
+      "expanded": [
+        "main.tex",
+        "part.tex",
+        "part.tex"
+      ],
+      "file_names": [
+        "main.tex",
+        "part.tex"
+      ],
+      "markers": [
+        "REPEAT-PART"
+      ],
+      "status": "resolved"
+    },
+    "files": {
+      "main.tex": "\\documentclass{article}\\begin{document}\n\\input{part}\n\\input{part}\n\\end{document}\n",
+      "part.tex": "REPEAT-PART\n"
+    }
+  },
+  "shadowing": {
+    "expectation": {
+      "expanded": [
+        "main.tex",
+        "defs.tex"
+      ],
+      "file_names": [
+        "main.tex",
+        "defs.tex"
+      ],
+      "markers": [
+        "DEF-OLD",
+        "DEF-NEW",
+        "THEOREM-AFTER"
+      ],
+      "status": "resolved"
+    },
+    "files": {
+      "defs.tex": "DEF-NEW Definition X new.\n",
+      "main.tex": "\\documentclass{article}\\begin{document}\nDEF-OLD Definition X old.\n\\input{defs}\nTHEOREM-AFTER Theorem using X.\n\\end{document}\n"
+    }
+  }
+}
