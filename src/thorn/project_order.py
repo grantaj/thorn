@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import TypeVar
+from typing import Protocol, TypeVar
 
 from pydantic import BaseModel, Field, model_validator
 
 from thorn.frontend import SourceSpan
 
-_ModelT = TypeVar("_ModelT", bound=BaseModel)
+
+class _Identified(Protocol):
+    identifier: str
+
+
+_ModelT = TypeVar("_ModelT", bound=_Identified)
 
 
 class ProjectOrderStatus(StrEnum):
@@ -215,12 +220,10 @@ class ProjectOrder(BaseModel):
         return self
 
     @staticmethod
-    def _unique(
-        items: list[_ModelT], description: str
-    ) -> dict[str, _ModelT]:
+    def _unique(items: list[_ModelT], description: str) -> dict[str, _ModelT]:
         result: dict[str, _ModelT] = {}
         for item in items:
-            identifier = getattr(item, "identifier")
+            identifier = item.identifier
             if identifier in result:
                 raise ValueError(f"duplicate {description} identifier {identifier!r}")
             result[identifier] = item
