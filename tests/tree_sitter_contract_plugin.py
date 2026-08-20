@@ -30,7 +30,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         callspec = getattr(item, "callspec", None)
         if callspec is None:
             continue
-        if item.originalname != (
+        if getattr(item, "originalname", None) != (
             "test_malformed_direct_include_is_exact_project_partiality_not_guessed_order"
         ):
             continue
