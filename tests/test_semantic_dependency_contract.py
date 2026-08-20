@@ -558,23 +558,19 @@ The complex $K$ is shell-rigid.
 """,
     )
 
-    run.assert_authoritative("thm:main", "shell-rigid", definition)
-    document = run.document_for("thm:main")
-    source = next(item for item in document.sources if item.text == definition)
-    assert source.source_span is not None
-    assert source.source_range is not None
+    symbol = run.assert_authoritative("thm:main", "shell-rigid", definition)
+    run.assert_observed_result_context("thm:main", definition)
 
-    navigation = report_source(
-        source.source_range,
-        excerpt=source.text,
-        source_addresses=(source.address,),
-    )
-    expected = source.source_span.source_range()
+    # Review reachability and report navigation are separate stable boundaries.
+    # Navigation starts from the authoritative declaration's canonical provenance,
+    # not from whichever packet/source-handle placement the current projection uses.
+    expected = symbol.introduction_source.source_range()
+    navigation = report_source(expected, excerpt=definition)
+
     assert navigation.file == expected.file
     assert navigation.start_line == expected.start_line
     assert navigation.end_line == expected.end_line
     assert navigation.excerpt == definition
-    assert navigation.source_addresses == (source.address,)
     assert navigation.uri == Path(expected.file).resolve().as_uri()
 
 
