@@ -318,14 +318,27 @@ def run_latexml(fixture: Path, expected: dict[str, Any]) -> dict[str, Any]:
     start = time.perf_counter()
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out.xml"
-        proc = subprocess.run(
-            [executable, "--quiet", f"--destination={out}", str(fixture / "main.tex")],
-            cwd=fixture,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        try:
+            proc = subprocess.run(
+                [executable, "--quiet", f"--destination={out}", str(fixture / "main.tex")],
+                cwd=fixture,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            returncode: int | None = proc.returncode
+            stderr = proc.stderr
+            timed_out = False
+        except subprocess.TimeoutExpired as error:
+            returncode = None
+            stderr_value = error.stderr or ""
+            stderr = (
+                stderr_value.decode(errors="replace")
+                if isinstance(stderr_value, bytes)
+                else stderr_value
+            )
+            timed_out = True
         xml = out.read_text(encoding="utf-8", errors="replace") if out.exists() else ""
     markers = []
     for marker in expected.get("markers", []):
@@ -336,8 +349,10 @@ def run_latexml(fixture: Path, expected: dict[str, Any]) -> dict[str, Any]:
         "backend": "latexml",
         "available": True,
         "version": version,
-        "returncode": proc.returncode,
-        "stderr_tail": proc.stderr[-2000:],
+        "returncode": returncode,
+        "timed_out": timed_out,
+        "timeout_seconds": 5,
+        "stderr_tail": stderr[-2000:],
         "xml_sha256": hashlib.sha256(xml.encode()).hexdigest() if xml else None,
         "markers": markers,
         "source_file_mentions": source_mentions,
