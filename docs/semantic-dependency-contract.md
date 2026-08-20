@@ -16,7 +16,8 @@ and its assertions inspect:
 - structured theorem/result dependencies;
 - canonical `thorn-proof/1` review context;
 - exact bounded source handles where rescue is required;
-- explicit ambiguity and capability state.
+- explicit ambiguity and capability state;
+- explicit source/dependency partiality without invented authority or targets.
 
 Passing this contract does not prove a theorem correct. It establishes that the
 mathematical context Thorn claims to have recovered remains faithful, source-addressed,
@@ -68,6 +69,9 @@ The contract is organized around these assurance properties:
    source rescue accepts only the finite advertised handle set.
 10. `thorn-proof/1` remains a projection over canonical state, not a second semantic
     store or a whole-paper fallback.
+11. When a required source fact or dependency is unavailable or ambiguous, Thorn must
+    preserve that partiality explicitly or fail closed; it must not invent a result,
+    declaration, dependency target, or review source.
 
 These properties concern fidelity, provenance, closure, and bounded reachability. They
 do not decide which review-context selector should govern normal review.
@@ -124,6 +128,10 @@ candidate assertions without exposing spaCy-native objects.
 | Recovered authoritative source projected to report navigation | Canonical declaration provenance preserves exact file, line range, excerpt, and file URI | Regex, pylatexenc |
 | Base-field convention, regular-matrix definition, and cited lemma | Transitive semantic closure composes with result dependency | Regex, pylatexenc |
 | Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative | Deterministic NLP fixture; structural-only explicitly skipped |
+| Truncated theorem environment | Parse partiality is explicit; no theorem/result is invented | Regex, pylatexenc |
+| Missing included file | Exact include-site diagnostic; extraction fails closed instead of treating the include as empty | Regex, pylatexenc |
+| Missing structured result reference | Dependency remains `MISSING`; no target or referenced review source is invented | Regex, pylatexenc |
+| Duplicate structured result label | Dependency remains `AMBIGUOUS`; no arbitrary target or referenced review source is selected | Regex, pylatexenc |
 
 The initial slice generalized the #125 seed beyond convergence vocabulary and made the
 same semantic assertions reusable across both supported LaTeX frontends. The second
@@ -142,11 +150,32 @@ therefore relies on that shared proof-language guarantee rather than freezing a 
 copy of the current numeric limit. Its own fixtures continue to require that semantic
 source handles belong to the finite advertised set and resolve to exact source.
 
+## Explicit partiality boundary
+
+The first partiality slice makes four already-supported failure modes part of the
+backend-independent guardrail. A malformed theorem environment is a source fact that is
+unavailable: the frontend must report a parse diagnostic and Thorn must not synthesize a
+result from the unmatched source. A missing include is explicit source/project
+unavailability with exact include-site provenance; the current extraction boundary fails
+closed rather than silently treating the child as empty. Missing and duplicate result
+references remain `MISSING` and `AMBIGUOUS` dependency edges respectively, with no
+fabricated target and no fabricated referenced-result source in review context.
+
+Parser disagreement itself is also already observable rather than normalized away by
+`tests/test_frontend_ab.py`; #162 relies on that source-fact boundary while asserting only
+Thorn-owned semantic consequences.
+
+This slice deliberately does not claim that every malformed prose/include shape is now
+represented. In particular, incomplete prose declarations and malformed include syntax
+still need a fail-closed semantic contract. Those cases must not be solved by widening
+source exposure or by guessing authority.
+
 ## Remaining #162 matrix
 
-After the source-order/provenance slice, remaining acceptance work is:
+After the first partiality slice, remaining acceptance work is:
 
-- malformed or incomplete source with explicit partiality rather than invented facts;
+- incomplete prose declarations and malformed include syntax, including any production
+  fail-closed fixes needed to prevent invented authority;
 - targeted-selector characterization without choosing its production role;
 - the real Local NLP configuration in its mandatory workflow;
 - any additional projection-correspondence assertion exposed by those selector/NLP
@@ -161,7 +190,8 @@ evidence to proceed.
 The keyless contract runs with:
 
 ```bash
-pytest -q tests/test_semantic_dependency_contract.py
+pytest -q tests/test_semantic_dependency_contract.py \
+  tests/test_semantic_dependency_partiality_contract.py
 ```
 
 No provider credentials, provider calls, or model fixtures are permitted. Backend and
