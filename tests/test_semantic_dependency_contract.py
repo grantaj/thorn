@@ -110,6 +110,22 @@ class ContractRun:
         assert declaration.source.text(raw_file) == source_text
         return symbol
 
+    def assert_not_authoritative_at_result(
+        self,
+        result_identifier: str,
+        name: str,
+    ) -> None:
+        """Assert absence of result-visible authority without constraining retained history."""
+
+        table = self.project.symbol_table
+        scope_ids = self._result_scope_ids(result_identifier)
+        assert not any(
+            use.resolved_symbol_identifier is not None
+            and use.scope_identifier in scope_ids
+            and use.name.casefold() == name.casefold()
+            for use in table.uses
+        )
+
     def assert_not_authoritative(self, name: str) -> None:
         table = self.project.symbol_table
         symbol_ids = {
@@ -513,6 +529,7 @@ The graph $G$ is edge-rigid.
         },
     )
 
+    run.assert_not_authoritative_at_result("thm:child", "edge-rigid")
     run.assert_not_observed_result_source("thm:child", later)
 
 
