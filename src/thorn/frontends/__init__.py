@@ -18,6 +18,10 @@ def get_frontend(name: str) -> LatexFrontend:
                 ) from exc
             raise
         return PylatexencLatexFrontend()
+    if normalized in {"tree-sitter", "treesitter"}:
+        from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
+
+        return TreeSitterLatexFrontend()
     raise ValueError(f"unknown LaTeX frontend {name!r}")
 
 

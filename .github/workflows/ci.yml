@@ -80,3 +80,36 @@ jobs:
             --output /tmp/lean-replay-opportunity.json >/dev/null
       - run: ruff check .
       - run: mypy src
+
+  tree-sitter-frontend:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+      TREE_SITTER_LATEX_REVISION: fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e '.[dev,treesitter]'
+      - name: Build and install pinned tree-sitter-latex grammar
+        run: |
+          git clone --filter=blob:none https://github.com/latex-lsp/tree-sitter-latex.git /tmp/tree-sitter-latex
+          git -C /tmp/tree-sitter-latex checkout "$TREE_SITTER_LATEX_REVISION"
+          (cd /tmp/tree-sitter-latex && npx --yes tree-sitter-cli@0.24.7 generate)
+          python -m pip install /tmp/tree-sitter-latex
+      - name: Frontend and differential conformance
+        run: pytest -q tests/test_frontend_conformance.py tests/test_frontend_ab.py tests/test_tree_sitter_frontend.py
+      - name: Completed semantic-dependency contract
+        run: >-
+          PYTHONPATH=tests
+          pytest -q -p tree_sitter_contract_plugin
+          tests/test_semantic_dependency_contract.py
+          tests/test_semantic_dependency_selector_contract.py
+          tests/test_semantic_dependency_partiality_contract.py
+          tests/test_semantic_dependency_project_partiality_contract.py
+      - name: Tree-sitter runtime/package measurement
+        run: python scripts/measure_tree_sitter_frontend.py --output /tmp/tree-sitter-frontend.json
+      - run: ruff check src/thorn/frontend.py src/thorn/frontends tests/test_frontend_conformance.py tests/test_frontend_ab.py tests/test_tree_sitter_frontend.py tests/tree_sitter_contract_plugin.py scripts/measure_tree_sitter_frontend.py
+      - run: mypy src

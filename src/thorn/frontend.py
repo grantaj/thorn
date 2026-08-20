@@ -16,12 +16,28 @@ class FrontendDiagnosticKind(StrEnum):
     PROJECT_PARTIALITY = "project_partiality"
 
 
+class FrontendRegionKind(StrEnum):
+    """Parser-neutral source-region facts relevant to prose eligibility.
+
+    These are syntactic/source roles, not mathematical authority decisions.
+    """
+
+    PREAMBLE = "preamble"
+    DOCUMENT_TEXT = "document_text"
+    COMMENT = "comment"
+    VERBATIM = "verbatim"
+    LISTING = "listing"
+    MINTED = "minted"
+    OPAQUE = "opaque"
+    MATH = "math"
+
+
 class SourceSpan(BaseModel):
     """Exact source provenance for a normalized frontend fact.
 
-    Offsets are zero-based and end-exclusive. Lines and columns are one-based.
-    The existing Thorn diagnostic layer can deliberately collapse this to a
-    line-oriented :class:`SourceRange` without losing the original offsets.
+    Offsets are zero-based Python-string offsets and end-exclusive. Lines and
+    columns are one-based. Backends whose native coordinates use bytes (notably
+    Tree-sitter) must normalize before constructing this model.
     """
 
     file: str
@@ -75,12 +91,22 @@ class FrontendMath(BaseModel):
     span: SourceSpan
 
 
+class FrontendRegion(BaseModel):
+    kind: FrontendRegionKind
+    span: SourceSpan
+
+    @property
+    def eligible_document_text(self) -> bool:
+        return self.kind == FrontendRegionKind.DOCUMENT_TEXT
+
+
 class FrontendFile(BaseModel):
     path: str
     raw: str
     macros: list[FrontendMacro] = Field(default_factory=list)
     environments: list[FrontendEnvironment] = Field(default_factory=list)
     math: list[FrontendMath] = Field(default_factory=list)
+    regions: list[FrontendRegion] = Field(default_factory=list)
 
 
 class FrontendDiagnostic(BaseModel):

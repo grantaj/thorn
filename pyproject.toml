@@ -19,6 +19,9 @@ dependencies = [
 pylatexenc = [
   "pylatexenc==2.10",
 ]
+treesitter = [
+  "tree-sitter==0.26.0",
+]
 dev = [
   "hatchling>=1.27",
   "mypy>=1.15",
@@ -58,3 +61,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.11"
 strict = true
 packages = ["thorn"]
+
+[[tool.mypy.overrides]]
+module = ["tree_sitter", "tree_sitter_latex"]
+ignore_missing_imports = true
