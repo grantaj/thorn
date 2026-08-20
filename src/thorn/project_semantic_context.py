@@ -259,10 +259,38 @@ def _overlaps_result(start: int, end: int, regions: list[ResultRegion]) -> bool:
     return False
 
 
-def _has_substantive_payload(view: str, *, cue_end: int, source_end: int) -> bool:
-    """Return whether a declaration cue has source-bearing defining content."""
+def _has_substantive_payload(
+    file: FrontendFile,
+    view: str,
+    *,
+    cue_end: int,
+    source_end: int,
+) -> bool:
+    """Return whether a declaration cue has conservative defining content."""
 
-    return any(character.isalnum() for character in view[cue_end:source_end])
+    characters = list(view[cue_end:source_end])
+    syntax_starts: list[int] = []
+    for macro in file.macros:
+        if macro.span.end_offset <= cue_end or source_end <= macro.span.start_offset:
+            continue
+        if _math_containing(file, macro.span.start_offset) is not None:
+            continue
+        start = max(cue_end, macro.span.start_offset) - cue_end
+        end = min(source_end, macro.span.end_offset) - cue_end
+        syntax_starts.append(start)
+        _mask_range(characters, start, end)
+
+    payload_start = next(
+        (index for index, character in enumerate(characters) if character.isalnum()),
+        None,
+    )
+    if payload_start is None:
+        return False
+
+    # If opaque/non-math TeX syntax appears before the first visible payload,
+    # the source does not establish that the later text is its defining
+    # complement. Fail closed rather than joining across the syntax boundary.
+    return not any(start < payload_start for start in syntax_starts)
 
 
 def _declarations(
@@ -286,7 +314,10 @@ def _declarations(
             # A declaration-shaped cue is grammatical evidence, not mathematical
             # authority. Promotion requires an actual defining complement.
             if not _has_substantive_payload(
-                view, cue_end=match.end(), source_end=source_end
+                file,
+                view,
+                cue_end=match.end(),
+                source_end=source_end,
             ):
                 continue
             raw_term = file.raw[match.start("term") : match.end("term")]

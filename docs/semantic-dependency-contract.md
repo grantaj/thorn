@@ -73,7 +73,9 @@ The contract is organized around these assurance properties:
     preserve that partiality explicitly or fail closed; it must not invent a result,
     declaration, dependency target, or review source. Declaration-shaped prose without
     a substantive defining complement is partial evidence only and must not become an
-    authoritative definition, constraint, dependency, or review source.
+    authoritative definition, constraint, or resolved semantic dependency. Whether a
+    selector exposes that exact partial source as non-authoritative evidence is a
+    separate review-policy question.
 
 These properties concern fidelity, provenance, closure, and bounded reachability. They
 do not decide which review-context selector should govern normal review.
@@ -134,7 +136,7 @@ candidate assertions without exposing spaCy-native objects.
 | Missing included file | Exact `MISSING_FILE` include-site provenance; unavailable source does not become authority by guess | Regex, pylatexenc |
 | Missing structured result reference | Dependency remains `MISSING`; no target or referenced review source is invented | Regex, pylatexenc |
 | Duplicate structured result label | Dependency remains `AMBIGUOUS`; no arbitrary target or referenced review source is selected | Regex, pylatexenc |
-| Truncated named declarations and ambient conventions | Exact available source is preserved; no definition, constraint, semantic dependency, or review source is invented; complete neighbouring declarations remain authoritative with exact provenance | Regex, pylatexenc |
+| Truncated named declarations and ambient conventions | Exact available source is preserved; no definition, constraint, or resolved semantic dependency is invented; complete neighbouring declarations remain authoritative with exact provenance | Regex, pylatexenc |
 
 The initial slice generalized the #125 seed beyond convergence vocabulary and made the
 same semantic assertions reusable across both supported LaTeX frontends. The second
@@ -182,9 +184,13 @@ The #167 tranche extends that boundary to incomplete prose declarations. A recog
 may still observe a declaration-shaped cue, but Thorn's authority layer must not promote
 it unless defining content is actually available. The exact source that was available
 remains source provenance; it is not converted into a definition, ambient constraint,
-semantic dependency, or review source by guess. Complete neighbouring declarations
-continue to resolve normally. This rule is vocabulary-independent and applies equally
-across the regex and pylatexenc structural configurations.
+or resolved semantic dependency by guess. The authority guard treats non-math macro-only or macro-leading
+material conservatively as insufficient payload, so syntax such as labels or empty
+formatting wrappers cannot manufacture authority or bridge into unrelated later prose. A future selector may still expose
+the exact partial source as non-authoritative evidence; #162 deliberately leaves that
+policy open. Complete neighbouring declarations continue to resolve normally. This rule
+is vocabulary-independent and applies equally across the regex and pylatexenc structural
+configurations.
 
 Malformed include syntax remains to be characterized separately. It must likewise not
 be solved by widening source exposure or by guessing authority.

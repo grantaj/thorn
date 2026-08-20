@@ -235,7 +235,13 @@ Use Lemma~\ref{lem:dup}.
 
 _NAMED_TRUNCATIONS = (
     ("A graph is called edge-rigid when", "edge-rigid"),
+    (r"A graph is called edge-rigid when \label{decl}", "edge-rigid"),
+    (
+        r"A graph is called edge-rigid when \label{decl} Additional prose follows.",
+        "edge-rigid",
+    ),
     ("A map is said to be fibre-pure if", "fibre-pure"),
+    (r"A map is said to be fibre-pure if \emph{}", "fibre-pure"),
     ("We say that a lattice is shell-balanced whenever", "shell-balanced"),
     ("By a chain-finite order we mean", "chain-finite order"),
 )
@@ -279,13 +285,6 @@ def test_truncated_named_declaration_is_source_not_authority(
     _assert_no_authority(project, result_identifier="thm:main", term=term)
     _assert_exact_definition(project, term="facet-sparse", source_text=complete)
 
-    document = prepare_proof_review(project, project.unit("thm:main")).document
-    assert truncated not in document.render_initial()
-    assert not any(truncated in source.text for source in document.sources)
-    assert complete in document.render_initial() or any(
-        source.text == complete for source in document.sources
-    )
-
 
 @pytest.mark.parametrize("frontend_factory", _FRONTENDS, ids=_frontend_id)
 def test_truncated_ambient_convention_is_source_not_scope_authority(
@@ -294,8 +293,8 @@ def test_truncated_ambient_convention_is_source_not_scope_authority(
 ) -> None:
     tex = tmp_path / "main.tex"
     truncated = (
-        "Throughout, all spectral spaces are",
-        "Unless otherwise stated, modules are",
+        r"Throughout, all spectral spaces are \label{ambient}",
+        r"Unless otherwise stated, modules are \emph{}",
     )
     complete = "In what follows, every covering map is finite-sheeted."
     tex.write_text(
@@ -326,10 +325,5 @@ def test_truncated_ambient_convention_is_source_not_scope_authority(
     _assert_no_authority(project, result_identifier="thm:main", term="modules")
     _assert_exact_constraint(project, term="covering map", source_text=complete)
 
-    document = prepare_proof_review(project, project.unit("thm:main")).document
-    for source_text in truncated:
-        assert source_text not in document.render_initial()
-        assert not any(source_text in source.text for source in document.sources)
-    assert complete in document.render_initial() or any(
-        source.text == complete for source in document.sources
-    )
+    # Whether a future selector exposes partial source as non-authoritative
+    # evidence is deliberately outside this backend-independent contract.
