@@ -129,7 +129,7 @@ candidate assertions without exposing spaCy-native objects.
 | Base-field convention, regular-matrix definition, and cited lemma | Transitive semantic closure composes with result dependency | Regex, pylatexenc |
 | Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative | Deterministic NLP fixture; structural-only explicitly skipped |
 | Truncated theorem environment | Parse partiality is explicit; no theorem/result is invented | Regex, pylatexenc |
-| Missing included file | Exact include-site diagnostic; extraction fails closed instead of treating the include as empty | Regex, pylatexenc |
+| Missing included file | Exact `MISSING_FILE` include-site provenance; unavailable source does not become authority by guess | Regex, pylatexenc |
 | Missing structured result reference | Dependency remains `MISSING`; no target or referenced review source is invented | Regex, pylatexenc |
 | Duplicate structured result label | Dependency remains `AMBIGUOUS`; no arbitrary target or referenced review source is selected | Regex, pylatexenc |
 
@@ -154,12 +154,22 @@ source handles belong to the finite advertised set and resolve to exact source.
 
 The first partiality slice makes four already-supported failure modes part of the
 backend-independent guardrail. A malformed theorem environment is a source fact that is
-unavailable: the frontend must report a parse diagnostic and Thorn must not synthesize a
-result from the unmatched source. A missing include is explicit source/project
-unavailability with exact include-site provenance; the current extraction boundary fails
-closed rather than silently treating the child as empty. Missing and duplicate result
-references remain `MISSING` and `AMBIGUOUS` dependency edges respectively, with no
-fabricated target and no fabricated referenced-result source in review context.
+unavailable: the frontend must report normalized parse partiality and Thorn must not
+synthesize a mathematical result from the malformed source. A frontend may still retain
+a partial or error syntax node internally; #162 does not make that CST representation
+normative.
+
+A missing include is explicit source/project unavailability with exact include-site
+provenance. The stable contract is the normalized `MISSING_FILE` fact and the requirement
+that unavailable source never turns into invented mathematical authority. The current
+extractor happens to fail closed with an exception, but neither `FileNotFoundError` nor
+any particular exception/partial-project mechanism is normative. #159 may replace that
+mechanism with a Thorn-owned partial project state while preserving the same source and
+semantic consequences.
+
+Missing and duplicate result references remain `MISSING` and `AMBIGUOUS` dependency
+edges respectively, with no fabricated target and no fabricated referenced-result
+source in review context.
 
 Parser disagreement itself is also already observable rather than normalized away by
 `tests/test_frontend_ab.py`; #162 relies on that source-fact boundary while asserting only
