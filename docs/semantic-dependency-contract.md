@@ -69,13 +69,14 @@ The contract is organized around these assurance properties:
    source rescue accepts only the finite advertised handle set.
 10. `thorn-proof/1` remains a projection over canonical state, not a second semantic
     store or a whole-paper fallback.
-11. When a required source fact or dependency is unavailable or ambiguous, Thorn must
-    preserve that partiality explicitly or fail closed; it must not invent a result,
-    declaration, dependency target, or review source. Declaration-shaped prose without
-    a substantive defining complement is partial evidence only and must not become an
-    authoritative definition, constraint, or resolved semantic dependency. Whether a
-    selector exposes that exact partial source as non-authoritative evidence is a
-    separate review-policy question.
+11. When a required source fact, project edge, or dependency is unavailable or
+    ambiguous, Thorn must preserve that partiality explicitly or fail closed; it must
+    not invent a result, child source, expanded project ordering, declaration,
+    dependency target, or review source. Declaration-shaped prose without a substantive
+    defining complement is partial evidence only and must not become an authoritative
+    definition, constraint, or resolved semantic dependency. Whether a selector exposes
+    exact partial source as non-authoritative evidence is a separate review-policy
+    question.
 
 These properties concern fidelity, provenance, closure, and bounded reachability. They
 do not decide which review-context selector should govern normal review.
@@ -134,6 +135,9 @@ candidate assertions without exposing spaCy-native objects.
 | Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative | Deterministic NLP fixture; structural-only explicitly skipped |
 | Truncated theorem environment | Parse partiality is explicit; no theorem/result is invented | Regex, pylatexenc |
 | Missing included file | Exact `MISSING_FILE` include-site provenance; unavailable source does not become authority by guess | Regex, pylatexenc |
+| Malformed/incomplete include | Exact normalized project-partiality provenance; no guessed child, expansion order, or later authority | Regex, pylatexenc |
+| Include-like text in comments/verbatim | No child source or project edge is fabricated from literal source | Regex, pylatexenc |
+| Include nested in custom macro structure | Explicit project partiality rather than macro-expansion guess | Regex, pylatexenc |
 | Missing structured result reference | Dependency remains `MISSING`; no target or referenced review source is invented | Regex, pylatexenc |
 | Duplicate structured result label | Dependency remains `AMBIGUOUS`; no arbitrary target or referenced review source is selected | Regex, pylatexenc |
 | Truncated named declarations and ambient conventions | Exact available source is preserved; no definition, constraint, or resolved semantic dependency is invented; complete neighbouring declarations remain authoritative with exact provenance | Regex, pylatexenc |
@@ -192,15 +196,22 @@ policy open. Complete neighbouring declarations continue to resolve normally. Th
 is vocabulary-independent and applies equally across the regex and pylatexenc structural
 configurations.
 
-Malformed include syntax remains to be characterized separately. It must likewise not
-be solved by widening source exposure or by guessing authority.
+The #169 tranche applies the same fail-closed rule to project structure. A complete
+static `\\input`/`\\include` remains ordinary project evidence. An incomplete target,
+mismatched group, dynamic/custom-macro include, or other include site whose expansion
+cannot be determined safely becomes normalized `PROJECT_PARTIALITY` with exact available
+source provenance. Files reached only through unsafe include-like evidence are excluded
+from the normalized project, and extraction currently fails closed rather than allowing
+later results to inherit guessed ordering or authority. Conversely, include-shaped text
+that is demonstrably comment or closed verbatim content is not project evidence at all.
+The current exception mechanism and the temporary normalization layer are not normative;
+#159 may replace both with mature workspace/project-resolution tooling while preserving
+these semantic consequences.
 
 ## Remaining #162 matrix
 
-After the first partiality slice, remaining acceptance work is:
+After the project-partiality tranche, remaining acceptance work is:
 
-- malformed include syntax, including any production fail-closed fix needed to prevent
-  invented project/source facts;
 - targeted-selector characterization without choosing its production role;
 - the real Local NLP configuration in its mandatory workflow;
 - any additional projection-correspondence assertion exposed by those selector/NLP
@@ -216,7 +227,8 @@ The keyless contract runs with:
 
 ```bash
 pytest -q tests/test_semantic_dependency_contract.py \
-  tests/test_semantic_dependency_partiality_contract.py
+  tests/test_semantic_dependency_partiality_contract.py \
+  tests/test_semantic_dependency_project_partiality_contract.py
 ```
 
 No provider credentials, provider calls, or model fixtures are permitted. Backend and
