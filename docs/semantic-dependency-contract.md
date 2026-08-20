@@ -108,7 +108,7 @@ the executable matrix records that limitation as an intentional skip. Real spaCy
 coverage remains in the mandatory Local NLP contract and must later consume the same
 candidate assertions without exposing spaCy-native objects.
 
-## Initial fixture matrix
+## Current fixture matrix
 
 | Mathematical shape | Assertions | Frontends |
 | --- | --- | --- |
@@ -116,23 +116,41 @@ candidate assertions without exposing spaCy-native objects.
 | Ambient Hausdorff convention between results | Forward application and no backward leakage | Regex, pylatexenc |
 | Comment, verbatim, and nearby historical prose | No false authority or reachability | Regex, pylatexenc |
 | Cross-file predicate redefinition | Later included authority resolves at the result; earlier authority does not | Regex, pylatexenc |
+| Same-file predicate redefinition | Later authority resolves at the result; shadowed source is not review-reachable | Regex, pylatexenc |
+| Parent declaration before child include | Parent authority is visible to a theorem inside the child | Regex, pylatexenc |
+| Child declaration before parent continuation | Child authority remains visible after returning to the parent | Regex, pylatexenc |
+| Child redefinition followed by child and parent theorems | Child authority shadows the earlier parent declaration at both results | Regex, pylatexenc |
+| Parent declaration after a child include | Later parent source does not leak backward into the child result | Regex, pylatexenc |
+| Recovered authoritative source projected to report navigation | Canonical declaration provenance preserves exact file, line range, excerpt, and file URI | Regex, pylatexenc |
 | Base-field convention, regular-matrix definition, and cited lemma | Transitive semantic closure composes with result dependency | Regex, pylatexenc |
 | Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative | Deterministic NLP fixture; structural-only explicitly skipped |
 
-This first slice generalizes the #125 seed beyond convergence vocabulary and makes the
-same semantic assertions reusable across both supported LaTeX frontends.
+The initial slice generalized the #125 seed beyond convergence vocabulary and made the
+same semantic assertions reusable across both supported LaTeX frontends. The second
+bounded slice extends the contract across source-occurrence order and report navigation
+without asserting private identifier spelling, declaration storage multiplicity, or
+whether authoritative prose is initially rendered versus source-rescued. The
+report-navigation fixture derives navigation from canonical declaration provenance and
+asserts review reachability separately, so it does not require a proof-language source
+handle to exist.
+
+The source-rescue response bound is already enforced by the shared closed-world
+proof-language contract in
+`tests/test_issue_88_closed_world_source_selection.py`: the selectable universe may be
+larger, but one request is schema-bounded and an over-limit response is rejected. #162
+therefore relies on that shared proof-language guarantee rather than freezing a second
+copy of the current numeric limit. Its own fixtures continue to require that semantic
+source handles belong to the finite advertised set and resolve to exact source.
 
 ## Remaining #162 matrix
 
-The next bounded slice must add:
+After the source-order/provenance slice, remaining acceptance work is:
 
-- same-file redefinition and the remaining parent/child include-order shapes;
 - malformed or incomplete source with explicit partiality rather than invented facts;
-- exact report-navigation assertions over recovered semantic sources;
 - targeted-selector characterization without choosing its production role;
 - the real Local NLP configuration in its mandatory workflow;
-- explicit source-address limit and projection-correspondence assertions where existing
-  proof-language tests are not already sufficient.
+- any additional projection-correspondence assertion exposed by those selector/NLP
+  slices.
 
 These are remaining acceptance work, not optional robustness ideas. #162 is complete
 only when the public matrix covers them and the focused selector decision has enough
@@ -140,7 +158,7 @@ evidence to proceed.
 
 ## Running the contract
 
-The initial keyless contract runs with:
+The keyless contract runs with:
 
 ```bash
 pytest -q tests/test_semantic_dependency_contract.py
