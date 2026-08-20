@@ -23,6 +23,7 @@ from thorn.frontends import RegexLatexFrontend
 from thorn.linguistic import LinguisticFrontend
 from thorn.linguistic_support import apply_linguistic_uncertainty
 from thorn.models import SourceRange, TheoremUnit
+from thorn.project_partiality import normalize_project_structure
 from thorn.support_corroboration import corroborate_explicit_result_support
 from thorn.support_extract import extract_proof_support_graph
 from thorn.symbols import ResultRegion, extract_symbol_table
@@ -143,6 +144,12 @@ def _raise_missing_file_diagnostic(project: FrontendProject) -> None:
         raise FileNotFoundError(diagnostic.message)
 
 
+def _raise_project_partiality_diagnostic(project: FrontendProject) -> None:
+    for diagnostic in project.diagnostics:
+        if diagnostic.kind == FrontendDiagnosticKind.PROJECT_PARTIALITY:
+            raise ValueError(diagnostic.message)
+
+
 def extract_project(
     main_file: str | Path,
     *,
@@ -157,7 +164,8 @@ def extract_project(
     """
 
     parser = frontend or _DEFAULT_FRONTEND
-    parsed = parser.parse_project(main_file)
+    parsed = normalize_project_structure(parser.parse_project(main_file))
+    _raise_project_partiality_diagnostic(parsed)
     _raise_missing_file_diagnostic(parsed)
     envs = _theorem_envs(parsed)
     all_labels = _project_labels(parsed)
