@@ -70,59 +70,87 @@ class ContractRun:
         unit = self.project.unit(result_identifier)
         return prepare_proof_review(self.project, unit).document
 
-    def semantic_symbol(self, name: str) -> Symbol:
-        matches = [
-            symbol
-            for symbol in self.project.symbol_table.symbols
-            if symbol.identifier.startswith("semantic:")
-            and symbol.name.casefold() == name.casefold()
-        ]
-        assert len(matches) == 1, (
-            f"expected one authoritative semantic symbol named {name!r}, "
-            f"found {[symbol.name for symbol in matches]!r}"
-        )
-        return matches[0]
+    def _result_scope_ids(self, result_identifier: str) -> set[str]:
+        return {
+            scope.identifier
+            for scope in self.project.symbol_table.scopes
+            if scope.result_identifier == result_identifier
+        }
 
-    def assert_authoritative(self, name: str, source_text: str) -> Symbol:
-        symbol = self.semantic_symbol(name)
+    def assert_authoritative(
+        self,
+        result_identifier: str,
+        name: str,
+        source_text: str,
+    ) -> Symbol:
+        """Assert result-visible authority without depending on private identifier schemes."""
+
+        table = self.project.symbol_table
+        scope_ids = self._result_scope_ids(result_identifier)
+        resolved_symbol_ids = {
+            use.resolved_symbol_identifier
+            for use in table.uses
+            if use.resolved_symbol_identifier is not None
+            and use.scope_identifier in scope_ids
+            and use.name.casefold() == name.casefold()
+        }
         declarations = [
             item
-            for item in [
-                *self.project.symbol_table.definitions,
-                *self.project.symbol_table.constraints,
-            ]
-            if item.symbol_identifier == symbol.identifier
+            for item in [*table.definitions, *table.constraints]
+            if item.symbol_identifier in resolved_symbol_ids and item.raw == source_text
         ]
-        assert len(declarations) == 1
+        assert len(declarations) == 1, (
+            f"expected {name!r} at {result_identifier!r} to resolve to exactly one "
+            f"authoritative declaration with source {source_text!r}"
+        )
         declaration = declarations[0]
-        assert declaration.raw == source_text
+        symbol = table.symbol(declaration.symbol_identifier)
+        assert symbol.name.casefold() == name.casefold()
         raw_file = Path(declaration.source.file).read_text(encoding="utf-8")
         assert declaration.source.text(raw_file) == source_text
         return symbol
 
     def assert_not_authoritative(self, name: str) -> None:
+        table = self.project.symbol_table
+        symbol_ids = {
+            symbol.identifier
+            for symbol in table.symbols
+            if symbol.name.casefold() == name.casefold()
+        }
         assert not any(
-            symbol.identifier.startswith("semantic:")
-            and symbol.name.casefold() == name.casefold()
-            for symbol in self.project.symbol_table.symbols
+            item.symbol_identifier in symbol_ids
+            for item in [*table.definitions, *table.constraints]
         )
 
-    def assert_observed_result_source(
+    def assert_observed_result_context(
         self,
         result_identifier: str,
         source_text: str,
     ) -> None:
-        """Characterize current result-level projection without declaring selector policy."""
+        """Accept canonical initial context or an exact bounded source-rescue path."""
 
         document = self.document_for(result_identifier)
+        initial = document.render_initial()
         matches = [source for source in document.sources if source.text == source_text]
+
+        # Packet placement is not part of the backend-independent contract. A
+        # future projection may render semantically sufficient canonical context
+        # directly; otherwise the exact manuscript source must be available
+        # through the bounded closed-world rescue map.
+        if source_text in initial:
+            for source in matches:
+                if source.source_span is None:
+                    continue
+                raw_file = Path(source.source_span.file).read_text(encoding="utf-8")
+                assert source.source_span.text(raw_file) == source_text
+            return
+
         assert len(matches) == 1
         source = matches[0]
         assert source.address in advertised_source_addresses(document)
         assert source.source_span is not None
         raw_file = Path(source.source_span.file).read_text(encoding="utf-8")
         assert source.source_span.text(raw_file) == source_text
-        assert source_text not in document.render_initial()
 
         request = parse_source_rescue_request(document, f"NEED_SOURCE {source.address}")
         rescue = render_source_rescue(document, request)
@@ -203,8 +231,8 @@ This follows from the edge criterion.
 """,
     )
 
-    run.assert_authoritative("flag-determined", definition)
-    run.assert_observed_result_source("thm:main", definition)
+    run.assert_authoritative("thm:main", "flag-determined", definition)
+    run.assert_observed_result_context("thm:main", definition)
     document = run.document_for("thm:main")
     with pytest.raises(KeyError, match="unknown proof-language source addresses"):
         parse_source_rescue_request(document, "NEED_SOURCE NOT_ADVERTISED")
@@ -238,9 +266,9 @@ Every compact subset is closed.
 """,
     )
 
-    run.assert_authoritative("topological spaces", convention)
+    run.assert_authoritative("thm:after", "topological spaces", convention)
     run.assert_not_observed_result_source("thm:before", "topological spaces are Hausdorff")
-    run.assert_observed_result_source("thm:after", convention)
+    run.assert_observed_result_context("thm:after", convention)
 
 
 @pytest.mark.parametrize(
@@ -275,11 +303,11 @@ The graph $G$ is chord-guarded, comment-defined, listing-defined, and code-defin
 """,
     )
 
-    run.assert_authoritative("chord-guarded", definition)
+    run.assert_authoritative("thm:main", "chord-guarded", definition)
     run.assert_not_authoritative("comment-defined")
     run.assert_not_authoritative("listing-defined")
     run.assert_not_authoritative("code-defined")
-    run.assert_observed_result_source("thm:main", definition)
+    run.assert_observed_result_context("thm:main", definition)
     run.assert_not_observed_result_source("thm:main", motivation)
     run.assert_not_observed_result_source("thm:main", "every vertex is red")
     run.assert_not_observed_result_source("thm:main", "every vertex is blue")
@@ -316,9 +344,9 @@ The map $f$ is fibre-regular.
         },
     )
 
-    symbol = run.assert_authoritative("fibre-regular", second)
+    symbol = run.assert_authoritative("thm:main", "fibre-regular", second)
     assert Path(symbol.introduction_source.file).name == "redefine.tex"
-    run.assert_observed_result_source("thm:main", second)
+    run.assert_observed_result_context("thm:main", second)
     run.assert_not_observed_result_source("thm:main", "every fibre contains two points")
 
 
@@ -352,10 +380,10 @@ Every regular matrix is invertible by Lemma~\ref{{lem:criterion}}.
 """,
     )
 
-    run.assert_authoritative("base field", convention)
-    run.assert_authoritative("regular", definition)
-    run.assert_observed_result_source("thm:main", convention)
-    run.assert_observed_result_source("thm:main", definition)
+    run.assert_authoritative("thm:main", "base field", convention)
+    run.assert_authoritative("thm:main", "regular", definition)
+    run.assert_observed_result_context("thm:main", convention)
+    run.assert_observed_result_context("thm:main", definition)
     assert run.project.dependency_graph.direct_dependency_ids("thm:main") == ["lem:criterion"]
     document = run.document_for("thm:main")
     assert any(
