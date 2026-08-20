@@ -50,7 +50,7 @@ When the optional Tree-sitter packages are installed, `tests/test_frontend_confo
 
 Unknown-macro argument semantics are deliberately **not** part of that shared contract: without a macro signature, surface syntax does not determine whether adjacent groups belong to the command. Those disagreements are preserved in `tests/test_frontend_ab.py` instead of being normalized into a fictional common answer.
 
-`tests/test_tree_sitter_frontend.py` adds #125/#162-derived source-level cases for preamble/body separation, line and block comments, `comment`, `verbatim`, `verbatim*`, `lstlisting`, `minted`, and the grammar's other native raw/code environments, fake includes/labels inside opaque regions, UTF-8 provenance, and the requirement that no Tree-sitter `Node` escapes the adapter.
+`tests/test_tree_sitter_frontend.py` adds #125/#162-derived source-level cases for preamble/body separation, line and block comments, `comment`, `verbatim`, `verbatim*`, `lstlisting`, `minted`, every native Asymptote/Python/Lua/Sage raw-code environment in the pinned grammar, fake includes/labels inside opaque regions, UTF-8 provenance, and the requirement that no Tree-sitter `Node` escapes the adapter.
 
 The review-followup evaluation run produced:
 
@@ -91,7 +91,7 @@ That makes two useful disagreements explicit:
 
 ### Opaque environments must suppress inner source facts
 
-The pinned grammar has dedicated trivia/raw-code nodes beyond the familiar `comment`, `verbatim`, `lstlisting`, and `minted` cases. The adapter therefore fails closed over **all native opaque/trivia node types exercised by that grammar revision**, including:
+The pinned grammar has dedicated trivia/raw-code nodes beyond the familiar `comment`, `verbatim`, `lstlisting`, and `minted` cases. The adapter therefore fails closed over **all native opaque/trivia node types in that grammar revision**, including:
 
 - `block_comment` (`\\iffalse ... \\fi`) as `COMMENT`;
 - `asy` and `asydef`;
@@ -99,7 +99,7 @@ The pinned grammar has dedicated trivia/raw-code nodes beyond the familiar `comm
 - `luacode` / `luacode*`;
 - `sagesilent` and `sageblock`.
 
-These raw/code environments map to a generic `OPAQUE` source role rather than growing a new Thorn enum for every package. Their full CST-owned spans are subtracted from eligible document prose, and macros found inside those spans are suppressed before include/project traversal.
+These raw/code environments map to a generic `OPAQUE` source role rather than growing a new Thorn enum for every package. Their full CST-owned spans are subtracted from eligible document prose, and macros found inside those spans are suppressed before include/project traversal. The regression corpus exercises every one of these native environment names.
 
 `verbatim*` is the one small classification fallback in this tranche because the pinned grammar parses it structurally as a generic environment rather than a dedicated trivia node. Thorn classifies the already Tree-sitter-owned environment span as `OPAQUE`; it does not rescan source to find its boundary.
 
@@ -115,7 +115,7 @@ The remaining limitation is custom verbatim-like environments: without package/m
 
 `DOCUMENT_TEXT` means *syntactically eligible document prose*, not a declaration and not mathematical authority. No downstream semantic consumer is switched to these regions in #158.
 
-The review-driven corpus verifies that declaration-looking text in line comments, `\\iffalse` block comments, the common literal environments, and native Asymptote/Python/Lua/Sage raw-code environments is not exposed as `DOCUMENT_TEXT`.
+The review-driven corpus verifies that declaration-looking text in line comments, `\\iffalse` block comments, the common literal environments, and every native Asymptote/Python/Lua/Sage raw-code environment in the pinned grammar is not exposed as `DOCUMENT_TEXT`.
 
 **Boundary recommendation:** keep this normalized region concept. It is a meaningful generic source responsibility that a structured frontend can own, and it gives later semantic code a route away from repeated raw masking/scanning. Consolidating existing consumers onto it belongs to #161, not this tranche.
 
