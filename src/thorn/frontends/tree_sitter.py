@@ -20,19 +20,22 @@ from thorn.frontend import (
 )
 
 _ENVIRONMENT_RE = re.compile(r"^\\begin\s*\{([^{}]+)\}")
-_OPAQUE_ENVIRONMENT_KINDS = {
-    "comment": FrontendRegionKind.COMMENT,
-    "verbatim": FrontendRegionKind.VERBATIM,
-    "verbatim*": FrontendRegionKind.VERBATIM,
-    "lstlisting": FrontendRegionKind.LISTING,
-    "minted": FrontendRegionKind.MINTED,
+_GENERIC_OPAQUE_ENVIRONMENT_KINDS = {
+    "verbatim*": FrontendRegionKind.OPAQUE,
 }
 _NATIVE_OPAQUE_TYPES = {
     "comment_environment": FrontendRegionKind.COMMENT,
     "verbatim_environment": FrontendRegionKind.VERBATIM,
     "listing_environment": FrontendRegionKind.LISTING,
     "minted_environment": FrontendRegionKind.MINTED,
+    "asy_environment": FrontendRegionKind.OPAQUE,
+    "asydef_environment": FrontendRegionKind.OPAQUE,
+    "pycode_environment": FrontendRegionKind.OPAQUE,
+    "luacode_environment": FrontendRegionKind.OPAQUE,
+    "sagesilent_environment": FrontendRegionKind.OPAQUE,
+    "sageblock_environment": FrontendRegionKind.OPAQUE,
 }
+_COMMENT_TYPES = {"line_comment", "block_comment"}
 _GROUP_PREFIXES = ("curly_group", "brack_group")
 _MATH_TYPES = {"inline_formula", "displayed_equation", "math_environment"}
 
@@ -78,69 +81,10 @@ class _Coordinates:
         return source_bytes[int(node.start_byte) : int(node.end_byte)].decode("utf-8")
 
 
-def _is_escaped(text: str, offset: int) -> bool:
-    backslashes = 0
-    index = offset - 1
-    while index >= 0 and text[index] == "\\":
-        backslashes += 1
-        index -= 1
-    return backslashes % 2 == 1
-
-
-def _surface_groups(
-    path: Path,
-    coordinates: _Coordinates,
-    start: int,
-) -> tuple[list[FrontendArgument], int]:
-    """Recover generic command groups that the grammar leaves as siblings.
-
-    tree-sitter-latex intentionally gives generic commands no package-specific
-    signature. In particular an optional bracket interrupts `generic_command`.
-    This bounded recovery is applied only from a Tree-sitter-recognized command
-    boundary; it is not a second whole-document scanner.
-    """
-    text = coordinates.text
-    cursor = start
-    recovered_end = start
-    arguments: list[FrontendArgument] = []
-    while True:
-        while cursor < len(text) and text[cursor].isspace():
-            cursor += 1
-        if cursor >= len(text) or text[cursor] not in "[{":
-            break
-        opening = text[cursor]
-        closing = "]" if opening == "[" else "}"
-        depth = 1
-        index = cursor + 1
-        while index < len(text):
-            if text[index] == opening and not _is_escaped(text, index):
-                depth += 1
-            elif text[index] == closing and not _is_escaped(text, index):
-                depth -= 1
-                if depth == 0:
-                    end = index + 1
-                    raw = text[cursor:end]
-                    arguments.append(
-                        FrontendArgument(
-                            raw=raw,
-                            value=raw[1:-1],
-                            span=_span_from_characters(path, coordinates, cursor, end),
-                            optional=opening == "[",
-                        )
-                    )
-                    cursor = end
-                    recovered_end = end
-                    break
-            index += 1
-        else:
-            break
-    return arguments, recovered_end
-
-
 def _load_parser() -> Any:
     try:
-        import tree_sitter_latex  # type: ignore
-        from tree_sitter import Language, Parser  # type: ignore
+        import tree_sitter_latex
+        from tree_sitter import Language, Parser
     except ModuleNotFoundError as exc:
         raise RuntimeError(
             "tree-sitter frontend requires tree-sitter plus the tree-sitter-latex grammar; "
@@ -218,13 +162,6 @@ def _command_macro(
 
     start = coordinates.character_offset(int(node.start_byte))
     end = coordinates.character_offset(int(node.end_byte))
-    if node.type == "generic_command":
-        command_end = coordinates.character_offset(int(command.end_byte))
-        recovered, recovered_end = _surface_groups(path, coordinates, command_end)
-        if recovered:
-            arguments = recovered
-            end = max(end, recovered_end)
-
     raw = coordinates.text[start:end]
     return FrontendMacro(
         name=name,
@@ -353,6 +290,18 @@ def _span_from_characters(
     )
 
 
+def _region_for_node(
+    path: Path,
+    coordinates: _Coordinates,
+    node: Any,
+    kind: FrontendRegionKind,
+) -> FrontendRegion:
+    return FrontendRegion(
+        kind=kind,
+        span=coordinates.span(path, int(node.start_byte), int(node.end_byte)),
+    )
+
+
 def _regions(
     path: Path,
     text: str,
@@ -371,9 +320,7 @@ def _regions(
         regions.append(
             FrontendRegion(
                 kind=FrontendRegionKind.PREAMBLE,
-                span=_span_from_characters(
-                    path, coordinates, 0, document.span.start_offset
-                ),
+                span=_span_from_characters(path, coordinates, 0, document.span.start_offset),
             )
         )
 
@@ -388,24 +335,24 @@ def _regions(
             regions.append(FrontendRegion(kind=FrontendRegionKind.MATH, span=item.span))
 
     for node in nodes:
-        if node.type == "line_comment":
-            span = coordinates.span(path, int(node.start_byte), int(node.end_byte))
-            if span.start_offset >= body_start and span.end_offset <= body_end:
-                excluded.append((span.start_offset, span.end_offset))
-                regions.append(FrontendRegion(kind=FrontendRegionKind.COMMENT, span=span))
-        native_kind = _NATIVE_OPAQUE_TYPES.get(node.type)
-        if native_kind is None:
+        kind: FrontendRegionKind | None = None
+        if node.type in _COMMENT_TYPES:
+            kind = FrontendRegionKind.COMMENT
+        else:
+            kind = _NATIVE_OPAQUE_TYPES.get(node.type)
+        if kind is None:
             continue
-        span = coordinates.span(path, int(node.start_byte), int(node.end_byte))
+        region = _region_for_node(path, coordinates, node, kind)
+        span = region.span
         if span.start_offset >= body_start and span.end_offset <= body_end:
             excluded.append((span.start_offset, span.end_offset))
-            regions.append(FrontendRegion(kind=native_kind, span=span))
+            regions.append(region)
 
-    # Some common opaque variants (notably verbatim*) are not dedicated grammar
-    # node types. We still rely on Tree-sitter for the environment boundary and
-    # apply only a small Thorn-owned classification to fail closed for prose.
+    # A small source-role fallback is retained only for constructs the pinned
+    # grammar parses structurally but does not classify as native trivia. It
+    # consumes the Tree-sitter-owned environment span; it does not rescan source.
     for environment in environments:
-        kind = _OPAQUE_ENVIRONMENT_KINDS.get(environment.name)
+        kind = _GENERIC_OPAQUE_ENVIRONMENT_KINDS.get(environment.name)
         if kind is None:
             continue
         if environment.span.start_offset >= body_start and environment.span.end_offset <= body_end:
@@ -497,17 +444,23 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
             environments.append(converted)
     environments.sort(key=lambda item: item.span.start_offset)
 
-    opaque_bodies = [
-        environment.body_span
-        for environment in environments
-        if environment.name in _OPAQUE_ENVIRONMENT_KINDS
+    opaque_spans = [
+        coordinates.span(path, int(node.start_byte), int(node.end_byte))
+        for node in nodes
+        if node.type in _COMMENT_TYPES or node.type in _NATIVE_OPAQUE_TYPES
     ]
+    opaque_spans.extend(
+        environment.span
+        for environment in environments
+        if environment.name in _GENERIC_OPAQUE_ENVIRONMENT_KINDS
+    )
     macros = [
         macro
         for macro in macros
         if not any(
-            body.start_offset <= macro.span.start_offset < body.end_offset
-            for body in opaque_bodies
+            span.start_offset <= macro.span.start_offset
+            and macro.span.end_offset <= span.end_offset
+            for span in opaque_spans
         )
     ]
 
