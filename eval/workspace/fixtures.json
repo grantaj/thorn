@@ -1,0 +1,235 @@
+{
+  "schema": "thorn-workspace-eval/1",
+  "cases": [
+    {
+      "name": "nested_expansion_order",
+      "purpose": "One-level and nested includes plus return-to-parent order; order markers stand in for #125 declarations without delegating mathematical authority.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\nTHORNMARK-main-before\\par\n\\input{chapter}\nTHORNMARK-main-after\\par\n\\end{document}\n",
+        "chapter.tex": "THORNMARK-child-before\\par\n\\input{sub/grandchild}\nTHORNMARK-child-after\\par\n",
+        "sub/grandchild.tex": "THORNMARK-grandchild\\par\n"
+      },
+      "markers": {
+        "THORNMARK-main-before": "main.tex",
+        "THORNMARK-child-before": "chapter.tex",
+        "THORNMARK-grandchild": "sub/grandchild.tex",
+        "THORNMARK-child-after": "chapter.tex",
+        "THORNMARK-main-after": "main.tex"
+      },
+      "expected": {
+        "marker_order": [
+          "THORNMARK-main-before",
+          "THORNMARK-child-before",
+          "THORNMARK-grandchild",
+          "THORNMARK-child-after",
+          "THORNMARK-main-after"
+        ],
+        "status": "resolved"
+      }
+    },
+    {
+      "name": "repeated_include",
+      "purpose": "The same physical file is included twice; a correct boundary must retain two execution occurrences.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\nTHORNMARK-before\\par\n\\input{shared}\nTHORNMARK-between\\par\n\\input{shared}\nTHORNMARK-after\\par\n\\end{document}\n",
+        "shared.tex": "THORNMARK-shared\\par\n"
+      },
+      "markers": {
+        "THORNMARK-before": "main.tex",
+        "THORNMARK-between": "main.tex",
+        "THORNMARK-after": "main.tex",
+        "THORNMARK-shared": "shared.tex"
+      },
+      "expected": {
+        "marker_order": [
+          "THORNMARK-before",
+          "THORNMARK-shared",
+          "THORNMARK-between",
+          "THORNMARK-shared",
+          "THORNMARK-after"
+        ],
+        "status": "resolved"
+      }
+    },
+    {
+      "name": "include_cycle",
+      "purpose": "Cycle main -> a -> main. Expansion cannot complete; the cycle site must be explicit rather than deduplicated into apparent success.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\nTHORNMARK-main\\par\n\\input{a}\n\\end{document}\n",
+        "a.tex": "THORNMARK-a\\par\n\\input{main}\n"
+      },
+      "markers": {
+        "THORNMARK-main": "main.tex",
+        "THORNMARK-a": "a.tex"
+      },
+      "expected": {
+        "marker_order_prefix": [
+          "THORNMARK-main",
+          "THORNMARK-a"
+        ],
+        "status": "partial",
+        "reason": "include_cycle"
+      }
+    },
+    {
+      "name": "missing_include",
+      "purpose": "Missing direct include must be surfaced with its source relationship.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\nTHORNMARK-before\\par\n\\input{missing-chapter}\nTHORNMARK-after\\par\n\\end{document}\n"
+      },
+      "markers": {
+        "THORNMARK-before": "main.tex",
+        "THORNMARK-after": "main.tex"
+      },
+      "expected": {
+        "status": "partial",
+        "reason": "missing_file"
+      }
+    },
+    {
+      "name": "cross_file_reference",
+      "purpose": "A reference in the main file targets a label defined in an included child.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\n\\input{child}\nSee Equation~\\ref{eq:child}.\n\\end{document}\n",
+        "child.tex": "\\begin{equation}x=x\\label{eq:child}\\end{equation}\n"
+      },
+      "markers": {},
+      "expected": {
+        "status": "resolved",
+        "reference_target": "child.tex"
+      },
+      "definition_queries": [
+        {
+          "file": "main.tex",
+          "needle": "eq:child",
+          "occurrence": 1,
+          "kind": "definition"
+        }
+      ]
+    },
+    {
+      "name": "fake_syntax_in_comment_and_verbatim",
+      "purpose": "Include/reference-looking text in comments and verbatim is not project structure.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\n% \\input{fake}\n\\begin{verbatim}\n\\input{fake}\n\\ref{fake:label}\n\\end{verbatim}\nTHORNMARK-real-main\\par\n\\end{document}\n",
+        "fake.tex": "THORNMARK-fake-child\\par\\label{fake:label}\n"
+      },
+      "markers": {
+        "THORNMARK-real-main": "main.tex",
+        "THORNMARK-fake-child": "fake.tex"
+      },
+      "expected": {
+        "marker_order": [
+          "THORNMARK-real-main"
+        ],
+        "status": "resolved",
+        "forbidden_files": [
+          "fake.tex"
+        ]
+      }
+    },
+    {
+      "name": "custom_macro_static_include",
+      "purpose": "A valid custom macro wraps input with a literal call-site argument.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\newcommand{\\loadchapter}[1]{\\input{#1}}\n\\begin{document}\nTHORNMARK-before\\par\n\\loadchapter{child}\nTHORNMARK-after\\par\n\\end{document}\n",
+        "child.tex": "THORNMARK-child\\par\n"
+      },
+      "markers": {
+        "THORNMARK-before": "main.tex",
+        "THORNMARK-child": "child.tex",
+        "THORNMARK-after": "main.tex"
+      },
+      "expected": {
+        "marker_order": [
+          "THORNMARK-before",
+          "THORNMARK-child",
+          "THORNMARK-after"
+        ],
+        "status": "resolved_or_explicit_partial"
+      }
+    },
+    {
+      "name": "macro_target_include",
+      "purpose": "A direct input target is produced by TeX macro expansion.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\def\\chapterfile{child}\n\\begin{document}\nTHORNMARK-before\\par\n\\input{\\chapterfile}\nTHORNMARK-after\\par\n\\end{document}\n",
+        "child.tex": "THORNMARK-child\\par\n"
+      },
+      "markers": {
+        "THORNMARK-before": "main.tex",
+        "THORNMARK-child": "child.tex",
+        "THORNMARK-after": "main.tex"
+      },
+      "expected": {
+        "marker_order": [
+          "THORNMARK-before",
+          "THORNMARK-child",
+          "THORNMARK-after"
+        ],
+        "status": "resolved_or_explicit_partial"
+      }
+    },
+    {
+      "name": "malformed_editing_state",
+      "purpose": "Realistic incomplete direct include. This is malformed source, not a valid-dynamics capability requirement.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\nTHORNMARK-before\\par\n\\input{child\nTHORNMARK-after\\par\n\\end{document}\n",
+        "child.tex": "THORNMARK-child\\par\n"
+      },
+      "markers": {
+        "THORNMARK-before": "main.tex",
+        "THORNMARK-child": "child.tex",
+        "THORNMARK-after": "main.tex"
+      },
+      "expected": {
+        "status": "source_error"
+      }
+    },
+    {
+      "name": "unicode_static_filename",
+      "purpose": "Unusual but valid static filename spelling must not be narrowed to an ASCII grammar.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\n\\input{chapître+α}\n\\end{document}\n",
+        "chapître+α.tex": "THORNMARK-unicode-child\\par\n"
+      },
+      "markers": {
+        "THORNMARK-unicode-child": "chapître+α.tex"
+      },
+      "expected": {
+        "marker_order": [
+          "THORNMARK-unicode-child"
+        ],
+        "status": "resolved"
+      }
+    },
+    {
+      "name": "cross_boundary_shadowing_order",
+      "purpose": "Order-only proxy for #125: declaration sites before include, in child, and after return must remain globally ordered; authority/shadowing stays Thorn-owned.",
+      "main": "main.tex",
+      "files": {
+        "main.tex": "\\documentclass{article}\n\\begin{document}\n\\label{order:parent-before}A map is called balanced when every fibre has two points.\n\\input{child}\n\\label{order:parent-after}A map is called balanced when every fibre has four points.\n\\end{document}\n",
+        "child.tex": "\\label{order:child}A map is called balanced when every fibre has three points.\n"
+      },
+      "markers": {},
+      "expected": {
+        "label_order": [
+          "order:parent-before",
+          "order:child",
+          "order:parent-after"
+        ],
+        "status": "resolved"
+      }
+    }
+  ]
+}
