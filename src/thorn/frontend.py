@@ -13,6 +13,7 @@ class FrontendDiagnosticKind(StrEnum):
     PARSE_ERROR = "parse_error"
     MISSING_FILE = "missing_file"
     UNSUPPORTED_CONSTRUCT = "unsupported_construct"
+    PROJECT_PARTIALITY = "project_partiality"
 
 
 class SourceSpan(BaseModel):
