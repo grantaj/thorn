@@ -18,23 +18,26 @@ An independent frontend backed by `pylatexenc.latexwalker.LatexWalker`, installe
 
 `TreeSitterLatexFrontend` uses the `latex-lsp/tree-sitter-latex` 0.6.0 grammar behind the same parser-neutral boundary. It is deliberately optional and does **not** change `current`.
 
-The Python runtime is available through the `treesitter` extra:
+The `treesitter` extra installs only the Python runtime used by the evaluation:
 
 ```text
 pip install 'thorn-math[treesitter]'
 ```
 
-The grammar is not declared as a normal Thorn dependency in this tranche. The evaluated grammar revision is pinned explicitly for development/CI:
+The evaluated grammar revision is `fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9`. That source revision does not contain generated `src/parser.c`, so a direct `pip install` from its Git repository does not build. The reproducible CI evaluation instead generates the parser first:
 
 ```text
-pip install 'tree-sitter-latex @ git+https://github.com/latex-lsp/tree-sitter-latex.git@fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9'
+git clone --filter=blob:none https://github.com/latex-lsp/tree-sitter-latex.git /tmp/tree-sitter-latex
+git -C /tmp/tree-sitter-latex checkout fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9
+(cd /tmp/tree-sitter-latex && npx --yes tree-sitter-cli@0.24.7 generate)
+pip install /tmp/tree-sitter-latex
 ```
 
-This split is intentional evidence, not a migration plan. The grammar's own 0.6.0 metadata leaves its `core` extra on `tree-sitter~=0.21`, while this evaluation exercises current `tree-sitter==0.26.0`. Thorn therefore tests the grammar binding and runtime explicitly rather than importing the grammar's stale optional runtime constraint.
+This is evaluation/build evidence, not a proposed normal-user installation path. The grammar's 0.6.0 metadata also leaves its `core` extra on `tree-sitter~=0.21`, while this evaluation exercises `tree-sitter==0.26.0`. With 0.26.0 the binding additionally emits a deprecation warning because the grammar exposes the legacy integer language handle. The runtime works, but the packaging/API compatibility story is materially less mature than Thorn's existing optional pylatexenc path.
 
 ## Normative conformance
 
-When the optional Tree-sitter packages are installed, `tests/test_frontend_conformance.py` runs the same contract against all three backends. It covers:
+When the optional Tree-sitter packages are installed, `tests/test_frontend_conformance.py` runs the same parser-neutral contract against all three backends. It covers:
 
 - exact raw source and source spans;
 - comments and escaped `%`;
@@ -47,7 +50,18 @@ When the optional Tree-sitter packages are installed, `tests/test_frontend_confo
 
 `tests/test_tree_sitter_frontend.py` adds #125/#162-derived source-level cases for preamble/body separation, `comment`, `verbatim`, `verbatim*`, `lstlisting`, and `minted` regions, fake includes/labels inside opaque regions, UTF-8 provenance, and the requirement that no Tree-sitter `Node` escapes the adapter.
 
-The normal CI job continues to run the full keyless suite. A dedicated Tree-sitter job installs the pinned optional grammar and reruns frontend conformance plus the completed #162 semantic-dependency contracts. No provider/model call is made.
+The pinned evaluation run produced:
+
+- frontend/differential conformance: **26 passed**;
+- completed #162 semantic-dependency contract: **64 passed, 1 skipped, 1 strict xfail**;
+- ordinary Thorn CI: fully green, including the normal test suite, Ruff and mypy;
+- Lean contract: green;
+- Local NLP contract: green;
+- provider/model requests: **0**.
+
+The strict xfail is deliberately part of the evaluation evidence rather than a compatibility workaround. For malformed direct source `\\input{{chapter}`, the evaluated grammar loses the command identity inside an undifferentiated parse `ERROR`. The #162 project-partiality contract requires Thorn to know that this is an indeterminate project boundary. Recovering that fact in the adapter would require rescanning the raw LaTeX for an include command, exactly the parallel-parser pattern #158 prohibits.
+
+This is therefore a **genuine assurance blocker for default/production use of this backend**, not a request to add a Thorn regex special case. The xfail is strict so an upstream grammar improvement that restores enough structure becomes visible immediately.
 
 ## Source/provenance observations
 
@@ -87,9 +101,17 @@ The remaining limitation is custom verbatim-like environments: without package/m
 
 ## Measurements
 
-`scripts/measure_tree_sitter_frontend.py` builds the same deterministic two-file synthetic project for all three frontends, warms each path, and records median parser/full-extraction time plus installed distribution bytes. The dedicated CI job prints and retains the measurement JSON. Final measured values and the resulting disposition are recorded in the #158 PR/issue evidence after the first green evaluation run.
+`scripts/measure_tree_sitter_frontend.py` builds one deterministic two-file project containing 40 lemma/theorem pairs, 7,231 source bytes, warms each backend, and records the median of 20 parse and full-extraction iterations.
 
-The packaging comparison is already qualitatively material: regex adds no parser package, pylatexenc is a pure-Python optional package, while Tree-sitter requires both the compiled Tree-sitter runtime and a separately built language binding. The grammar's current distribution/runtime constraint story is weaker than the ordinary PyPI-wheel path used by Thorn's existing optional backend.
+| Backend | Parse median | Full extraction median | Installed parser bytes |
+| --- | ---: | ---: | ---: |
+| regex | 14.735 ms | 66.823 ms | none |
+| pylatexenc | 33.956 ms | 66.425 ms | 1,143,296 |
+| tree-sitter | 24.957 ms | 77.956 ms | 5,819,485 combined |
+
+The Tree-sitter installed total is 2,078,154 bytes for `tree-sitter` plus 3,741,331 bytes for the generated `tree-sitter-latex` distribution. It parses this fixture faster than pylatexenc but slower than regex, and its current full-extraction path is the slowest of the three. None of these differences is large enough to be the deciding architectural factor.
+
+Packaging is more consequential. In the observed hosted CI run, cloning/generating/building the pinned grammar took roughly 55 seconds before tests could start, and requires a Node/tree-sitter-cli generation step. That is an observation of the current build path rather than a stable runtime benchmark, but it reinforces that this is not yet a frictionless normal-install dependency.
 
 ## Earlier regex/pylatexenc result
 
@@ -110,4 +132,16 @@ The #16 CI run used a generated two-file project containing 40 lemma/theorem pai
 
 ## #158 disposition
 
-Pending the pinned Tree-sitter CI measurement and full contract run, **do not change the production/default frontend**. The evidence so far supports Tree-sitter as a serious structured-source candidate and differential oracle, but packaging friction, custom tokenization limits, and measured cost must be included before choosing between `optional backend`, `development/differential oracle`, or a stronger default-candidate disposition.
+**Disposition: retain Tree-sitter as an experimental development/differential oracle and source-structure prototype; do not promote it to Thorn's default or production assurance frontend.**
+
+The positive evidence is substantial: conventional mathematical LaTeX conformance is strong, provenance normalizes exactly, opaque/comment/math regions are materially cleaner than repeated raw scanning, and parser-neutral `FrontendRegion` facts look like the right long-term ownership boundary.
+
+The negative evidence is also decisive for this tranche: at least one completed #162 project-partiality case loses the syntactic identity required to fail closed at the project boundary; repairing that in Thorn would recreate generic LaTeX scanning. The grammar also currently requires a generated-source build path and exposes a stale Tree-sitter runtime/API compatibility story.
+
+Accordingly:
+
+1. keep the adapter, corpus, differential lane, measurement script, and normalized-region experiment as useful architectural evidence;
+2. keep `current` as `regex`;
+3. do **not** add bespoke source scanning to make Tree-sitter satisfy the malformed-include case;
+4. revisit production candidacy only if the upstream grammar preserves enough error structure, or a later generic source-partiality design can fail closed without identifying constructs by rescanning raw LaTeX;
+5. use the `FrontendRegion` result as input to #161 substrate consolidation, without pre-empting #159 project/workspace evaluation.
