@@ -259,6 +259,12 @@ def _overlaps_result(start: int, end: int, regions: list[ResultRegion]) -> bool:
     return False
 
 
+def _has_substantive_payload(view: str, *, cue_end: int, source_end: int) -> bool:
+    """Return whether a declaration cue has source-bearing defining content."""
+
+    return any(character.isalnum() for character in view[cue_end:source_end])
+
+
 def _declarations(
     file: FrontendFile,
     regions: list[ResultRegion],
@@ -276,6 +282,12 @@ def _declarations(
         for match in pattern.finditer(view):
             source_start, source_end = _sentence_bounds(file, view, match.start())
             if _overlaps_result(source_start, source_end, regions):
+                continue
+            # A declaration-shaped cue is grammatical evidence, not mathematical
+            # authority. Promotion requires an actual defining complement.
+            if not _has_substantive_payload(
+                view, cue_end=match.end(), source_end=source_end
+            ):
                 continue
             raw_term = file.raw[match.start("term") : match.end("term")]
             term, term_start, term_end = _unwrap_term(raw_term, match.start("term"))
