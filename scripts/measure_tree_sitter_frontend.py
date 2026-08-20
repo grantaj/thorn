@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable
 import importlib.metadata
 import json
 import statistics
 import tempfile
 import time
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 from thorn.frontends.pylatexenc import PylatexencLatexFrontend
@@ -28,7 +29,10 @@ def _fixture(root: Path, pairs: int) -> Path:
     for index in range(pairs):
         chunks.extend(
             [
-                f"\\begin{{lemma}}\\label{{lem:{index}}}L{index}: $x_{index}^2\\ge 0$.\\end{{lemma}}\n",
+                (
+                    f"\\begin{{lemma}}\\label{{lem:{index}}}L{index}: "
+                    f"$x_{index}^2\\ge 0$.\\end{{lemma}}\n"
+                ),
                 f"\\begin{{proof}}Proof {index}.\\end{{proof}}\n",
                 f"\\begin{{theorem}}\\label{{thm:{index}}}T{index}.\\end{{theorem}}\n",
                 f"\\begin{{proof}}By \\ref{{lem:{index}}}.\\end{{proof}}\n",
@@ -95,11 +99,11 @@ def main() -> int:
             extract_project(main_file, frontend=frontend)
             results[name] = {
                 "parse_median_ms": round(
-                    _median_ms(lambda: frontend.parse_project(main_file), args.iterations), 3
+                    _median_ms(partial(frontend.parse_project, main_file), args.iterations), 3
                 ),
                 "extract_median_ms": round(
                     _median_ms(
-                        lambda: extract_project(main_file, frontend=frontend), args.iterations
+                        partial(extract_project, main_file, frontend=frontend), args.iterations
                     ),
                     3,
                 ),
