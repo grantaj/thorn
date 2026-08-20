@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from thorn.eval_review import build_result_review_context
 from thorn.evidence import InferenceStatus
+from thorn.frontend import SourceSpan
 from thorn.semantic_review import SemanticReviewItem, build_review_context
 
 from test_semantic_review import make_project
@@ -11,6 +12,18 @@ from test_semantic_review import make_project
 
 def _canonical_by_identifier(items: list[object]) -> dict[str, object]:
     return {getattr(item, "identifier"): item for item in items}
+
+
+def _source_key(span: SourceSpan) -> tuple[str, int, int, int, int, int, int]:
+    return (
+        span.file,
+        span.start_offset,
+        span.end_offset,
+        span.start_line,
+        span.start_column,
+        span.end_line,
+        span.end_column,
+    )
 
 
 def _assert_canonical_selector_projection(project: object, item: SemanticReviewItem) -> None:
@@ -60,13 +73,13 @@ def _assert_canonical_selector_projection(project: object, item: SemanticReviewI
     # Nearby prose is admitted only through exact evidence already attached to a
     # selected canonical support relation. There is no whole-paper fallback here.
     canonical_context = {
-        (evidence.context.strip(), evidence.source)
+        (evidence.context.strip(), _source_key(evidence.source))
         for relation in item.support_relations
         for evidence in relation.evidence
         if evidence.context.strip()
     }
     assert {
-        (context.text, context.source) for context in item.nearby_context
+        (context.text, _source_key(context.source)) for context in item.nearby_context
     } <= canonical_context
 
 
