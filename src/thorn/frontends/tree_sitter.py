@@ -101,6 +101,7 @@ def _surface_groups(
     """
     text = coordinates.text
     cursor = start
+    recovered_end = start
     arguments: list[FrontendArgument] = []
     while True:
         while cursor < len(text) and text[cursor].isspace():
@@ -128,11 +129,12 @@ def _surface_groups(
                         )
                     )
                     cursor = end
+                    recovered_end = end
                     break
             index += 1
         else:
             break
-    return arguments, cursor
+    return arguments, recovered_end
 
 
 def _load_parser() -> Any:
@@ -455,24 +457,24 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
         ):
             diagnostic = _diagnostic_for_error(path, coordinates, node)
             source = diagnostic.source
-            key = (
+            diagnostic_key = (
                 source.start_offset if source else 0,
                 source.end_offset if source else 0,
                 diagnostic.message,
             )
-            if key not in seen_diagnostics:
+            if diagnostic_key not in seen_diagnostics:
                 diagnostics.append(diagnostic)
-                seen_diagnostics.add(key)
+                seen_diagnostics.add(diagnostic_key)
 
     macros_by_key: dict[tuple[int, str], FrontendMacro] = {}
     for node in nodes:
         macro = _command_macro(path, source_bytes, coordinates, node)
         if macro is None:
             continue
-        key = (macro.span.start_offset, macro.name)
-        incumbent = macros_by_key.get(key)
+        macro_key = (macro.span.start_offset, macro.name)
+        incumbent = macros_by_key.get(macro_key)
         if incumbent is None or macro.span.end_offset > incumbent.span.end_offset:
-            macros_by_key[key] = macro
+            macros_by_key[macro_key] = macro
     macros = sorted(macros_by_key.values(), key=lambda item: item.span.start_offset)
 
     environments: list[FrontendEnvironment] = []
@@ -483,14 +485,14 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
         converted, disagreement = _environment(path, source_bytes, coordinates, node)
         if disagreement is not None:
             source = disagreement.source
-            key = (
+            diagnostic_key = (
                 source.start_offset if source else 0,
                 source.end_offset if source else 0,
                 disagreement.message,
             )
-            if key not in seen_diagnostics:
+            if diagnostic_key not in seen_diagnostics:
                 diagnostics.append(disagreement)
-                seen_diagnostics.add(key)
+                seen_diagnostics.add(diagnostic_key)
         if converted is not None:
             environments.append(converted)
     environments.sort(key=lambda item: item.span.start_offset)
