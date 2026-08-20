@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
+from typing import TypeVar
 
 from pydantic import BaseModel, Field, model_validator
 
 from thorn.frontend import SourceSpan
+
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 class ProjectOrderStatus(StrEnum):
@@ -133,7 +136,9 @@ class ProjectOrder(BaseModel):
                 raise ValueError("ProjectOrder must contain exactly one root file occurrence")
             root = roots[0]
             if root.file != self.root.main_file or root.depth != 0:
-                raise ValueError("root file occurrence must match ProjectRoot.main_file at depth zero")
+                raise ValueError(
+                    "root file occurrence must match ProjectRoot.main_file at depth zero"
+                )
 
         child_by_include: dict[str, FileOccurrence] = {}
         for file_occurrence in self.files:
@@ -148,7 +153,9 @@ class ProjectOrder(BaseModel):
             if include.resolved_file != file_occurrence.file:
                 raise ValueError("child file occurrence must match include resolved_file")
             if parent_id in child_by_include:
-                raise ValueError("a resolved include occurrence may produce only one child occurrence")
+                raise ValueError(
+                    "a resolved include occurrence may produce only one child occurrence"
+                )
             child_by_include[parent_id] = file_occurrence
 
         for include in self.includes:
@@ -170,7 +177,9 @@ class ProjectOrder(BaseModel):
 
         chunk_indices = sorted(item.order_index for item in self.chunks)
         if chunk_indices != list(range(len(chunk_indices))):
-            raise ValueError("expanded source chunk order_index values must be contiguous from zero")
+            raise ValueError(
+                "expanded source chunk order_index values must be contiguous from zero"
+            )
         for chunk in self.chunks:
             owner = file_by_id.get(chunk.file_occurrence_identifier)
             if owner is None:
@@ -197,15 +206,19 @@ class ProjectOrder(BaseModel):
             for diagnostic in self.diagnostics
         )
         if self.status == ProjectOrderStatus.RESOLVED and (unresolved or source_error):
-            raise ValueError("resolved ProjectOrder cannot contain unresolved structure/source error")
+            raise ValueError(
+                "resolved ProjectOrder cannot contain unresolved structure/source error"
+            )
         if self.status == ProjectOrderStatus.SOURCE_ERROR and not source_error:
             raise ValueError("source_error ProjectOrder requires a source-error diagnostic")
 
         return self
 
     @staticmethod
-    def _unique(items: list[BaseModel], description: str) -> dict[str, BaseModel]:
-        result: dict[str, BaseModel] = {}
+    def _unique(
+        items: list[_ModelT], description: str
+    ) -> dict[str, _ModelT]:
+        result: dict[str, _ModelT] = {}
         for item in items:
             identifier = getattr(item, "identifier")
             if identifier in result:
