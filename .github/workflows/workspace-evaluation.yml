@@ -1,0 +1,64 @@
+name: Workspace substrate evaluation
+
+on:
+  pull_request:
+    paths:
+      - "src/thorn/project_order.py"
+      - "tests/test_project_order.py"
+      - "scripts/evaluate_workspace_substrates.py"
+      - "eval/workspace/**"
+      - "docs/workspace-evaluation.md"
+      - ".github/workflows/workspace-evaluation.yml"
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+      TEXLAB_VERSION: "5.26.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
+
+      - name: Install pinned TexLab release
+        run: |
+          curl --fail --location --retry 3 \
+            "https://github.com/latex-lsp/texlab/releases/download/v${TEXLAB_VERSION}/texlab-x86_64-linux.tar.gz" \
+            --output /tmp/texlab.tar.gz
+          echo "TEXLAB_ARCHIVE_SHA256=$(sha256sum /tmp/texlab.tar.gz | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          tar -xzf /tmp/texlab.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/texlab /usr/local/bin/texlab
+          texlab --version
+          stat --printf='texlab executable bytes: %s\n' /usr/local/bin/texlab
+
+      - name: Install LaTeXML distribution package
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends latexml
+          latexml --VERSION || latexml --version
+          dpkg-query -W -f='${Package} ${Version} installed-kib=${Installed-Size}\n' latexml
+
+      - name: Run project/workspace differential corpus
+        run: |
+          python scripts/evaluate_workspace_substrates.py \
+            --output /tmp/workspace-evaluation.json
+          cat /tmp/workspace-evaluation.json
+
+      - name: Preserve #162 project-partiality assurance
+        run: >-
+          pytest -q
+          tests/test_project_order.py
+          tests/test_semantic_dependency_project_partiality_contract.py
+
+      - run: ruff check src/thorn/project_order.py tests/test_project_order.py scripts/evaluate_workspace_substrates.py
+      - run: mypy src
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workspace-evaluation
+          path: /tmp/workspace-evaluation.json
