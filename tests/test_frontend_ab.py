@@ -85,3 +85,32 @@ def test_unknown_mandatory_macro_disagreement_is_visible(tmp_path: Path) -> None
     # Every backend preserves exact provenance for the syntax it claims to own.
     assert regex_macro.span.text(source) == regex_macro.raw
     assert pylatexenc_macro.span.text(source) == pylatexenc_macro.raw
+
+
+def test_unknown_optional_macro_disagreement_is_visible(tmp_path: Path) -> None:
+    tex = tmp_path / "main.tex"
+    source = r"Before \mystery[alpha]{payload} after."
+    tex.write_text(source, encoding="utf-8")
+
+    regex_file = RegexLatexFrontend().parse_project(tex).files[0]
+    pylatexenc_file = PylatexencLatexFrontend().parse_project(tex).files[0]
+    regex_macro = next(macro for macro in regex_file.macros if macro.name == "mystery")
+    pylatexenc_macro = next(macro for macro in pylatexenc_file.macros if macro.name == "mystery")
+
+    assert [argument.value for argument in regex_macro.arguments] == ["alpha", "payload"]
+    assert [argument.value for argument in pylatexenc_macro.arguments] == ["alpha", "payload"]
+
+    if _HAS_TREE_SITTER:
+        tree_sitter_file = TreeSitterLatexFrontend().parse_project(tex).files[0]
+        tree_sitter_macro = next(
+            macro for macro in tree_sitter_file.macros if macro.name == "mystery"
+        )
+        # The pinned grammar ends generic_command at the optional bracket. The
+        # bracket and following group are siblings, not CST-owned arguments.
+        # Keep that negative result visible instead of reparsing raw source here.
+        assert tree_sitter_macro.arguments == []
+        assert tree_sitter_macro.raw == r"\mystery"
+        assert tree_sitter_macro.span.text(source) == tree_sitter_macro.raw
+
+    assert regex_macro.span.text(source) == regex_macro.raw
+    assert pylatexenc_macro.span.text(source) == pylatexenc_macro.raw
