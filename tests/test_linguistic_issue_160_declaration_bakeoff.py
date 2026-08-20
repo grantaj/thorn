@@ -69,7 +69,7 @@ def test_issue_160_frozen_phrase_baseline_is_measured_not_extended() -> None:
     assert report["transitive_cases_satisfied"] == "1/2"
 
 
-def test_issue_160_spacy_measurement_probe() -> None:
+def test_issue_160_spacy_measurements_are_frozen() -> None:
     import pytest
 
     from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
@@ -81,26 +81,45 @@ def test_issue_160_spacy_measurement_probe() -> None:
         frontend.parse("A map is called balanced when THORNMATH1 holds.")
     except (LinguisticFrontendUnavailable, OSError):
         pytest.skip("local spaCy English model is not installed")
-    reports = {
-        name: module._evaluate_strategy(name, payload["cases"], frontend)
-        for name in ("dependency", "hybrid")
+
+    dependency = module._evaluate_strategy("dependency", payload["cases"], frontend)
+    hybrid = module._evaluate_strategy("hybrid", payload["cases"], frontend)
+
+    assert dependency["true_positive_candidates"] == 19
+    assert dependency["false_positive_candidates"] == 29
+    assert dependency["missed_candidates"] == 2
+    assert dependency["precision"] == 0.396
+    assert dependency["recall"] == 0.905
+    assert dependency["lexical_challenge_recall"] == 0.75
+    assert dependency["provenance_failures"] == 0
+    assert dependency["ambiguity_marked_candidates"] == 48
+    assert dependency["transitive_cases_satisfied"] == "1/2"
+
+    assert hybrid["true_positive_candidates"] == 18
+    assert hybrid["false_positive_candidates"] == 6
+    assert hybrid["missed_candidates"] == 3
+    assert hybrid["precision"] == 0.75
+    assert hybrid["recall"] == 0.857
+    assert hybrid["lexical_challenge_recall"] == 0.625
+    assert hybrid["provenance_failures"] == 0
+    assert hybrid["transitive_cases_satisfied"] == "1/2"
+
+    hybrid_fp_ids = {row["id"] for row in hybrid["rows"] if row["fp"]}
+    hybrid_fn_ids = {row["id"] for row in hybrid["rows"] if row["fn"]}
+    assert hybrid_fp_ids == {
+        "named-math-before",
+        "transitive-hybrid",
+        "negative-useful",
+        "negative-display-label",
+        "negative-quotation",
+        "negative-called-metaphor",
     }
-    summary = {}
-    for name, report in reports.items():
-        summary[name] = {
-            key: report[key]
-            for key in (
-                "true_positive_candidates",
-                "false_positive_candidates",
-                "missed_candidates",
-                "precision",
-                "recall",
-                "lexical_challenge_recall",
-                "provenance_failures",
-                "ambiguity_marked_candidates",
-                "transitive_cases_satisfied",
-            )
-        }
-        summary[name]["fp_ids"] = [row["id"] for row in report["rows"] if row["fp"]]
-        summary[name]["fn_ids"] = [row["id"] for row in report["rows"] if row["fn"]]
-    raise AssertionError("ISSUE160_MEASUREMENT=" + json.dumps(summary, sort_keys=True))
+    assert hybrid_fn_ids == {
+        "named-deemed",
+        "named-math-before",
+        "transitive-hybrid",
+    }
+
+    assert hybrid["recall"] > 0.619
+    assert hybrid["lexical_challenge_recall"] > 0.125
+    assert hybrid["false_authority_risk"] < dependency["false_authority_risk"]
