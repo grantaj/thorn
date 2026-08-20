@@ -28,6 +28,9 @@ Preamble declaration-looking prose must stay out.
 \begin{document}
 Visible café text with an escaped percent \%.
 % Hidden comment declaration: let Shadow mean bad.
+\iffalse
+Hidden block comment declaration: let BlockShadow mean bad.
+\fi
 \begin{comment}
 Hidden comment environment: let CommentShadow mean bad.
 \end{comment}
@@ -47,8 +50,20 @@ Hidden listing declaration: let ListingShadow mean bad.
 print(r"\ref{fake:minted}")
 Hidden minted declaration: let MintedShadow mean bad.
 \end{minted}
+\begin{asy}
+Hidden Asymptote declaration: let AsyShadow mean bad.
+\end{asy}
+\begin{pycode}
+Hidden Python declaration: let PyShadow mean bad.
+\end{pycode}
+\begin{luacode*}
+Hidden Lua declaration: let LuaShadow mean bad.
+\end{luacode*}
+\begin{sageblock}
+Hidden Sage declaration: let SageShadow mean bad.
+\end{sageblock}
 \begin{fact}[Small]\label{fact:one}
-Let $x\in\mathbb R$ and use \foo[alpha]{a{b}c}.
+Let $x\in\mathbb R$ and use \foo{a{b}c}.
 \[
 x^2 \ge 0.
 \]
@@ -77,8 +92,8 @@ Indeed, by \ref{fact:one}.
     newtheorem = next(macro for macro in file.macros if macro.name == "newtheorem")
     assert [argument.value for argument in newtheorem.arguments] == ["fact", "Fact"]
     foo = next(macro for macro in file.macros if macro.name == "foo")
-    assert [argument.value for argument in foo.arguments] == ["alpha", "a{b}c"]
-    assert [argument.optional for argument in foo.arguments] == [True, False]
+    assert [argument.value for argument in foo.arguments] == ["a{b}c"]
+    assert [argument.optional for argument in foo.arguments] == [False]
 
     env_names = {environment.name for environment in file.environments}
     assert {
@@ -106,6 +121,7 @@ Indeed, by \ref{fact:one}.
         FrontendRegionKind.VERBATIM,
         FrontendRegionKind.LISTING,
         FrontendRegionKind.MINTED,
+        FrontendRegionKind.OPAQUE,
         FrontendRegionKind.MATH,
     } <= kinds
     eligible = _eligible_text(file)
@@ -113,11 +129,16 @@ Indeed, by \ref{fact:one}.
     assert "Indeed, by" in eligible
     assert "Preamble declaration-looking prose" not in eligible
     assert "Hidden comment declaration" not in eligible
+    assert "BlockShadow" not in eligible
     assert "CommentShadow" not in eligible
     assert "VerbatimShadow" not in eligible
     assert "StarShadow" not in eligible
     assert "ListingShadow" not in eligible
     assert "MintedShadow" not in eligible
+    assert "AsyShadow" not in eligible
+    assert "PyShadow" not in eligible
+    assert "LuaShadow" not in eligible
+    assert "SageShadow" not in eligible
     assert "x\\in\\mathbb" not in eligible
 
 
