@@ -97,7 +97,7 @@ jobs:
         run: |
           git clone --filter=blob:none https://github.com/latex-lsp/tree-sitter-latex.git /tmp/tree-sitter-latex
           git -C /tmp/tree-sitter-latex checkout "$TREE_SITTER_LATEX_REVISION"
-          npm --prefix /tmp/tree-sitter-latex ci --ignore-scripts
+          npm --prefix /tmp/tree-sitter-latex ci
           npm --prefix /tmp/tree-sitter-latex run generate
           python -m pip install /tmp/tree-sitter-latex
       - name: Frontend and differential conformance
