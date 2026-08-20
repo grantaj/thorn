@@ -108,7 +108,7 @@ retain.
 | Binder and expression resolution | `symbol_resolution_ir.py` | Thorn mathematical interpretation | Thorn |
 | Ambiguity and partiality | evidence models, candidates, support edges, Symbol Resolution IR | Thorn assurance policy | Thorn |
 | Semantic dependency closure | `project_semantic_context._reachable_declarations`; `semantic_review._close_project_symbol_dependencies`, privately reused by `eval_review` | Thorn mathematical/assurance policy | One explicit closure contract over canonical dependency identities |
-| Review-context selection/materiality | Targeted selection in `semantic_review.py`; result-level normal-review selection in `eval_review.py` | Thorn assurance/review policy | Shared selection primitives with explicit targeted and result-level policies |
+| Review-context selection/materiality | Targeted selection in `semantic_review.py`; result-level normal-review selection in `eval_review.py` | Unresolved Thorn assurance/review policy | Shared selection primitives plus an explicit decision on the intended normal-review policy |
 | Canonical Proof-IR lowering | canonical and typed Proof-IR modules | Thorn mathematical/assurance policy | Thorn |
 | Advertised source handles | `llm_proof_language.py`, derived from semantic IR sources | Thorn assurance/review policy | Thorn |
 | Closed-world rescue limits | `proof_language_review.py` | Thorn assurance/review policy | Thorn |
@@ -285,6 +285,10 @@ the latter through `review_workflow`, despite its historical `eval_review` modul
 and evaluation-seam docstring. `eval_review` privately imports
 `_close_project_symbol_dependencies` from `semantic_review`, so closure is shared but
 selection policy is not. This is both an ownership ambiguity and a consolidation risk.
+The split is observed behavior, not yet an established semantic contract. #162 should
+characterize both paths while preserving their shared fidelity, provenance, closure,
+and bounded-reachability invariants. A decision gate must then determine whether normal
+review should use result-level or targeted selection before #161 consolidates them.
 
 The target should make the stages observable:
 
@@ -341,7 +345,7 @@ navigation and `NEED_SOURCE` response.
 | Project order represented as transient integer ranks | Repeated includes and uncertainty cannot be represented | Add a provenance-bearing project-position fact model under #159/#161 |
 | Units sorted by file path while dependency graphs call node order project order | Project order can diverge between prose semantics and structured dependencies | Make result/dependency ordering consume the #159 project-position contract |
 | Two project semantic closure stages | Edge semantics and termination contract are implicit | Specify one backend-independent closure invariant in #162 |
-| `semantic_review` and `eval_review` context selectors | Normal and targeted review select materially different context through duplicated code; normal review uses the module named as an evaluation seam | Name both policies explicitly, share selection primitives, and cover both under #162 before consolidation |
+| `semantic_review` and `eval_review` context selectors | Normal and targeted review select materially different context through duplicated code; normal review uses the module named as an evaluation seam | Characterize both under #162 without making either normative, then decide the intended normal-review policy before #161 |
 | Structural-only behavior | A backend change could silently weaken or overclaim capability | Add explicit capability assertions in #162 |
 
 ## Target layering
@@ -439,24 +443,32 @@ identity, edge kinds, materiality, and closure selection remain Thorn-owned.
 | Exact report navigation | #125 semantic-context report test |
 | Closed-world rescue | issue #88 and #125 reachability tests |
 | Structured dependencies compose with semantic context | dependency, Proof-IR fidelity, and #125 tests |
-| Normal result review and targeted semantic selection remain intentional | review-workflow, semantic-review, eval-preflight, and semantic-review-provider tests |
+| Observed result-level and targeted review-selection behavior, pending a policy decision | review-workflow, semantic-review, eval-preflight, and semantic-review-provider tests |
 | `thorn-proof/1` remains a projection | Proof-language, transformation, and review-contract tests |
 
 #162 should centralize these properties into smaller semantic assertions rather than
-only preserving issue-specific end-to-end tests.
+only preserving issue-specific end-to-end tests. The selector row is characterization
+evidence, not a promise that both current policies are intentional or immutable. #162
+should keep shared fidelity, provenance, closure, and reachability assertions separate
+from assertions that describe each selector's current materiality policy.
 
 ## Sequencing recommendation
 
 1. Land this audit without production changes.
 2. Start #162's fixture matrix and assertion helpers so all later evaluations target
-   the same Thorn-owned promises.
+   the same Thorn-owned promises, while characterizing both current review selectors
+   without making either policy normative.
 3. Run #158-#160 as separate evaluation changes. They may proceed in parallel, but
    each must consume the audit boundaries and report an explicit disposition.
-4. Publish the architecture decision gate combining their evidence.
-5. Begin #161 only after the relevant #162 contract is executable.
-6. Consolidate source facts, project facts, candidates, authority, and closure in
+4. Decide whether normal review should use result-level or targeted selection, using
+   #162 evidence to record the intended materiality and escalation semantics.
+5. Publish the architecture decision gate combining that decision with #158-#160
+   evidence.
+6. Begin #161 only after the relevant #162 contract is executable and the selector
+   decision is recorded.
+7. Consolidate source facts, project facts, candidates, authority, and closure in
    bounded changes, removing superseded paths only after consumers are rewired.
-7. Re-establish full keyless CI and Local NLP contract coverage before any deferred
+8. Re-establish full keyless CI and Local NLP contract coverage before any deferred
    paid semantic-review experiment.
 
 ## What Thorn deliberately continues to own

@@ -16,7 +16,8 @@ justifies changing them.
 | #158 Tree-sitter evaluation | Not started | Requires #157 boundary and evaluation dependency approval |
 | #159 workspace evaluation | Not started | Requires #157 boundary and external-tool approval |
 | #160 linguistic evaluation | Not started | Requires #157 boundary and #125 baseline freeze |
-| Architecture decision gate | Blocked by evidence | Requires dispositions from #157-#160 and executable #162 coverage |
+| Normal-review selector decision | Blocked by characterization | #162 must characterize result-level and targeted behavior without making either normative |
+| Architecture decision gate | Blocked by evidence | Requires dispositions from #157-#160, executable #162 coverage, and the selector decision |
 | #161 consolidation | Blocked by design | Must not begin before the decision gate |
 
 Baseline notes for the current #157 chunk:
@@ -45,6 +46,11 @@ Adversarial review of the first chunk identified and corrected three audit gaps:
 - the four distinct NLP-related production paths, including the unconditional #125
   prose recognizer.
 
+PR review then identified that documenting both current review selectors as behavior
+did not make both policies intentional contracts. #162 will characterize both while
+preserving shared assurance invariants, and a separate decision gate will select the
+intended normal-review policy before #161.
+
 ## Objective
 
 Re-ground Thorn's semantic-dependency substrate so that mature components own generic
@@ -65,17 +71,17 @@ model calls are part of this programme.
 ## Programme dependency graph
 
 ```text
-#157 ownership audit ------------------+
-                                       +--> decision gate --> #161 consolidation
-#158 Tree-sitter evaluation -----------+
-#159 workspace tooling evaluation -----+
-#160 linguistic evaluation ------------+
-#162 conformance contract ------------------------------------^
+#157 ownership audit --------------------------+
+#158 Tree-sitter evaluation -------------------+
+#159 workspace tooling evaluation -------------+--> architecture decision --> #161
+#160 linguistic evaluation --------------------+              gate
+#162 selector characterization --> selector decision ---------^
 ```
 
 #158-#160 may perform bounded implementation and evaluation work in parallel once the
 current contracts are understood. Their final dispositions depend on #157. #162 begins
-early and becomes the invariant gate for #161.
+early and becomes the invariant gate for #161, but it must not freeze the current
+normal-review selector wiring before the selector decision is made.
 
 ## Phase 0: establish the baseline
 
@@ -145,9 +151,13 @@ Build the backend-independent contract before replacing production machinery.
    - exact source provenance and report navigation;
    - composition with structured theorem/result dependencies;
    - bounded closed-world review reachability.
-5. Require reduced-capability configurations to advertise and test their limitation
+5. Characterize result-level and targeted review selection separately. Preserve their
+   shared fidelity, provenance, semantic-closure, and bounded-reachability invariants,
+   but do not encode either current materiality policy as the required normal-review
+   behavior before the selector decision.
+6. Require reduced-capability configurations to advertise and test their limitation
    explicitly instead of silently passing a weaker contract.
-6. Run structural assertions in ordinary CI and real-NLP assertions in the Local NLP
+7. Run structural assertions in ordinary CI and real-NLP assertions in the Local NLP
    contract.
 
 Do not introduce a second semantic IR. The contract observes canonical Thorn state and
@@ -196,8 +206,9 @@ production defaults.
 
 ## Phase 4: enforce the architecture decision gate
 
-Do not begin #161 until #157-#160 have produced explicit dispositions and the relevant
-parts of #162 are executable.
+Do not begin #161 until #157-#160 have produced explicit dispositions, the relevant
+parts of #162 are executable, and the intended normal-review selector policy has been
+decided explicitly.
 
 Publish one consolidated decision record specifying:
 
@@ -206,6 +217,8 @@ Publish one consolidated decision record specifying:
 - the selected linguistic candidate-recognition strategy;
 - each external tool's runtime, optional, oracle, reference, or rejected role;
 - capability behavior for structural-only mode;
+- whether normal review uses result-level or targeted selection, including the intended
+  materiality and escalation semantics;
 - conformance and benchmark evidence supporting each choice;
 - superseded code expected to be removed.
 
