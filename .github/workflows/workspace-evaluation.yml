@@ -49,10 +49,13 @@ jobs:
             --output /tmp/workspace-evaluation.json
           cat /tmp/workspace-evaluation.json
 
-      - name: Preserve #162 project-partiality assurance
+      - name: Preserve completed #162 assurance contracts
         run: >-
           pytest -q
           tests/test_project_order.py
+          tests/test_semantic_dependency_contract.py
+          tests/test_semantic_dependency_selector_contract.py
+          tests/test_semantic_dependency_partiality_contract.py
           tests/test_semantic_dependency_project_partiality_contract.py
 
       - run: ruff check src/thorn/project_order.py tests/test_project_order.py scripts/evaluate_workspace_substrates.py
