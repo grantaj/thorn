@@ -63,13 +63,31 @@ def _inside_macro_argument(file: FrontendFile, macro: FrontendMacro) -> bool:
     )
 
 
+def _complete_braced_argument(raw: str) -> bool:
+    if len(raw) < 2 or raw[0] != "{" or raw[-1] != "}":
+        return False
+
+    depth = 0
+    escaped = False
+    for index, char in enumerate(raw):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth < 0 or (depth == 0 and index != len(raw) - 1):
+                return False
+    return depth == 0
+
+
 def _available_include_span(file: FrontendFile, macro: FrontendMacro) -> SourceSpan:
     required = [argument for argument in macro.arguments if not argument.optional]
-    if (
-        len(required) == 1
-        and required[0].raw.startswith("{")
-        and required[0].raw.endswith("}")
-    ):
+    if len(required) == 1 and _complete_braced_argument(required[0].raw):
         return macro.span
 
     line_end = file.raw.find("\n", macro.span.start_offset)
@@ -106,7 +124,7 @@ def classify_includes(
             continue
 
         required = [argument for argument in macro.arguments if not argument.optional]
-        if len(required) != 1:
+        if len(required) != 1 or not _complete_braced_argument(required[0].raw):
             diagnostics.append(_partiality(file, macro, "complete static target is unavailable"))
             continue
 
