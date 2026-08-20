@@ -135,9 +135,11 @@ candidate assertions without exposing spaCy-native objects.
 | Local linguistic symbol introduction | Candidate remains ambiguous and non-authoritative | Deterministic NLP fixture; structural-only explicitly skipped |
 | Truncated theorem environment | Parse partiality is explicit; no theorem/result is invented | Regex, pylatexenc |
 | Missing included file | Exact `MISSING_FILE` include-site provenance; unavailable source does not become authority by guess | Regex, pylatexenc |
-| Malformed/incomplete include | Exact normalized project-partiality provenance; no guessed child, expansion order, or later authority | Regex, pylatexenc |
+| Malformed/incomplete direct include | Exact normalized project-partiality provenance; no guessed child, expansion order, or later authority | Regex, pylatexenc |
+| Direct include target requiring TeX expansion | Explicit project partiality rather than guessing a static child | Regex, pylatexenc |
 | Include-like text in comments/verbatim | No child source or project edge is fabricated from literal source | Regex, pylatexenc |
-| Include nested in custom macro structure | Explicit project partiality rather than macro-expansion guess | Regex, pylatexenc |
+| Unused macro definition containing include syntax | Definition site alone is not treated as an executed project boundary; invocation semantics are deferred to #159 | Regex, pylatexenc |
+| Static non-ASCII/punctuated include target | No Thorn-owned ASCII filename grammar is imposed on workspace evidence | Regex, pylatexenc |
 | Missing structured result reference | Dependency remains `MISSING`; no target or referenced review source is invented | Regex, pylatexenc |
 | Duplicate structured result label | Dependency remains `AMBIGUOUS`; no arbitrary target or referenced review source is selected | Regex, pylatexenc |
 | Truncated named declarations and ambient conventions | Exact available source is preserved; no definition, constraint, or resolved semantic dependency is invented; complete neighbouring declarations remain authoritative with exact provenance | Regex, pylatexenc |
@@ -196,17 +198,22 @@ policy open. Complete neighbouring declarations continue to resolve normally. Th
 is vocabulary-independent and applies equally across the regex and pylatexenc structural
 configurations.
 
-The #169 tranche applies the same fail-closed rule to project structure. A complete
-static `\\input`/`\\include` remains ordinary project evidence. An incomplete target,
-mismatched group, dynamic/custom-macro include, or other include site whose expansion
-cannot be determined safely becomes normalized `PROJECT_PARTIALITY` with exact available
-source provenance. Files reached only through unsafe include-like evidence are excluded
-from the normalized project, and extraction currently fails closed rather than allowing
+The #169 tranche applies the same fail-closed rule to direct project structure. A
+complete direct static `\\input`/`\\include` remains ordinary project evidence. An
+incomplete target, mismatched group, or direct target that visibly requires TeX
+expansion becomes normalized `PROJECT_PARTIALITY` with exact available source
+provenance. Files reached only through unsafe direct include evidence are excluded from
+the normalized project, and extraction currently fails closed rather than allowing
 later results to inherit guessed ordering or authority. Conversely, include-shaped text
 that is demonstrably comment or closed verbatim content is not project evidence at all.
-The current exception mechanism and the temporary normalization layer are not normative;
-#159 may replace both with mature workspace/project-resolution tooling while preserving
-these semantic consequences.
+An include token appearing inside a macro definition is likewise not treated as an
+executed boundary merely because it is present in source. Determining whether and how a
+custom macro invocation expands the project requires generic TeX/workspace semantics and
+is deliberately deferred to #159 rather than approximated in this temporary guard.
+Static filenames are not restricted by a Thorn-owned ASCII whitelist. The current
+exception mechanism and the temporary normalization layer are not normative; #159 may
+replace both with mature workspace/project-resolution tooling while preserving these
+semantic consequences.
 
 ## Remaining #162 matrix
 
@@ -240,6 +247,7 @@ asserted semantic vocabulary remains Thorn-owned.
 - proving mathematical correctness;
 - recovering all implicit cultural mathematical knowledge;
 - freezing parser- or NLP-native evidence paths;
+- defining a Thorn-specific TeX filename grammar or macro-expansion engine;
 - freezing private symbol identifier conventions or storage multiplicity;
 - freezing whether authoritative prose is initially rendered or source-rescued;
 - making both current review selectors normative;
