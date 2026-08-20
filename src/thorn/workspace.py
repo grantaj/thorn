@@ -87,7 +87,7 @@ class ProjectWorkspaceFacts(BaseModel):
     diagnostics: list[WorkspaceDiagnostic] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_occurrence_identity(self) -> "ProjectWorkspaceFacts":
+    def validate_occurrence_identity(self) -> ProjectWorkspaceFacts:
         occurrence_ids = [item.occurrence_id for item in self.occurrences]
         if len(occurrence_ids) != len(set(occurrence_ids)):
             raise ValueError("source occurrence ids must be unique")
@@ -110,7 +110,10 @@ class ProjectWorkspaceFacts(BaseModel):
                 and occurrence.via_include_id not in include_ids
             ):
                 raise ValueError("occurrence via_include_id must name an include site")
-        for fact in [*self.labels, *self.references]:
-            if fact.occurrence_id not in known:
+        for label in self.labels:
+            if label.occurrence_id not in known:
+                raise ValueError("label facts must name a source occurrence")
+        for reference in self.references:
+            if reference.occurrence_id not in known:
                 raise ValueError("reference facts must name a source occurrence")
         return self
