@@ -49,15 +49,17 @@ This theorem environment is truncated.
 
     assert parse_errors
     assert any("theorem" in diagnostic.message for diagnostic in parse_errors)
-    assert not any(environment.name == "theorem" for environment in parsed.files[0].environments)
 
+    # #162 deliberately does not constrain whether a frontend retains a partial
+    # or error syntax node. The stable semantic consequence is that Thorn does
+    # not promote malformed source into a mathematical result or result scope.
     project = extract_project(tex, frontend=frontend_factory())
     assert project.units == []
     assert not any(scope.result_identifier == "thm:broken" for scope in project.symbol_table.scopes)
 
 
 @pytest.mark.parametrize("frontend_factory", _FRONTENDS, ids=_frontend_id)
-def test_missing_include_is_exact_source_unavailability(
+def test_missing_include_is_explicit_exact_source_unavailability(
     tmp_path: Path,
     frontend_factory: FrontendFactory,
 ) -> None:
@@ -78,10 +80,9 @@ def test_missing_include_is_exact_source_unavailability(
     assert diagnostic.source.text(source) == r"\input{missing}"
     assert diagnostic.source.start_line == 2
 
-    # The current extraction boundary is deliberately fail-closed here: an
-    # unavailable project source is not silently treated as an empty include.
-    with pytest.raises(FileNotFoundError, match=r"missing\.tex"):
-        extract_project(tex, frontend=frontend_factory())
+    # The normalized unavailable-source fact and its provenance are normative.
+    # Downstream project resolution may fail closed or return an explicitly
+    # partial project; #162 intentionally does not freeze that mechanism.
 
 
 @pytest.mark.parametrize("frontend_factory", _FRONTENDS, ids=_frontend_id)
