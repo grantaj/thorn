@@ -17,7 +17,11 @@ from thorn.symbols import (
     SymbolTable,
     SymbolUse,
 )
-from thorn.workspace import ProjectPositionLookup, build_project_workspace_facts
+from thorn.workspace import (
+    ProjectPositionLookup,
+    ProjectWorkspaceFacts,
+    build_project_workspace_facts,
+)
 
 # This module recognizes declaration *grammar*, never mathematical vocabulary.
 # Ordinary prose declarations become review context only when a theorem/proof
@@ -395,10 +399,11 @@ def _included_path(file: FrontendFile, macro_name: str, argument: str) -> str | 
 def _document_order(
     project: ParsedProject,
     points: set[tuple[str, int]],
+    workspace: ProjectWorkspaceFacts | None = None,
 ) -> dict[tuple[str, int], int]:
     """Assign compatibility point ranks from normalized workspace positions."""
 
-    lookup = ProjectPositionLookup(build_project_workspace_facts(project))
+    lookup = ProjectPositionLookup(workspace or build_project_workspace_facts(project))
     # Declaration/use identities remain path-based until the occurrence-aware
     # authority migration in #161 Slice D. Preserve that behavior here by using
     # each path point's earliest occurrence while sourcing all order from the
@@ -671,6 +676,8 @@ def add_project_semantic_context(
     project: ParsedProject,
     regions: list[ResultRegion],
     table: SymbolTable,
+    *,
+    workspace: ProjectWorkspaceFacts | None = None,
 ) -> None:
     """Recover explicit prose semantics as ordinary project-scope symbol edges.
 
@@ -710,7 +717,7 @@ def add_project_semantic_context(
         (candidate.file, candidate.start)
         for candidate in candidates
     }
-    order = _document_order(project, points)
+    order = _document_order(project, points, workspace)
     resolved_uses = _resolve_uses(sites, candidates, order)
     active = _reachable_declarations(resolved_uses)
     if not active:
