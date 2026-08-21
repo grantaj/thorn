@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from thorn.dependencies import ExtractedProject
+from thorn.dependencies import DependencyNode, ExtractedProject
 from thorn.frontend import SourceSpan
 from thorn.symbols import ScopeKind, Symbol
 from thorn.workspace import ProjectPositionLookup
@@ -19,23 +19,49 @@ def _span_contains(outer: SourceSpan, inner: SourceSpan) -> bool:
 def semantic_symbol_sort_key(
     project: ExtractedProject,
     symbol: Symbol,
-) -> tuple[int, ...]:
-    """Order a canonical symbol by normalized workspace position when available."""
+) -> tuple[int | str, ...]:
+    """Order a canonical symbol by workspace position, then stable provenance."""
 
     workspace = project.workspace
     if workspace is not None:
         try:
-            return (0, *ProjectPositionLookup(workspace).sort_key(
-                symbol.source.file,
-                symbol.source.start_offset,
-            ))
+            return (
+                0,
+                "",
+                *ProjectPositionLookup(workspace).sort_key(
+                    symbol.source.file,
+                    symbol.source.start_offset,
+                ),
+            )
         except KeyError:
             pass
 
-    table_order = {
-        item.identifier: index for index, item in enumerate(project.symbol_table.symbols)
-    }
-    return (1, table_order[symbol.identifier])
+    return (
+        1,
+        symbol.source.file,
+        symbol.source.start_offset,
+        symbol.source.end_offset,
+        symbol.identifier,
+    )
+
+
+def dependency_node_sort_key(
+    project: ExtractedProject,
+    node: DependencyNode,
+) -> tuple[int | str, ...]:
+    """Order result/dependency nodes by canonical extracted project order."""
+
+    unit_order = {unit.identifier: index for index, unit in enumerate(project.units)}
+    index = unit_order.get(node.identifier)
+    if index is not None:
+        return (0, "", index)
+    return (
+        1,
+        node.source.file,
+        node.source.start_line,
+        node.source.end_line,
+        node.identifier,
+    )
 
 
 def _ordered_project_symbol_ids(
