@@ -7,6 +7,9 @@ from thorn.frontend import SourceSpan
 from thorn.symbols import ScopeKind, Symbol
 from thorn.workspace import ProjectPositionLookup
 
+SemanticSymbolSortKey = tuple[int, tuple[int, ...], str, int, int, str]
+DependencyNodeSortKey = tuple[int, int, str, int, int, str]
+
 
 def _span_contains(outer: SourceSpan, inner: SourceSpan) -> bool:
     return (
@@ -19,7 +22,7 @@ def _span_contains(outer: SourceSpan, inner: SourceSpan) -> bool:
 def semantic_symbol_sort_key(
     project: ExtractedProject,
     symbol: Symbol,
-) -> tuple[int | str, ...]:
+) -> SemanticSymbolSortKey:
     """Order a canonical symbol by workspace position, then stable provenance."""
 
     workspace = project.workspace
@@ -27,17 +30,21 @@ def semantic_symbol_sort_key(
         try:
             return (
                 0,
-                "",
-                *ProjectPositionLookup(workspace).sort_key(
+                ProjectPositionLookup(workspace).sort_key(
                     symbol.source.file,
                     symbol.source.start_offset,
                 ),
+                symbol.source.file,
+                symbol.source.start_offset,
+                symbol.source.end_offset,
+                symbol.identifier,
             )
         except KeyError:
             pass
 
     return (
         1,
+        (),
         symbol.source.file,
         symbol.source.start_offset,
         symbol.source.end_offset,
@@ -48,15 +55,16 @@ def semantic_symbol_sort_key(
 def dependency_node_sort_key(
     project: ExtractedProject,
     node: DependencyNode,
-) -> tuple[int | str, ...]:
+) -> DependencyNodeSortKey:
     """Order result/dependency nodes by canonical extracted project order."""
 
     unit_order = {unit.identifier: index for index, unit in enumerate(project.units)}
     index = unit_order.get(node.identifier)
     if index is not None:
-        return (0, "", index)
+        return (0, index, "", 0, 0, node.identifier)
     return (
         1,
+        0,
         node.source.file,
         node.source.start_line,
         node.source.end_line,
@@ -74,7 +82,7 @@ def _ordered_project_symbol_ids(
         symbol.identifier
         for symbol in sorted(
             (symbol for symbol in table.symbols if symbol.identifier in unique),
-            key=lambda symbol: (*semantic_symbol_sort_key(project, symbol), symbol.identifier),
+            key=lambda symbol: semantic_symbol_sort_key(project, symbol),
         )
     ]
 
