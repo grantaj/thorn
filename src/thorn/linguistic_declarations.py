@@ -372,7 +372,10 @@ def collect_project_prose_declarations(
             capability=ProseDeclarationCapability.PARTIAL,
             frontend=frontend.name,
             reasons=[
-                f"{projection.file.path}: {projection.partial_reason or 'partial source projection'}"
+                (
+                    f"{projection.file.path}: "
+                    f"{projection.partial_reason or 'partial source projection'}"
+                )
                 for projection in partial
             ],
         )
