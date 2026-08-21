@@ -172,13 +172,12 @@ def build_result_review_context(
     project: ExtractedProject,
     result_identifier: str,
 ) -> ReviewContext:
-    """Build one bounded, result-level IR item for a controlled context A/B run.
+    """Build the canonical bounded result-level review item for one result.
 
-    Unlike ``build_review_context``, this evaluation seam does not decide whether
-    semantic escalation is warranted. It always returns exactly one item for the
-    selected result so explicit ``raw`` and ``ir`` runs perform comparable
-    attack-only semantic work. The normal targeted selector remains the sole
-    authority for deciding which uncertainty-bearing local items deserve review.
+    Unlike ``build_review_context``, this path does not decide whether an
+    uncertainty-focused diagnostic escalation is warranted. It always returns
+    exactly one item for the requested result and is the result-level projection
+    consumed by the normal review workflow and controlled context A/B runs.
 
     The item contains only Thorn-owned IR. Provider adapters still receive a
     ``SemanticReviewRequest`` and never receive or traverse the project graph.
