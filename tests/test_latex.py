@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from thorn.latex import extract_units
+from thorn.latex import extract_project, extract_units
 
 
 def test_extracts_custom_theorem_and_proof(tmp_path: Path) -> None:
@@ -59,6 +59,46 @@ B.
     theorem = units[1]
     assert len(theorem.referenced_results) == 1
     assert "lem:a" in theorem.referenced_results[0]
+
+
+def test_result_order_follows_include_expansion_and_parent_return(tmp_path: Path) -> None:
+    main = tmp_path / "main.tex"
+    child = tmp_path / "z-child.tex"
+    main.write_text(
+        r"""
+\newtheorem{theorem}{Theorem}
+\begin{document}
+\begin{theorem}\label{thm:before}
+Before.
+\end{theorem}
+\input{z-child}
+\begin{theorem}\label{thm:after}
+After.
+\end{theorem}
+\end{document}
+""",
+        encoding="utf-8",
+    )
+    child.write_text(
+        r"""
+\begin{theorem}\label{thm:child}
+Child.
+\end{theorem}
+""",
+        encoding="utf-8",
+    )
+
+    project = extract_project(main)
+    assert [unit.label for unit in project.units] == [
+        "thm:before",
+        "thm:child",
+        "thm:after",
+    ]
+    assert project.workspace is not None
+    assert [Path(item.file).name for item in project.workspace.occurrences] == [
+        "main.tex",
+        "z-child.tex",
+    ]
 
 
 def test_comment_does_not_create_input_dependency(tmp_path: Path) -> None:

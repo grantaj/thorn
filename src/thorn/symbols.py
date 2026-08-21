@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import ParsedProject, SourceSpan
 from thorn.linguistic import LinguisticFrontend
+from thorn.workspace import ProjectWorkspaceFacts
 
 _ATOMIC_BRACED_SUBSCRIPT_RE = re.compile(
     r"^(?P<base>(?:\\[A-Za-z]+|[A-Za-z]))_\{(?P<sub>\\[A-Za-z]+|[A-Za-z0-9]+)\}$"
@@ -200,6 +201,7 @@ def extract_symbol_table(
     project: ParsedProject,
     regions: list[ResultRegion],
     *,
+    workspace: ProjectWorkspaceFacts | None = None,
     linguistic_frontend: LinguisticFrontend | None = None,
 ) -> SymbolTable:
     """Build deterministic symbols plus optional ambiguity-aware candidates."""
@@ -218,7 +220,7 @@ def extract_symbol_table(
 
     add_project_authoritative_context(project, regions, table)
     preserve_project_authoritative_source(project, table)
-    add_project_semantic_context(project, regions, table)
+    add_project_semantic_context(project, regions, table, workspace=workspace)
 
     if linguistic_frontend is not None:
         from thorn.linguistic_symbols import add_linguistic_symbol_candidates
