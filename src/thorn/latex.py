@@ -331,6 +331,7 @@ def extract_project(
             parsed,
             regions,
             workspace=workspace,
+            prose_declarations=prose_declarations,
             linguistic_frontend=linguistic_frontend,
         ),
         proof_support_graph=support_graph,
