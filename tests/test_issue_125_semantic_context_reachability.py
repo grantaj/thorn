@@ -108,7 +108,10 @@ The assertion follows from the construction.
     item = build_result_review_context(project, "thm:main").items[0]
 
     assert any(symbol.name == "balanced" for symbol in item.symbols)
-    assert any("every fibre contains exactly two points" in definition.raw for definition in item.definitions)
+    assert any(
+        "every fibre contains exactly two points" in definition.raw
+        for definition in item.definitions
+    )
 
 
 def test_ambient_convention_is_reachable_when_result_uses_its_subject(tmp_path: Path) -> None:
