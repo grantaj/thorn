@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from thorn.latex import extract_units
+from thorn.latex import extract_project, extract_units
 
 
 def test_extracts_custom_theorem_and_proof(tmp_path: Path) -> None:
@@ -88,10 +88,16 @@ Child.
         encoding="utf-8",
     )
 
-    assert [unit.label for unit in extract_units(main)] == [
+    project = extract_project(main)
+    assert [unit.label for unit in project.units] == [
         "thm:before",
         "thm:child",
         "thm:after",
+    ]
+    assert project.workspace is not None
+    assert [Path(item.file).name for item in project.workspace.occurrences] == [
+        "main.tex",
+        "z-child.tex",
     ]
 
 
