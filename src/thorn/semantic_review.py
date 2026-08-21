@@ -14,25 +14,24 @@ from thorn.dependencies import (
 )
 from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
+from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
-    close_project_symbol_dependencies,
     dependency_node_sort_key,
     result_project_symbol_dependency_ids,
-    semantic_symbol_sort_key,
 )
 from thorn.support import Claim, SupportEdge
 from thorn.symbols import (
     Constraint,
     Definition,
-    ScopeKind,
     Symbol,
     SymbolIntroductionCandidate,
 )
 
 
 class ReviewTargetKind(StrEnum):
-    """Kinds of Thorn IR relations that can become semantic review targets."""
+    """Policy that selected a bounded Thorn review projection."""
 
+    RESULT = "result"
     SUPPORT_RELATION = "support_relation"
 
 
@@ -44,12 +43,12 @@ class ReviewSourceContext(BaseModel):
 
 
 class SemanticReviewItem(BaseModel):
-    """One bounded mathematical neighbourhood worth later semantic attention.
+    """One bounded Thorn-owned mathematical review projection.
 
-    The representation is provider-independent and contains only Thorn-owned IR
-    objects. ``trigger_relation_identifiers`` records why the item exists;
-    confident support relations may be present in ``support_relations`` without
-    becoming escalation reasons themselves.
+    ``RESULT`` items are the canonical normal-review view for a requested result.
+    ``SUPPORT_RELATION`` items are uncertainty-focused diagnostic/evaluation views.
+    ``trigger_relation_identifiers`` therefore records uncertainty present in a
+    result-level item, but records the actual selection reason for a targeted item.
     """
 
     identifier: str
@@ -78,7 +77,7 @@ class SemanticReviewItem(BaseModel):
 
 
 class ReviewContext(BaseModel):
-    """Provider-neutral semantic-review context distilled from a project Math IR."""
+    """Provider-neutral review context projected from canonical Thorn IR."""
 
     items: list[SemanticReviewItem] = Field(default_factory=list)
 
@@ -89,18 +88,6 @@ class ReviewContext(BaseModel):
             separators=(",", ":"),
             sort_keys=True,
         )
-
-
-def _span_key(span: SourceSpan) -> tuple[str, int, int, int, int, int, int]:
-    return (
-        span.file,
-        span.start_offset,
-        span.end_offset,
-        span.start_line,
-        span.start_column,
-        span.end_line,
-        span.end_column,
-    )
 
 
 def _spans_overlap(left: SourceSpan, right: SourceSpan) -> bool:
@@ -254,18 +241,11 @@ def _select_symbol_context(
     project: ExtractedProject,
     result_identifier: str,
     spans: list[SourceSpan],
-) -> tuple[
-    list[Constraint],
-    list[Constraint],
-    list[Symbol],
-    list[Definition],
-    list[SymbolIntroductionCandidate],
-]:
+) -> SelectedSymbolContext:
     table = project.symbol_table
 
-    # Result-to-project-declaration identity comes from canonical resolved uses.
-    # The uncertainty-focused selector may narrow local context below, but it does
-    # not reconstruct semantic project edges from source text or file ordering.
+    # Targeted breadth is trigger-relative. Mathematical identity and transitive
+    # authority closure still come from the same canonical Symbol IR as normal review.
     selected_ids = set(result_project_symbol_dependency_ids(project, result_identifier))
 
     for use in table.uses:
@@ -291,54 +271,17 @@ def _select_symbol_context(
         if any(_spans_overlap(constraint.source, span) for span in spans):
             selected_ids.add(constraint.symbol_identifier)
 
-    # NEED_SOURCE is deliberately bounded to one round. Any authoritative
-    # project prose needed to interpret an already-selected declaration must
-    # therefore be selected before the packet advertises its closed-world
-    # handles, not discovered only after rescuing the outer declaration.
-    selected_ids = close_project_symbol_dependencies(project, selected_ids)
-
-    symbols = sorted(
-        (symbol for symbol in table.symbols if symbol.identifier in selected_ids),
-        key=lambda symbol: semantic_symbol_sort_key(project, symbol),
+    candidates = (
+        candidate
+        for candidate in table.candidates
+        if candidate.result_identifier == result_identifier
+        and any(
+            _spans_overlap(candidate.source, span)
+            or _spans_overlap(candidate.math_source, span)
+            for span in spans
+        )
     )
-    definitions = sorted(
-        (
-            definition
-            for definition in table.definitions
-            if definition.symbol_identifier in selected_ids
-        ),
-        key=lambda definition: (*_span_key(definition.source), definition.identifier),
-    )
-
-    hypotheses: list[Constraint] = []
-    local_constraints: list[Constraint] = []
-    symbol_by_id = {symbol.identifier: symbol for symbol in symbols}
-    for constraint in table.constraints:
-        selected_symbol = symbol_by_id.get(constraint.symbol_identifier)
-        if selected_symbol is None:
-            continue
-        scope_kind = table.scope(selected_symbol.scope_identifier).kind
-        if scope_kind in {ScopeKind.RESULT, ScopeKind.STATEMENT}:
-            hypotheses.append(constraint)
-        else:
-            local_constraints.append(constraint)
-    hypotheses.sort(key=lambda item: (*_span_key(item.source), item.identifier))
-    local_constraints.sort(key=lambda item: (*_span_key(item.source), item.identifier))
-
-    candidates = sorted(
-        (
-            candidate
-            for candidate in table.candidates
-            if candidate.result_identifier == result_identifier
-            and any(
-                _spans_overlap(candidate.source, span)
-                or _spans_overlap(candidate.math_source, span)
-                for span in spans
-            )
-        ),
-        key=lambda candidate: (*_span_key(candidate.source), candidate.identifier),
-    )
-    return hypotheses, local_constraints, symbols, definitions, candidates
+    return select_symbol_context(project, selected_ids, candidates)
 
 
 def _select_dependencies(
@@ -372,7 +315,7 @@ def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
             text = evidence.context.strip()
             if not text:
                 continue
-            key = (text, _span_key(evidence.source))
+            key = (text, span_key(evidence.source))
             contexts[key] = ReviewSourceContext(text=text, source=evidence.source)
     return [contexts[key] for key in sorted(contexts)]
 
@@ -381,7 +324,7 @@ def _item_identifier(result_identifier: str, trigger_edges: list[SupportEdge]) -
     trigger_ids = sorted(edge.identifier for edge in trigger_edges)
     payload = "\0".join([result_identifier, *trigger_ids]).encode()
     digest = hashlib.sha256(payload).hexdigest()[:16]
-    return f"semantic-review:{result_identifier}:{digest}"
+    return f"semantic-review:diagnostic:{result_identifier}:{digest}"
 
 
 def _build_item(
@@ -413,17 +356,7 @@ def _build_item(
     }
     relations = sorted(relations_by_id.values(), key=_edge_sort_key)
     spans = _relevant_spans(claims, relations)
-    (
-        hypotheses,
-        local_constraints,
-        symbols,
-        definitions,
-        candidates,
-    ) = _select_symbol_context(
-        project,
-        result_identifier,
-        spans,
-    )
+    symbol_context = _select_symbol_context(project, result_identifier, spans)
 
     try:
         result = project.dependency_graph.node(result_identifier)
@@ -437,22 +370,27 @@ def _build_item(
         claims=claims,
         trigger_relation_identifiers=sorted(edge.identifier for edge in trigger_edges),
         support_relations=relations,
-        hypotheses=hypotheses,
-        local_constraints=local_constraints,
-        symbols=symbols,
-        definitions=definitions,
-        symbol_candidates=candidates,
+        hypotheses=symbol_context.hypotheses,
+        local_constraints=symbol_context.local_constraints,
+        symbols=symbol_context.symbols,
+        definitions=symbol_context.definitions,
+        symbol_candidates=symbol_context.candidates,
         dependencies=_select_dependencies(project, result_identifier, relations),
         nearby_context=_nearby_context(trigger_edges),
     )
 
 
 def build_review_context(project: ExtractedProject) -> ReviewContext:
-    """Distill uncertain support relations into bounded semantic-review items.
+    """Build Thorn's uncertainty-focused diagnostic/evaluation review projection.
 
-    Ambiguous or unresolved support relations are the only triggers in this
-    tranche. Ambiguous symbol candidates never create an item by themselves;
-    they may be selected as local context after a support item already exists.
+    This selector is retained for the explicit ``thorn-eval --targeted-preflight``
+    and ``--review-context targeted`` use cases. It is not the canonical normal
+    review policy and never gates ``review_workflow``; normal review always uses
+    the result-level projection from ``build_result_review_context``.
+
+    Ambiguous or unresolved support relations are the only diagnostic triggers.
+    Ambiguous symbol candidates never create an item by themselves; they may be
+    selected as local context after a support item already exists.
     """
 
     triggers_by_result: dict[str, list[SupportEdge]] = defaultdict(list)
@@ -462,8 +400,6 @@ def build_review_context(project: ExtractedProject) -> ReviewContext:
         triggers_by_result[target.result_identifier].append(edge)
 
     items: list[SemanticReviewItem] = []
-    # ExtractedProject.units is already normalized workspace order. Preserve it
-    # rather than re-sorting result identifiers lexically.
     for unit in project.units:
         result_identifier = unit.identifier
         if result_identifier not in triggers_by_result:
