@@ -316,11 +316,18 @@ def _regions(
     body_end = document.body_span.end_offset if document else len(text)
     regions: list[FrontendRegion] = []
 
-    if document is not None and document.span.start_offset > 0:
+    if body_start > 0:
         regions.append(
             FrontendRegion(
                 kind=FrontendRegionKind.PREAMBLE,
-                span=_span_from_characters(path, coordinates, 0, document.span.start_offset),
+                span=_span_from_characters(path, coordinates, 0, body_start),
+            )
+        )
+    if body_end < len(text):
+        regions.append(
+            FrontendRegion(
+                kind=FrontendRegionKind.NON_DOCUMENT,
+                span=_span_from_characters(path, coordinates, body_end, len(text)),
             )
         )
 
@@ -479,6 +486,7 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
             environments=environments,
             math=math,
             regions=_regions(path, text, coordinates, nodes, macros, environments, math),
+            regions_complete=True,
         ),
         diagnostics,
     )
