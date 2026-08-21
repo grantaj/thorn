@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from declaration_contract_frontend import DeclarationContractFrontend
+from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
 from thorn.llm_proof_language import parse_source_rescue_request, render_source_rescue
 from thorn.proof_language_review import (
@@ -15,7 +16,6 @@ from thorn.proof_language_review import (
 )
 from thorn.report import ProofReviewReportInput, ReviewExecution, proof_review_metadata
 from thorn.review_workflow import prepare_proof_review
-from thorn.semantic_review import _select_symbol_context
 
 ROOT = Path(__file__).resolve().parents[1]
 A2_SOURCE = ROOT / "eval" / "robustness" / "issue_101" / "variant_prose_uniformity.tex"
@@ -84,7 +84,7 @@ The assertion follows from the construction.
     assert definition in rescue.text
 
 
-def test_direct_project_semantics_survive_trigger_local_selection(tmp_path: Path) -> None:
+def test_direct_project_semantics_survive_result_level_selection(tmp_path: Path) -> None:
     paper = tmp_path / "paper.tex"
     paper.write_text(
         r"""\documentclass{article}
@@ -105,10 +105,10 @@ The assertion follows from the construction.
     )
     project = _extract(paper)
 
-    _, _, symbols, definitions, _ = _select_symbol_context(project, "thm:main", [])
+    item = build_result_review_context(project, "thm:main").items[0]
 
-    assert any(symbol.name == "balanced" for symbol in symbols)
-    assert any("every fibre contains exactly two points" in item.raw for item in definitions)
+    assert any(symbol.name == "balanced" for symbol in item.symbols)
+    assert any("every fibre contains exactly two points" in definition.raw for definition in item.definitions)
 
 
 def test_ambient_convention_is_reachable_when_result_uses_its_subject(tmp_path: Path) -> None:
