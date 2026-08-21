@@ -331,7 +331,7 @@ def _dedupe(candidates: list[Candidate]) -> list[Candidate]:
 
 
 def baseline_candidates(text: str) -> list[Candidate]:
-    from thorn.project_semantic_context import (
+    from thorn._frozen_declaration_benchmark import (
         _AMBIENT_RE,
         _BY_MEAN_RE,
         _CALLED_RE,
@@ -485,7 +485,7 @@ def main() -> int:
         "grammar_inventory": {
             "baseline": {
                 "phrase_regex_families": 5,
-                "notes": "current #125 production patterns, imported unchanged",
+                "notes": "frozen pre-#161 #125 phrase baseline",
             },
             "dependency": {
                 "structural_rule_families": 3,
