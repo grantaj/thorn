@@ -34,6 +34,11 @@ class ProseDeclarationCandidate(BaseModel):
     term: str
     term_source: SourceSpan
     source: SourceSpan
+    # Exact sentence tail that the grammatical frontend identified as the
+    # proposed defining payload. Mathematical authority remains a Thorn policy
+    # decision; this span merely prevents the authority layer from rebuilding
+    # grammar or guessing where a complement begins.
+    payload_source: SourceSpan | None = None
     status: InferenceStatus = InferenceStatus.AMBIGUOUS
     evidence: list[StructuralEvidence] = Field(default_factory=list)
 
@@ -58,6 +63,7 @@ class LinguisticDeclarationProposal:
     term_token_index: int
     anchor_start: int
     anchor_end: int
+    payload_start: int
     sentence_index: int
     evidence: str
 
@@ -153,6 +159,7 @@ def _proposal(
     term_end: int,
     term_token_index: int,
     anchor: LinguisticToken,
+    payload_start: int,
     evidence: str,
 ) -> LinguisticDeclarationProposal:
     return LinguisticDeclarationProposal(
@@ -163,6 +170,7 @@ def _proposal(
         term_token_index=term_token_index,
         anchor_start=anchor.start,
         anchor_end=anchor.end,
+        payload_start=payload_start,
         sentence_index=anchor.sentence_index,
         evidence=evidence,
     )
@@ -239,6 +247,7 @@ def propose_linguistic_declarations(
                     term_end=term.end,
                     term_token_index=term.index,
                     anchor=anchor,
+                    payload_start=condition.end,
                     evidence=(
                         "dependency+definition-anchor"
                         if cue is not None
@@ -262,16 +271,21 @@ def propose_linguistic_declarations(
                     term_end=end,
                     term_token_index=term_token_index,
                     anchor=cue,
+                    payload_start=cue.end,
                     evidence="dependency+mean-anchor",
                 )
             )
 
         if sentence_text.startswith(_AMBIENT_PREFIXES):
             subject = _subject(tokens)
-            if subject is not None and any(
-                token.lemma.casefold() == "be" for token in tokens
-            ):
+            copulas = [token for token in tokens if token.lemma.casefold() == "be"]
+            if subject is not None and copulas:
                 anchor = min(tokens, key=lambda token: token.start)
+                copula = min(
+                    (token for token in copulas if token.start >= subject.end),
+                    key=lambda token: token.start,
+                    default=copulas[0],
+                )
                 out.append(
                     _proposal(
                         role=ProseDeclarationRole.AMBIENT,
@@ -280,6 +294,7 @@ def propose_linguistic_declarations(
                         term_end=subject.end,
                         term_token_index=subject.index,
                         anchor=anchor,
+                        payload_start=copula.end,
                         evidence="dependency+ambient-anchor",
                     )
                 )
@@ -319,6 +334,9 @@ def _candidate_from_proposal(
     if projection.text[proposal.term_start : proposal.term_end] != term_source.text(file.raw):
         return None
     source = projection.sentence_span(proposal.anchor_start)
+    if not (source.start_offset <= proposal.payload_start <= source.end_offset):
+        return None
+    payload_source = projection.source_span(proposal.payload_start, source.end_offset)
     anchor_source = projection.source_span(proposal.anchor_start, proposal.anchor_end)
     try:
         dependency_path = document.root_path_signature(proposal.term_token_index)
@@ -333,6 +351,7 @@ def _candidate_from_proposal(
         term=term_source.text(file.raw),
         term_source=term_source,
         source=source,
+        payload_source=payload_source,
         status=InferenceStatus.AMBIGUOUS,
         evidence=[
             StructuralEvidence(

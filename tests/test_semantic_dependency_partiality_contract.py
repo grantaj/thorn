@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from declaration_contract_frontend import DeclarationContractFrontend
 from thorn.dependencies import DependencyResolution, ExtractedProject
 from thorn.frontend import FrontendDiagnosticKind, LatexFrontend
 from thorn.frontends import RegexLatexFrontend
@@ -281,7 +282,16 @@ def test_truncated_named_declaration_is_source_not_authority(
     start = raw.index(truncated)
     assert raw[start : start + len(truncated)] == truncated
 
-    project = extract_project(tex, frontend=frontend_factory())
+    project = extract_project(
+        tex,
+        frontend=frontend_factory(),
+        linguistic_frontend=DeclarationContractFrontend(),
+    )
+    assert project.prose_declarations is not None
+    assert any(
+        candidate.term.casefold() == term.casefold()
+        for candidate in project.prose_declarations.candidates
+    )
     _assert_no_authority(project, result_identifier="thm:main", term=term)
     _assert_exact_definition(project, term="facet-sparse", source_text=complete)
 
@@ -320,7 +330,20 @@ def test_truncated_ambient_convention_is_source_not_scope_authority(
         start = raw.index(source_text)
         assert raw[start : start + len(source_text)] == source_text
 
-    project = extract_project(tex, frontend=frontend_factory())
+    project = extract_project(
+        tex,
+        frontend=frontend_factory(),
+        linguistic_frontend=DeclarationContractFrontend(),
+    )
+    assert project.prose_declarations is not None
+    candidate_terms = {
+        candidate.term.casefold() for candidate in project.prose_declarations.candidates
+    }
+    # Candidate recall over malformed/truncated prose is not itself an authority
+    # contract. We require the recoverable first truncation and the complete
+    # convention to survive as candidates, while all truncated source remains
+    # non-authoritative whether or not the linguistic frontend proposed it.
+    assert {"spectral spaces", "covering map"} <= candidate_terms
     _assert_no_authority(project, result_identifier="thm:main", term="spectral spaces")
     _assert_no_authority(project, result_identifier="thm:main", term="modules")
     _assert_exact_constraint(project, term="covering map", source_text=complete)

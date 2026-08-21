@@ -4,6 +4,12 @@ import re
 from dataclasses import dataclass
 
 from thorn.frontend import FrontendFile, ParsedProject, SourceSpan
+from thorn.linguistic_declarations import (
+    ProseDeclarationCandidate,
+    ProseDeclarationCapability,
+    ProseDeclarationInventory,
+    ProseDeclarationRole,
+)
 from thorn.source_projection import (
     LinguisticProjection,
     ProjectionTokenKind,
@@ -21,72 +27,27 @@ from thorn.symbols import (
     SymbolUse,
 )
 from thorn.workspace import (
+    ProjectPosition,
     ProjectPositionLookup,
     ProjectWorkspaceFacts,
-    build_project_workspace_facts,
+    WorkspaceResolution,
 )
-
-# This module recognizes declaration *grammar*, never mathematical vocabulary.
-# Ordinary prose declarations become review context only when a theorem/proof
-# depends on them directly or through another authoritative declaration.
-# Explicit ambient cues additionally establish a scope dependency on later
-# results. Proximity alone is never a semantic edge.
-_STYLE_TERM = (
-    r"(?:\\[A-Za-z]+\{[^{}]+\}|"
-    r"[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z][A-Za-z0-9-]*){0,3})"
-)
-
-_CALLED_RE = re.compile(
-    rf"\b(?:is|are|will\s+be|shall\s+be)\s+called\s+"
-    rf"(?P<term>{_STYLE_TERM})\s+"
-    r"(?:when|if|whenever|provided\s+that)\b",
-    re.IGNORECASE,
-)
-_SAID_TO_BE_RE = re.compile(
-    rf"\b(?:is|are)\s+said\s+to\s+be\s+(?P<term>{_STYLE_TERM})\s+"
-    r"(?:when|if|whenever|provided\s+that)\b",
-    re.IGNORECASE,
-)
-_WE_SAY_RE = re.compile(
-    rf"\bwe\s+say\s+that\b[^.!?\n]{{1,160}}?\b(?:is|are)\s+"
-    rf"(?P<term>{_STYLE_TERM})\s+"
-    r"(?:when|if|whenever|provided\s+that)\b",
-    re.IGNORECASE,
-)
-_BY_MEAN_RE = re.compile(
-    rf"\bby\s+(?:an?\s+)?(?P<term>{_STYLE_TERM})\s+we\s+mean\b",
-    re.IGNORECASE,
-)
-_AMBIENT_RE = re.compile(
-    r"(?:^|(?<=[.!?])\s+)"
-    r"(?:throughout|in\s+what\s+follows|henceforth|from\s+now\s+on|"
-    r"unless\s+otherwise\s+stated|unless\s+specified\s+otherwise)\s*,?\s*"
-    r"(?:(?:the|all|every|each)\s+)?"
-    r"(?P<term>[A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*){0,5}?)\s+"
-    r"(?:is|are|means?|denotes?|refers\s+to)\b",
-    re.IGNORECASE | re.MULTILINE,
-)
-_STYLE_WRAPPER_RE = re.compile(r"\\[A-Za-z]+\{(?P<inner>[^{}]+)\}\Z")
 
 
 @dataclass(frozen=True)
-class _Declaration:
-    kind: str
-    term: str
-    term_start: int
-    term_end: int
-    source_start: int
-    source_end: int
+class _AuthoritySite:
+    """One occurrence-specific Thorn authority decision for normalized evidence."""
 
-
-@dataclass(frozen=True)
-class _DeclarationSite:
-    file: str
-    declaration: _Declaration
+    candidate: ProseDeclarationCandidate
+    position: ProjectPosition
 
     @property
     def identifier(self) -> str:
-        return f"semantic:{self.file}:{self.declaration.term_start}"
+        return (
+            f"semantic:{self.position.occurrence_id}:"
+            f"{self.candidate.term_source.file}:"
+            f"{self.candidate.term_source.start_offset}"
+        )
 
 
 @dataclass(frozen=True)
@@ -95,10 +56,31 @@ class _UseCandidate:
     file: str
     start: int
     end: int
+    position: ProjectPosition
     result_identifier: str | None
     scope_kind: ScopeKind
     owner_identifier: str | None = None
     ambient_scope: bool = False
+
+    def logical_key(self) -> tuple[str, int, int, str, str | None, ScopeKind, str | None, bool]:
+        """Path-level use identity whose occurrence resolutions must agree."""
+
+        return (
+            self.file,
+            self.start,
+            self.end,
+            _normalized_term(self.matched_term),
+            self.result_identifier,
+            self.scope_kind,
+            self.owner_identifier,
+            self.ambient_scope,
+        )
+
+
+@dataclass(frozen=True)
+class _Resolution:
+    candidate: _UseCandidate
+    target_identifier: str | None
 
 
 @dataclass(frozen=True)
@@ -107,207 +89,155 @@ class _ResolvedUse:
     target_identifier: str
 
 
+def _normalized_term(term: str) -> str:
+    """Normalize presentation whitespace only; do not infer lexical variants."""
+
+    return " ".join(term.split()).casefold()
+
+
+def _term_pattern(term: str) -> re.Pattern[str]:
+    """Match the exact normalized declaration term without bespoke morphology."""
+
+    pieces = [re.escape(piece) for piece in term.split()]
+    if not pieces:
+        return re.compile(r"(?!)")
+    body = r"\s+".join(pieces)
+    return re.compile(rf"(?<![A-Za-z0-9]){body}(?![A-Za-z0-9])", re.IGNORECASE)
+
+
 def _mask_range(characters: list[str], start: int, end: int) -> None:
     for index in range(max(0, start), min(len(characters), end)):
         if characters[index] != "\n":
             characters[index] = " "
 
 
-def _unwrap_term(raw_term: str, absolute_start: int) -> tuple[str, int, int]:
-    wrapper = _STYLE_WRAPPER_RE.fullmatch(raw_term.strip())
-    if wrapper is None:
-        leading = len(raw_term) - len(raw_term.lstrip())
-        term = raw_term.strip()
-        start = absolute_start + leading
-        return term, start, start + len(term)
-    inner = wrapper.group("inner").strip()
-    inner_start = raw_term.find(wrapper.group("inner")) + (
-        len(wrapper.group("inner")) - len(wrapper.group("inner").lstrip())
-    )
-    start = absolute_start + inner_start
-    return inner, start, start + len(inner)
-
-
-def _overlaps_result(start: int, end: int, regions: list[ResultRegion]) -> bool:
-    for region in regions:
-        spans = [region.statement_span]
-        if region.proof_span is not None:
-            spans.append(region.proof_span)
-        for span in spans:
-            if start < span.end_offset and span.start_offset < end:
-                return True
-    return False
-
-
 def _has_substantive_payload(
     file: FrontendFile,
     projection: LinguisticProjection,
-    *,
-    cue_end: int,
-    source_end: int,
+    candidate: ProseDeclarationCandidate,
 ) -> bool:
-    """Return whether a declaration cue has conservative defining content."""
+    """Apply the #167 fail-closed authority rule to exact candidate provenance."""
 
-    characters = list(projection.text[cue_end:source_end])
+    payload = candidate.payload_source
+    if payload is None or payload.file != file.path:
+        return False
+    if not (
+        candidate.source.start_offset <= payload.start_offset <= payload.end_offset
+        <= candidate.source.end_offset
+    ):
+        return False
+
+    characters = list(projection.text[payload.start_offset : payload.end_offset])
     syntax_starts: list[int] = []
     for macro in file.macros:
-        if macro.span.end_offset <= cue_end or source_end <= macro.span.start_offset:
+        if (
+            macro.span.end_offset <= payload.start_offset
+            or payload.end_offset <= macro.span.start_offset
+        ):
             continue
         if projection.token_containing(
             macro.span.start_offset,
             kind=ProjectionTokenKind.MATH,
         ) is not None:
             continue
-        start = max(cue_end, macro.span.start_offset) - cue_end
-        end = min(source_end, macro.span.end_offset) - cue_end
+        start = max(payload.start_offset, macro.span.start_offset) - payload.start_offset
+        end = min(payload.end_offset, macro.span.end_offset) - payload.start_offset
         syntax_starts.append(start)
         _mask_range(characters, start, end)
 
-    payload_starts = [
+    visible_starts = [
         index for index, character in enumerate(characters) if character.isalnum()
     ]
-    payload_starts.extend(
-        max(cue_end, token.source.start_offset) - cue_end
+    visible_starts.extend(
+        max(payload.start_offset, token.source.start_offset) - payload.start_offset
         for token in projection.tokens
         if token.kind == ProjectionTokenKind.MATH
-        and token.source.end_offset > cue_end
-        and token.source.start_offset < source_end
+        and token.source.end_offset > payload.start_offset
+        and token.source.start_offset < payload.end_offset
     )
-    if not payload_starts:
+    if not visible_starts:
         return False
-    payload_start = min(payload_starts)
+    first_payload = min(visible_starts)
 
-    # If opaque/non-math TeX syntax appears before the first visible payload,
-    # the source does not establish that the later text is its defining
-    # complement. Fail closed rather than joining across the syntax boundary.
-    return not any(start < payload_start for start in syntax_starts)
+    # Do not join a declaration cue to later prose across opaque TeX syntax.
+    return not any(start < first_payload for start in syntax_starts)
 
 
-def _declarations(
-    file: FrontendFile,
-    regions: list[ResultRegion],
-    projection: LinguisticProjection,
-) -> list[_Declaration]:
-    if not projection.complete:
+def _eligible_sites(
+    project: ParsedProject,
+    inventory: ProseDeclarationInventory,
+    workspace: ProjectWorkspaceFacts,
+    projections: dict[str, LinguisticProjection],
+) -> list[_AuthoritySite]:
+    """Adjudicate candidate eligibility without rebuilding linguistic grammar."""
+
+    if workspace.resolution != WorkspaceResolution.RESOLVED:
+        return []
+    if inventory.capability != ProseDeclarationCapability.COMPLETE:
         return []
 
-    candidates: list[_Declaration] = []
-    patterns = (
-        ("definition", _CALLED_RE),
-        ("definition", _SAID_TO_BE_RE),
-        ("definition", _WE_SAY_RE),
-        ("definition", _BY_MEAN_RE),
-        ("ambient", _AMBIENT_RE),
-    )
-    for kind, pattern in patterns:
-        for match in pattern.finditer(projection.text):
-            sentence = projection.sentence_span(match.start())
-            source_start = sentence.start_offset
-            source_end = sentence.end_offset
-            if _overlaps_result(source_start, source_end, regions):
-                continue
-            # A declaration-shaped cue is grammatical evidence, not mathematical
-            # authority. Promotion requires an actual defining complement.
-            if not _has_substantive_payload(
-                file,
-                projection,
-                cue_end=match.end(),
-                source_end=source_end,
-            ):
-                continue
-            raw_term = file.raw[match.start("term") : match.end("term")]
-            term, term_start, term_end = _unwrap_term(raw_term, match.start("term"))
-            if not term:
-                continue
-            candidates.append(
-                _Declaration(
-                    kind=kind,
-                    term=term,
-                    term_start=term_start,
-                    term_end=term_end,
-                    source_start=source_start,
-                    source_end=source_end,
-                )
-            )
+    files = {file.path: file for file in project.files}
+    lookup = ProjectPositionLookup(workspace)
+    sites: list[_AuthoritySite] = []
+    for candidate in inventory.candidates:
+        file = files.get(candidate.source.file)
+        projection = projections.get(candidate.source.file)
+        if file is None or projection is None or not projection.complete:
+            continue
+        if not candidate.term.strip() or not _has_substantive_payload(file, projection, candidate):
+            continue
+        for position in lookup.positions(
+            candidate.source.file,
+            candidate.source.end_offset,
+        ):
+            sites.append(_AuthoritySite(candidate=candidate, position=position))
 
-    unique: dict[tuple[int, int, str], _Declaration] = {}
-    for candidate in candidates:
-        key = (candidate.source_start, candidate.source_end, candidate.term.casefold())
-        unique[key] = candidate
     return sorted(
-        unique.values(),
-        key=lambda item: (item.source_start, item.term.casefold()),
+        sites,
+        key=lambda site: (
+            site.position.order_key,
+            _normalized_term(site.candidate.term),
+            site.candidate.role.value,
+        ),
     )
 
 
-def _term_variants(term: str) -> tuple[str, ...]:
-    """Return mechanically related lexical forms without mathematical vocabulary."""
-
-    variants = [term]
-    words = term.split()
-    if not words:
-        return tuple(variants)
-    final = words[-1]
-    singular: str | None = None
-    if final.lower().endswith("ies") and len(final) > 3:
-        singular = final[:-3] + "y"
-    elif (
-        final.lower().endswith("s")
-        and not final.lower().endswith("ss")
-        and len(final) > 1
-    ):
-        singular = final[:-1]
-    if singular is not None:
-        variants.append(" ".join([*words[:-1], singular]))
-    return tuple(dict.fromkeys(variants))
-
-
-def _terms_match(left: str, right: str) -> bool:
-    left_variants = {item.casefold() for item in _term_variants(left)}
-    right_variants = {item.casefold() for item in _term_variants(right)}
-    return bool(left_variants & right_variants)
-
-
-def _term_pattern(term: str) -> re.Pattern[str]:
-    alternatives: list[str] = []
-    for variant in _term_variants(term):
-        pieces = [re.escape(piece) for piece in variant.split()]
-        alternatives.append(r"\s+".join(pieces))
-    body = "(?:" + "|".join(alternatives) + ")"
-    return re.compile(rf"(?<![A-Za-z0-9]){body}(?![A-Za-z0-9])", re.IGNORECASE)
-
-
-def _document_order(
-    project: ParsedProject,
-    points: set[tuple[str, int]],
-    workspace: ProjectWorkspaceFacts | None = None,
-) -> dict[tuple[str, int], int]:
-    """Assign compatibility point ranks from normalized workspace positions."""
-
-    lookup = ProjectPositionLookup(workspace or build_project_workspace_facts(project))
-    # Declaration/use identities remain path-based until the occurrence-aware
-    # authority migration in #161 Slice D. Preserve that behavior here by using
-    # each path point's earliest occurrence while sourcing all order from the
-    # normalized workspace boundary rather than traversing includes again.
-    ordered = sorted(points, key=lambda point: lookup.sort_key(*point))
-    return {point: index for index, point in enumerate(ordered)}
+def _position_for_occurrence(
+    lookup: ProjectPositionLookup,
+    *,
+    file: str,
+    offset: int,
+    occurrence_id: str,
+) -> ProjectPosition | None:
+    return next(
+        (
+            position
+            for position in lookup.positions(file, offset)
+            if position.occurrence_id == occurrence_id
+        ),
+        None,
+    )
 
 
 def _use_candidates(
     project: ParsedProject,
     regions: list[ResultRegion],
-    sites: list[_DeclarationSite],
+    sites: list[_AuthoritySite],
     projections: dict[str, LinguisticProjection],
+    workspace: ProjectWorkspaceFacts,
 ) -> list[_UseCandidate]:
+    lookup = ProjectPositionLookup(workspace)
     files = {file.path: file for file in project.files}
     terms: dict[str, str] = {}
     for site in sites:
-        terms.setdefault(site.declaration.term.casefold(), site.declaration.term)
+        terms.setdefault(_normalized_term(site.candidate.term), site.candidate.term)
     patterns = [(term, _term_pattern(term)) for term in terms.values()]
 
     candidates: list[_UseCandidate] = []
 
-    # Direct result uses seed the semantic dependency closure.
+    # Explicit result uses seed semantic reachability. Every physical source use
+    # is evaluated in every workspace occurrence of that source; a later consensus
+    # step refuses authority if those occurrence contexts disagree.
     for region in regions:
         file = files.get(region.file)
         projection = projections.get(region.file)
@@ -320,64 +250,80 @@ def _use_candidates(
             text = projection.text[span.start_offset : span.end_offset]
             for term, pattern in patterns:
                 for match in pattern.finditer(text):
-                    candidates.append(
-                        _UseCandidate(
-                            matched_term=term,
-                            file=file.path,
-                            start=span.start_offset + match.start(),
-                            end=span.start_offset + match.end(),
-                            result_identifier=region.identifier,
-                            scope_kind=scope_kind,
+                    start = span.start_offset + match.start()
+                    end = span.start_offset + match.end()
+                    for position in lookup.positions(file.path, start):
+                        candidates.append(
+                            _UseCandidate(
+                                matched_term=term,
+                                file=file.path,
+                                start=start,
+                                end=end,
+                                position=position,
+                                result_identifier=region.identifier,
+                                scope_kind=scope_kind,
+                            )
                         )
-                    )
 
-    # Explicit ambient cues are scope declarations: their mathematical purpose
-    # is precisely to avoid repeating the subject in every later theorem. Model
-    # that as an implicit use at each later statement boundary. Resolution below
-    # still enforces forward document order and same-term ambient shadowing.
+    # Ambient candidates establish forward scope without requiring later results
+    # to repeat the convention subject. They remain subject to occurrence-aware
+    # ordering and same-term shadowing below.
     ambient_terms: dict[str, str] = {}
     for site in sites:
-        if site.declaration.kind == "ambient":
+        if site.candidate.role == ProseDeclarationRole.AMBIENT:
             ambient_terms.setdefault(
-                site.declaration.term.casefold(),
-                site.declaration.term,
+                _normalized_term(site.candidate.term),
+                site.candidate.term,
             )
     for region in regions:
         projection = projections.get(region.file)
         if region.file not in files or projection is None or not projection.complete:
             continue
+        start = region.statement_span.start_offset
         for term in ambient_terms.values():
-            candidates.append(
-                _UseCandidate(
-                    matched_term=term,
-                    file=region.file,
-                    start=region.statement_span.start_offset,
-                    end=region.statement_span.start_offset,
-                    result_identifier=region.identifier,
-                    scope_kind=ScopeKind.STATEMENT,
-                    ambient_scope=True,
+            for position in lookup.positions(region.file, start):
+                candidates.append(
+                    _UseCandidate(
+                        matched_term=term,
+                        file=region.file,
+                        start=start,
+                        end=start,
+                        position=position,
+                        result_identifier=region.identifier,
+                        scope_kind=ScopeKind.STATEMENT,
+                        ambient_scope=True,
+                    )
                 )
-            )
 
-    # Authoritative declarations may themselves depend on earlier prose
-    # definitions/conventions. Those edges are required before one-shot rescue.
+    # An authoritative declaration may depend on an earlier authoritative prose
+    # declaration. Scan only exact normalized candidate terms in the already
+    # eligible source projection; no declaration grammar or morphology lives here.
     for owner in sites:
-        file = files[owner.file]
-        projection = projections[owner.file]
-        declaration = owner.declaration
-        text = projection.text[declaration.source_start : declaration.source_end]
+        projection = projections[owner.candidate.source.file]
+        source = owner.candidate.source
+        text = projection.text[source.start_offset : source.end_offset]
         for term, pattern in patterns:
             for match in pattern.finditer(text):
-                start = declaration.source_start + match.start()
-                end = declaration.source_start + match.end()
-                if start < declaration.term_end and declaration.term_start < end:
+                start = source.start_offset + match.start()
+                end = source.start_offset + match.end()
+                own_term = owner.candidate.term_source
+                if start < own_term.end_offset and own_term.start_offset < end:
+                    continue
+                occurrence_position = _position_for_occurrence(
+                    lookup,
+                    file=source.file,
+                    offset=start,
+                    occurrence_id=owner.position.occurrence_id,
+                )
+                if occurrence_position is None:
                     continue
                 candidates.append(
                     _UseCandidate(
                         matched_term=term,
-                        file=file.path,
+                        file=source.file,
                         start=start,
                         end=end,
+                        position=occurrence_position,
                         result_identifier=None,
                         scope_kind=ScopeKind.PROJECT,
                         owner_identifier=owner.identifier,
@@ -387,51 +333,50 @@ def _use_candidates(
     return candidates
 
 
-def _resolve_uses(
-    sites: list[_DeclarationSite],
+def _resolve_candidates(
+    sites: list[_AuthoritySite],
     candidates: list[_UseCandidate],
-    order: dict[tuple[str, int], int],
-) -> list[_ResolvedUse]:
-    site_order = {
-        site.identifier: order[(site.file, site.declaration.source_end)]
-        for site in sites
-    }
-    resolved_by_location: dict[
-        tuple[str, int, int, str, str | None, ScopeKind, str | None],
-        tuple[int, _ResolvedUse],
-    ] = {}
-
+) -> list[_Resolution]:
+    resolved: list[_Resolution] = []
     for candidate in candidates:
-        use_order = order[(candidate.file, candidate.start)]
         eligible = [
             site
             for site in sites
-            if _terms_match(site.declaration.term, candidate.matched_term)
-            and (not candidate.ambient_scope or site.declaration.kind == "ambient")
-            and site_order[site.identifier] < use_order
+            if _normalized_term(site.candidate.term)
+            == _normalized_term(candidate.matched_term)
+            and (not candidate.ambient_scope or site.candidate.role == ProseDeclarationRole.AMBIENT)
+            and site.position < candidate.position
         ]
-        if not eligible:
-            continue
-        target = max(eligible, key=lambda site: site_order[site.identifier])
-        target_order = site_order[target.identifier]
-        key = (
-            candidate.file,
-            candidate.start,
-            candidate.end,
-            candidate.matched_term.casefold(),
-            candidate.result_identifier,
-            candidate.scope_kind,
-            candidate.owner_identifier,
+        target = max(eligible, key=lambda site: site.position) if eligible else None
+        resolved.append(
+            _Resolution(
+                candidate=candidate,
+                target_identifier=target.identifier if target is not None else None,
+            )
         )
-        resolved = _ResolvedUse(
-            candidate=candidate,
-            target_identifier=target.identifier,
-        )
-        previous = resolved_by_location.get(key)
-        if previous is None or target_order > previous[0]:
-            resolved_by_location[key] = (target_order, resolved)
+    return resolved
 
-    return [item[1] for item in resolved_by_location.values()]
+
+def _consensus_resolved_uses(resolutions: list[_Resolution]) -> list[_ResolvedUse]:
+    """Collapse path-level uses only when all occurrence contexts agree exactly."""
+
+    groups: dict[
+        tuple[str, int, int, str, str | None, ScopeKind, str | None, bool],
+        list[_Resolution],
+    ] = {}
+    for resolution in resolutions:
+        groups.setdefault(resolution.candidate.logical_key(), []).append(resolution)
+
+    out: list[_ResolvedUse] = []
+    for group in groups.values():
+        targets = {resolution.target_identifier for resolution in group}
+        if len(targets) != 1:
+            continue
+        target = next(iter(targets))
+        if target is None:
+            continue
+        out.append(_ResolvedUse(candidate=group[0].candidate, target_identifier=target))
+    return out
 
 
 def _reachable_declarations(resolved_uses: list[_ResolvedUse]) -> set[str]:
@@ -493,38 +438,34 @@ def _scope_for_use(
 def _append_declaration(
     file: FrontendFile,
     table: SymbolTable,
-    declaration: _Declaration,
+    site: _AuthoritySite,
 ) -> Symbol:
-    source = file.span(declaration.term_start, declaration.term_end)
-    introduction = file.span(declaration.source_start, declaration.source_end)
-    identifier = f"semantic:{file.path}:{declaration.term_start}"
+    candidate = site.candidate
+    identifier = site.identifier
     symbol = Symbol(
         identifier=identifier,
-        name=declaration.term,
+        name=candidate.term,
         role=SymbolRole.UNKNOWN,
         introduction_kind=(
             IntroductionKind.DEFINE
-            if declaration.kind == "definition"
+            if candidate.role == ProseDeclarationRole.DEFINITION
             else IntroductionKind.FOR
         ),
         scope_identifier="project",
-        source=source,
-        introduction_source=introduction,
-        raw_introduction=introduction.text(file.raw),
+        source=candidate.term_source,
+        introduction_source=candidate.source,
+        raw_introduction=candidate.source.text(file.raw),
     )
     table.symbols.append(symbol)
-    if declaration.kind == "definition":
+    if candidate.role == ProseDeclarationRole.DEFINITION:
         table.definitions.append(
             Definition(
                 identifier=f"{identifier}:definition",
                 symbol_identifier=identifier,
                 operator=":=",
-                # The authoritative meaning is ordinary prose. Deliberately do
-                # not fabricate a formula; the canonical source handle is the
-                # semantic payload and thorn-proof/1 may request it.
                 expression_latex="",
-                source=introduction,
-                raw=introduction.text(file.raw),
+                source=candidate.source,
+                raw=candidate.source.text(file.raw),
             )
         )
     else:
@@ -534,11 +475,21 @@ def _append_declaration(
                 symbol_identifier=identifier,
                 relation=":",
                 expression_latex="",
-                source=introduction,
-                raw=introduction.text(file.raw),
+                source=candidate.source,
+                raw=candidate.source.text(file.raw),
             )
         )
     return symbol
+
+
+def _project_source_key(
+    lookup: ProjectPositionLookup,
+    source: SourceSpan,
+) -> tuple[int, ...]:
+    try:
+        return lookup.sort_key(source.file, source.start_offset)
+    except KeyError:
+        return (10**12, source.start_offset)
 
 
 def add_project_semantic_context(
@@ -546,51 +497,37 @@ def add_project_semantic_context(
     regions: list[ResultRegion],
     table: SymbolTable,
     *,
-    workspace: ProjectWorkspaceFacts | None = None,
+    workspace: ProjectWorkspaceFacts,
+    prose_declarations: ProseDeclarationInventory,
 ) -> None:
-    """Recover explicit prose semantics as ordinary project-scope symbol edges.
+    """Apply Thorn-owned prose authority, visibility, shadowing, and reachability.
 
-    Ordinary declaration-shaped prose is only eligible source material. It is
-    activated when a theorem/proof uses it directly or transitively through
-    another activated declaration. Explicit ambient cues are different: the cue
-    itself establishes a forward scope dependency on later results, even when
-    their wording omits the convention's subject. All lexical matching uses a
-    reversible frontend-derived linguistic projection, and all resolution follows
-    expanded project/include order.
+    This layer consumes only normalized declaration candidates, reversible source
+    projections, canonical result spans, and occurrence-aware workspace facts.
+    It does not recognize declaration phrases, infer lexical morphology, or expose
+    linguistic-backend objects downstream.
     """
 
-    regions_by_file: dict[str, list[ResultRegion]] = {}
-    for region in regions:
-        regions_by_file.setdefault(region.file, []).append(region)
+    if workspace.resolution != WorkspaceResolution.RESOLVED:
+        return
+    if prose_declarations.capability != ProseDeclarationCapability.COMPLETE:
+        return
 
     files = {file.path: file for file in project.files}
     projections = {
         file.path: build_linguistic_projection(file)
         for file in project.files
     }
-    sites: list[_DeclarationSite] = []
-    for file in project.files:
-        file_regions = regions_by_file.get(file.path, [])
-        for declaration in _declarations(
-            file,
-            file_regions,
-            projections[file.path],
-        ):
-            sites.append(_DeclarationSite(file=file.path, declaration=declaration))
+    if any(not projection.complete for projection in projections.values()):
+        return
 
+    sites = _eligible_sites(project, prose_declarations, workspace, projections)
     if not sites:
         return
 
-    candidates = _use_candidates(project, regions, sites, projections)
-    points = {
-        (site.file, site.declaration.source_end)
-        for site in sites
-    } | {
-        (candidate.file, candidate.start)
-        for candidate in candidates
-    }
-    order = _document_order(project, points, workspace)
-    resolved_uses = _resolve_uses(sites, candidates, order)
+    candidates = _use_candidates(project, regions, sites, projections, workspace)
+    resolutions = _resolve_candidates(sites, candidates)
+    resolved_uses = _consensus_resolved_uses(resolutions)
     active = _reachable_declarations(resolved_uses)
     if not active:
         return
@@ -598,31 +535,21 @@ def add_project_semantic_context(
     site_by_id = {site.identifier: site for site in sites}
     active_sites = sorted(
         (site_by_id[identifier] for identifier in active),
-        key=lambda site: order[(site.file, site.declaration.source_end)],
+        key=lambda site: site.position,
     )
 
     actual_symbol_ids: dict[str, str] = {}
     for site in active_sites:
-        declaration = site.declaration
-        existing = next(
-            (
-                symbol
-                for symbol in table.symbols
-                if symbol.name.casefold() == declaration.term.casefold()
-                and symbol.source.file == site.file
-                and symbol.source.start_offset == declaration.term_start
-            ),
-            None,
+        symbol = _append_declaration(
+            files[site.candidate.source.file],
+            table,
+            site,
         )
-        if existing is not None:
-            actual_symbol_ids[site.identifier] = existing.identifier
-            continue
-        symbol = _append_declaration(files[site.file], table, declaration)
         actual_symbol_ids[site.identifier] = symbol.identifier
 
     existing_uses = {
         (
-            use.name.casefold(),
+            _normalized_term(use.name),
             use.source.file,
             use.source.start_offset,
             use.source.end_offset,
@@ -633,32 +560,34 @@ def add_project_semantic_context(
         candidate = resolved.candidate
         if resolved.target_identifier not in active:
             continue
-        if (
-            candidate.owner_identifier is not None
-            and candidate.owner_identifier not in active
-        ):
+        if candidate.owner_identifier is not None and candidate.owner_identifier not in active:
             continue
 
         file = files[candidate.file]
         source = file.span(candidate.start, candidate.end)
         target_site = site_by_id[resolved.target_identifier]
-        name = target_site.declaration.term
-        use_key = (name.casefold(), source.file, source.start_offset, source.end_offset)
+        name = target_site.candidate.term
+        use_key = (
+            _normalized_term(name),
+            source.file,
+            source.start_offset,
+            source.end_offset,
+        )
         if use_key in existing_uses:
             continue
 
+        resolved_scope_identifier: str | None
         if candidate.result_identifier is None:
             resolved_scope_identifier = "project"
         else:
-            maybe_scope_identifier = _scope_for_use(
+            resolved_scope_identifier = _scope_for_use(
                 table,
                 result_identifier=candidate.result_identifier,
                 kind=candidate.scope_kind,
                 source=source,
             )
-            if maybe_scope_identifier is None:
+            if resolved_scope_identifier is None:
                 continue
-            resolved_scope_identifier = maybe_scope_identifier
 
         table.uses.append(
             SymbolUse(
@@ -671,13 +600,29 @@ def add_project_semantic_context(
         )
         existing_uses.add(use_key)
 
-    table.symbols.sort(key=lambda item: (item.source.file, item.source.start_offset))
+    lookup = ProjectPositionLookup(workspace)
+    site_positions = {site.identifier: site.position.order_key for site in active_sites}
+    table.symbols.sort(
+        key=lambda item: site_positions.get(
+            item.identifier,
+            _project_source_key(lookup, item.source),
+        )
+    )
     table.definitions.sort(
-        key=lambda item: (item.source.file, item.source.start_offset)
+        key=lambda item: site_positions.get(
+            item.symbol_identifier,
+            _project_source_key(lookup, item.source),
+        )
     )
     table.constraints.sort(
-        key=lambda item: (item.source.file, item.source.start_offset)
+        key=lambda item: site_positions.get(
+            item.symbol_identifier,
+            _project_source_key(lookup, item.source),
+        )
     )
     table.uses.sort(
-        key=lambda item: (item.source.file, item.source.start_offset, item.name)
+        key=lambda item: (
+            _project_source_key(lookup, item.source),
+            _normalized_term(item.name),
+        )
     )

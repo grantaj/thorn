@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -9,6 +10,9 @@ from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import ParsedProject, SourceSpan
 from thorn.linguistic import LinguisticFrontend
 from thorn.workspace import ProjectWorkspaceFacts
+
+if TYPE_CHECKING:
+    from thorn.linguistic_declarations import ProseDeclarationInventory
 
 _ATOMIC_BRACED_SUBSCRIPT_RE = re.compile(
     r"^(?P<base>(?:\\[A-Za-z]+|[A-Za-z]))_\{(?P<sub>\\[A-Za-z]+|[A-Za-z0-9]+)\}$"
@@ -202,6 +206,7 @@ def extract_symbol_table(
     regions: list[ResultRegion],
     *,
     workspace: ProjectWorkspaceFacts | None = None,
+    prose_declarations: ProseDeclarationInventory | None = None,
     linguistic_frontend: LinguisticFrontend | None = None,
 ) -> SymbolTable:
     """Build deterministic symbols plus optional ambiguity-aware candidates."""
@@ -210,17 +215,25 @@ def extract_symbol_table(
 
     table = run_extractor(project, regions)
 
-    # Result/proof extraction is intentionally local, but ordinary manuscripts
-    # also place authoritative declarations immediately before theorem-like
-    # environments. Recover only explicit, mechanically recognizable project
-    # introductions and then record their uses through the existing scope IR.
+    # Mathematical project declarations remain Thorn-owned authority. Prose
+    # authority is a separate policy layer consuming the normalized candidate and
+    # workspace boundaries established by #161; it never reparses declaration grammar.
     from thorn.project_context import add_project_authoritative_context
     from thorn.project_context_source import preserve_project_authoritative_source
-    from thorn.project_semantic_context import add_project_semantic_context
 
     add_project_authoritative_context(project, regions, table)
     preserve_project_authoritative_source(project, table)
-    add_project_semantic_context(project, regions, table, workspace=workspace)
+
+    if workspace is not None and prose_declarations is not None:
+        from thorn.project_semantic_context import add_project_semantic_context
+
+        add_project_semantic_context(
+            project,
+            regions,
+            table,
+            workspace=workspace,
+            prose_declarations=prose_declarations,
+        )
 
     if linguistic_frontend is not None:
         from thorn.linguistic_symbols import add_linguistic_symbol_candidates

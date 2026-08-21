@@ -77,13 +77,11 @@ Fix $x\in X$ for the argument.
     assert prose.capability == ProseDeclarationCapability.COMPLETE
     assert prose.frontend == frontend.name
 
-    # Linguistic evidence is normalized, reviewable candidate evidence. It cannot
-    # become deterministic mathematical authority merely because a backend proposed it.
+    # Generic linguistic symbol candidates remain non-authoritative. Slice D only
+    # changes the separate Thorn policy for complete prose declaration candidates.
     assert all(symbol.name != "x" for symbol in run.project.symbol_table.symbols)
     run.assert_not_authoritative("x")
 
-    # Pydantic JSON projection proves the adapter has not leaked backend-native
-    # document/token objects into Thorn's candidate boundary.
     payload = candidate.model_dump(mode="json")
     assert isinstance(payload, dict)
     assert "spacy.tokens" not in repr(payload)
@@ -111,7 +109,7 @@ def test_fixture_and_real_spacy_share_the_candidate_contract(tmp_path: Path) -> 
     _assert_candidate_contract(tmp_path / "spacy", spacy_configuration, spacy_frontend)
 
 
-def test_real_spacy_prose_proposal_is_exact_but_not_authoritative(tmp_path: Path) -> None:
+def test_real_spacy_prose_proposal_is_exact_then_thorn_promotes_it(tmp_path: Path) -> None:
     frontend = _spacy_frontend_or_skip()
     run = _write_project(
         tmp_path,
@@ -122,6 +120,7 @@ def test_real_spacy_prose_proposal_is_exact_but_not_authoritative(tmp_path: Path
             capabilities=frozenset(
                 {
                     ContractCapability.PROJECT_SEMANTICS,
+                    ContractCapability.PROSE_AUTHORITY,
                     ContractCapability.LINGUISTIC_CANDIDATES,
                 }
             ),
@@ -129,7 +128,7 @@ def test_real_spacy_prose_proposal_is_exact_but_not_authoritative(tmp_path: Path
         r"""
 We call a map admissible if it is continuous.
 \begin{theorem}\label{thm:main}
-A conclusion holds.
+The map $f$ is admissible.
 \end{theorem}
 """,
     )
@@ -142,17 +141,25 @@ A conclusion holds.
     assert candidate.status == InferenceStatus.AMBIGUOUS
     assert candidate.term_source.text(raw) == "admissible"
     assert candidate.source.text(raw) == "We call a map admissible if it is continuous."
+    assert candidate.payload_source is not None
+    assert candidate.payload_source.text(raw).strip() == "it is continuous."
     assert candidate.evidence
     assert candidate.evidence[0].frontend == frontend.name
     assert candidate.evidence[0].target == candidate.term_source
 
-    # `We call ...` is deliberately outside the frozen #125 authority grammar.
-    # Slice C may expose it as candidate evidence but cannot promote it.
-    assert all(symbol.name != "admissible" for symbol in run.project.symbol_table.symbols)
-    run.assert_not_authoritative("admissible")
+    # The linguistic backend still proposes only ambiguous grammatical evidence.
+    # Thorn separately adjudicates substantive payload, project order, visibility,
+    # shadowing, and result use before emitting canonical mathematical authority.
+    symbol = run.assert_authoritative(
+        "thm:main",
+        "admissible",
+        "We call a map admissible if it is continuous.",
+    )
+    assert symbol.introduction_source == candidate.source
 
 
 def test_structural_only_configuration_explicitly_omits_linguistic_capability() -> None:
     structural_configuration = LINGUISTIC_CONFIGURATIONS[0]
     assert ContractCapability.PROJECT_SEMANTICS in structural_configuration.capabilities
+    assert ContractCapability.PROSE_AUTHORITY not in structural_configuration.capabilities
     assert ContractCapability.LINGUISTIC_CANDIDATES not in structural_configuration.capabilities

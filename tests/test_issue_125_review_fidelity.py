@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from declaration_contract_frontend import DeclarationContractFrontend
 from thorn.latex import extract_project
 from thorn.proof_language_review import advertised_source_addresses
 from thorn.review_workflow import prepare_proof_review
@@ -22,7 +23,7 @@ def _write_paper(path: Path, body: str) -> None:
 
 
 def _prepared(path: Path):
-    project = extract_project(path)
+    project = extract_project(path, linguistic_frontend=DeclarationContractFrontend())
     return project, prepare_proof_review(project, project.unit("thm:main"))
 
 

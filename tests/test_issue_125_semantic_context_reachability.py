@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from declaration_contract_frontend import DeclarationContractFrontend
 from thorn.latex import extract_project
 from thorn.llm_proof_language import parse_source_rescue_request, render_source_rescue
 from thorn.proof_language_review import (
@@ -20,6 +21,13 @@ ROOT = Path(__file__).resolve().parents[1]
 A2_SOURCE = ROOT / "eval" / "robustness" / "issue_101" / "variant_prose_uniformity.tex"
 
 
+def _extract(path: Path):
+    return extract_project(
+        path,
+        linguistic_frontend=DeclarationContractFrontend(),
+    )
+
+
 def _prepare(tmp_path: Path, body: str):
     paper = tmp_path / "paper.tex"
     paper.write_text(
@@ -31,7 +39,7 @@ def _prepare(tmp_path: Path, body: str):
         "\\end{document}\n",
         encoding="utf-8",
     )
-    project = extract_project(paper)
+    project = _extract(paper)
     unit = project.unit("thm:main")
     return paper, prepare_proof_review(project, unit)
 
@@ -95,7 +103,7 @@ The assertion follows from the construction.
 """,
         encoding="utf-8",
     )
-    project = extract_project(paper)
+    project = _extract(paper)
 
     _, _, symbols, definitions, _ = _select_symbol_context(project, "thm:main", [])
 
@@ -193,7 +201,7 @@ The assertion follows from the construction.
 \end{{proof}}
 """,
     )
-    project = extract_project(paper)
+    project = _extract(paper)
     unit = project.unit("thm:main")
     source = _source_matching(prepared, "every fibre contains exactly two points")
     initial = ProofReviewTurnRequest(
@@ -267,7 +275,7 @@ The assertion follows from the construction.
 
 
 def test_historical_a2_definition_and_ambient_window_are_reachable() -> None:
-    project = extract_project(A2_SOURCE)
+    project = _extract(A2_SOURCE)
     prepared = prepare_proof_review(project, project.unit("thm:uniform-decay"))
     advertised = set(advertised_source_addresses(prepared.document))
 
