@@ -8,8 +8,12 @@ production source of project occurrence/order facts.
 ## Production boundary after #161
 
 `ProjectWorkspaceFacts` in `src/thorn/workspace.py` is no longer merely a proposed
-contract. `latex.extract_project()` builds it for every parsed project and downstream
-semantic/result ordering consumes it through `ProjectPositionLookup`.
+contract. For projects that pass the extraction composition root's fatal frontend
+preflight, `latex.extract_project()` builds these facts before semantic/result ordering
+and downstream code consumes them through `ProjectPositionLookup`. The workspace
+boundary itself can also represent explicit partial/source-error states for direct
+workspace/conformance use; production extraction may fail closed earlier when the
+frontend has already established a fatal source/project diagnostic.
 
 The boundary contains generic source/project facts only:
 
@@ -45,7 +49,9 @@ Workspace resolution does not attempt complete TeX execution.
 
 - complete static project structure is resolved;
 - missing included files remain explicit missing/partial evidence with exact include
-  provenance;
+  provenance at the workspace boundary, although the normal extraction composition root
+  may reject an already-fatal frontend missing-file diagnostic before returning a
+  project;
 - include cycles remain explicit rather than disappearing through path deduplication;
 - valid but unsupported or macro-generated/dynamic structure may remain `partial`;
 - malformed source may become `source_error` and invalidate dependent project facts.
