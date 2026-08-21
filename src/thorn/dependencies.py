@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from thorn.models import SourceRange, TheoremUnit
 from thorn.support import ProofSupportGraph
 from thorn.symbols import SymbolTable
+from thorn.workspace import ProjectWorkspaceFacts
 
 
 class DependencyResolution(StrEnum):
@@ -197,6 +198,7 @@ class ExtractedProject(BaseModel):
     dependency_graph: DependencyGraph
     symbol_table: SymbolTable = Field(default_factory=SymbolTable)
     proof_support_graph: ProofSupportGraph = Field(default_factory=ProofSupportGraph)
+    workspace: ProjectWorkspaceFacts | None = None
 
     def unit(self, identifier: str) -> TheoremUnit:
         for unit in self.units:
