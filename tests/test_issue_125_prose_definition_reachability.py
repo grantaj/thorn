@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from declaration_contract_frontend import DeclarationContractFrontend
 from thorn.latex import extract_project
 from thorn.proof_language_review import advertised_source_addresses
 from thorn.review_workflow import prepare_proof_review
@@ -30,7 +31,10 @@ The required estimate follows from the preceding discussion.
         encoding="utf-8",
     )
 
-    project = extract_project(paper)
+    project = extract_project(
+        paper,
+        linguistic_frontend=DeclarationContractFrontend(),
+    )
     prepared = prepare_proof_review(project, project.unit("thm:main"))
     document = prepared.document
     packet = document.render_initial()
