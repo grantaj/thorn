@@ -324,7 +324,7 @@ def _item_identifier(result_identifier: str, trigger_edges: list[SupportEdge]) -
     trigger_ids = sorted(edge.identifier for edge in trigger_edges)
     payload = "\0".join([result_identifier, *trigger_ids]).encode()
     digest = hashlib.sha256(payload).hexdigest()[:16]
-    return f"semantic-review:diagnostic:{result_identifier}:{digest}"
+    return f"semantic-review:{result_identifier}:{digest}"
 
 
 def _build_item(
