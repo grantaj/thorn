@@ -14,6 +14,11 @@ from thorn.dependencies import (
 )
 from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
+from thorn.semantic_dependencies import (
+    close_project_symbol_dependencies,
+    result_project_symbol_dependency_ids,
+    semantic_symbol_sort_key,
+)
 from thorn.support import Claim, SupportEdge
 from thorn.symbols import (
     Constraint,
@@ -21,7 +26,6 @@ from thorn.symbols import (
     ScopeKind,
     Symbol,
     SymbolIntroductionCandidate,
-    SymbolTable,
 )
 
 
@@ -103,14 +107,6 @@ def _spans_overlap(left: SourceSpan, right: SourceSpan) -> bool:
         left.file == right.file
         and left.start_offset < right.end_offset
         and right.start_offset < left.end_offset
-    )
-
-
-def _span_contains(outer: SourceSpan, inner: SourceSpan) -> bool:
-    return (
-        outer.file == inner.file
-        and outer.start_offset <= inner.start_offset
-        and inner.end_offset <= outer.end_offset
     )
 
 
@@ -253,50 +249,6 @@ def _relevant_spans(
     return spans
 
 
-def _span_in_result(
-    span: SourceSpan,
-    project: ExtractedProject,
-    result_identifier: str,
-) -> bool:
-    unit = project.unit(result_identifier)
-    ranges = [unit.statement_range]
-    if unit.proof_range is not None:
-        ranges.append(unit.proof_range)
-    return any(
-        span.file == source_range.file
-        and source_range.start_line <= span.start_line
-        and span.end_line <= source_range.end_line
-        for source_range in ranges
-    )
-
-
-def _close_project_symbol_dependencies(
-    table: SymbolTable,
-    selected_ids: set[str],
-) -> None:
-    """Close selected project semantics over declaration-to-declaration uses."""
-
-    pending = list(selected_ids)
-    while pending:
-        owner_identifier = pending.pop()
-        owner = table.symbol(owner_identifier)
-        if table.scope(owner.scope_identifier).kind != ScopeKind.PROJECT:
-            continue
-        for use in table.uses:
-            target_identifier = use.resolved_symbol_identifier
-            if target_identifier is None or use.scope_identifier != "project":
-                continue
-            if not _span_contains(owner.introduction_source, use.source):
-                continue
-            target = table.symbol(target_identifier)
-            if table.scope(target.scope_identifier).kind != ScopeKind.PROJECT:
-                continue
-            if target_identifier in selected_ids:
-                continue
-            selected_ids.add(target_identifier)
-            pending.append(target_identifier)
-
-
 def _select_symbol_context(
     project: ExtractedProject,
     result_identifier: str,
@@ -309,19 +261,16 @@ def _select_symbol_context(
     list[SymbolIntroductionCandidate],
 ]:
     table = project.symbol_table
-    selected_ids: set[str] = set()
+
+    # Result-to-project-declaration identity comes from canonical resolved uses.
+    # The uncertainty-focused selector may narrow local context below, but it does
+    # not reconstruct semantic project edges from source text or file ordering.
+    selected_ids = set(result_project_symbol_dependency_ids(project, result_identifier))
 
     for use in table.uses:
         if use.resolved_symbol_identifier is None:
             continue
-        symbol = table.symbol(use.resolved_symbol_identifier)
-        direct_project_dependency = (
-            table.scope(symbol.scope_identifier).kind == ScopeKind.PROJECT
-            and _span_in_result(use.source, project, result_identifier)
-        )
-        if direct_project_dependency or any(
-            _spans_overlap(use.source, span) for span in spans
-        ):
+        if any(_spans_overlap(use.source, span) for span in spans):
             selected_ids.add(use.resolved_symbol_identifier)
 
     for symbol in table.symbols:
@@ -345,11 +294,11 @@ def _select_symbol_context(
     # project prose needed to interpret an already-selected declaration must
     # therefore be selected before the packet advertises its closed-world
     # handles, not discovered only after rescuing the outer declaration.
-    _close_project_symbol_dependencies(table, selected_ids)
+    selected_ids = close_project_symbol_dependencies(project, selected_ids)
 
     symbols = sorted(
         (symbol for symbol in table.symbols if symbol.identifier in selected_ids),
-        key=lambda symbol: (*_span_key(symbol.source), symbol.identifier),
+        key=lambda symbol: (*semantic_symbol_sort_key(project, symbol), symbol.identifier),
     )
     definitions = sorted(
         (
@@ -405,20 +354,12 @@ def _select_dependencies(
         and edge.resolution == DependencyResolution.RESOLVED
         and edge.target_identifier is not None
     }
-    nodes = [
+    # DependencyGraph node order is already normalized workspace order.
+    return [
         node
         for node in project.dependency_graph.nodes
         if node.identifier in identifiers
     ]
-    return sorted(
-        nodes,
-        key=lambda node: (
-            node.source.file,
-            node.source.start_line,
-            node.source.end_line,
-            node.identifier,
-        ),
-    )
 
 
 def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
@@ -520,7 +461,12 @@ def build_review_context(project: ExtractedProject) -> ReviewContext:
         triggers_by_result[target.result_identifier].append(edge)
 
     items: list[SemanticReviewItem] = []
-    for result_identifier in sorted(triggers_by_result):
+    # ExtractedProject.units is already normalized workspace order. Preserve it
+    # rather than re-sorting result identifiers lexically.
+    for unit in project.units:
+        result_identifier = unit.identifier
+        if result_identifier not in triggers_by_result:
+            continue
         groups = _group_trigger_edges(
             project,
             result_identifier,
