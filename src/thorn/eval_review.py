@@ -121,7 +121,7 @@ def build_result_review_context(
     )
 
     item = SemanticReviewItem(
-        identifier=f"semantic-review:result:{result_identifier}",
+        identifier=f"semantic-review-eval:{result_identifier}",
         target_kind=ReviewTargetKind.RESULT,
         result=_result_node(project, result_identifier),
         claims=claims,
