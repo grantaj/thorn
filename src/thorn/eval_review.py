@@ -5,6 +5,7 @@ from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
 from thorn.semantic_dependencies import (
     close_project_symbol_dependencies,
+    dependency_node_sort_key,
     result_project_symbol_dependency_ids,
     semantic_symbol_sort_key,
 )
@@ -115,7 +116,7 @@ def _result_symbol_context(
 
     symbols = sorted(
         (symbol for symbol in table.symbols if symbol.identifier in symbol_ids),
-        key=lambda symbol: (*semantic_symbol_sort_key(project, symbol), symbol.identifier),
+        key=lambda symbol: semantic_symbol_sort_key(project, symbol),
     )
     definitions = sorted(
         (
@@ -205,9 +206,10 @@ def build_result_review_context(
         for edge in relations
         if edge.status in {InferenceStatus.AMBIGUOUS, InferenceStatus.UNRESOLVED}
     )
-    # DependencyGraph nodes were constructed in normalized workspace order.
-    # Preserve that canonical order instead of re-sorting by file path here.
-    dependencies = project.dependency_graph.direct_dependencies(result_identifier)
+    dependencies = sorted(
+        project.dependency_graph.direct_dependencies(result_identifier),
+        key=lambda node: dependency_node_sort_key(project, node),
+    )
 
     item = SemanticReviewItem(
         identifier=f"semantic-review-eval:{result_identifier}",
