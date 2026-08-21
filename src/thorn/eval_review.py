@@ -3,12 +3,16 @@ from __future__ import annotations
 from thorn.dependencies import DependencyNode, ExtractedProject
 from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
+from thorn.semantic_dependencies import (
+    close_project_symbol_dependencies,
+    result_project_symbol_dependency_ids,
+    semantic_symbol_sort_key,
+)
 from thorn.semantic_review import (
     ReviewContext,
     ReviewSourceContext,
     ReviewTargetKind,
     SemanticReviewItem,
-    _close_project_symbol_dependencies,
 )
 from thorn.support import Claim, SupportEdge
 from thorn.symbols import (
@@ -38,10 +42,6 @@ def _claim_key(claim: Claim) -> tuple[str, int, int, int, int, int, int, str]:
 
 def _relation_key(edge: SupportEdge) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(edge.source), edge.identifier)
-
-
-def _symbol_key(symbol: Symbol) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(symbol.source), symbol.identifier)
 
 
 def _definition_key(
@@ -100,40 +100,22 @@ def _result_symbol_context(
     list[SymbolIntroductionCandidate],
 ]:
     table = project.symbol_table
-    result = _result_node(project, result_identifier)
 
-    def is_target_use(source: SourceSpan) -> bool:
-        if (
-            source.file == result.source.file
-            and result.source.start_line <= source.start_line <= result.source.end_line
-        ):
-            return True
-        return any(
-            source.file == claim.source.file
-            and claim.source.start_offset <= source.start_offset
-            and source.end_offset <= claim.source.end_offset
-            for claim in claims
-        )
-
-    # Keep result-owned symbols, then close selectively over actually resolved
-    # symbol uses in the target statement/proof. This admits an outer/global
-    # definition only when the target really uses that symbol; it is not a
-    # whole-paper symbol-table dump.
+    # Result-to-project-declaration edges are already canonical SymbolUse
+    # identities. Seed from those identities, then close declaration-to-declaration
+    # dependencies over the same canonical table rather than reconstructing edges
+    # from source overlap.
     symbol_ids = {
         symbol.identifier
         for symbol in table.symbols
         if symbol.result_identifier == result_identifier
     }
-    symbol_ids.update(
-        use.resolved_symbol_identifier
-        for use in table.uses
-        if use.resolved_symbol_identifier is not None and is_target_use(use.source)
-    )
-    _close_project_symbol_dependencies(table, symbol_ids)
+    symbol_ids.update(result_project_symbol_dependency_ids(project, result_identifier))
+    symbol_ids = close_project_symbol_dependencies(project, symbol_ids)
 
     symbols = sorted(
         (symbol for symbol in table.symbols if symbol.identifier in symbol_ids),
-        key=_symbol_key,
+        key=lambda symbol: (*semantic_symbol_sort_key(project, symbol), symbol.identifier),
     )
     definitions = sorted(
         (
@@ -223,15 +205,9 @@ def build_result_review_context(
         for edge in relations
         if edge.status in {InferenceStatus.AMBIGUOUS, InferenceStatus.UNRESOLVED}
     )
-    dependencies = sorted(
-        project.dependency_graph.direct_dependencies(result_identifier),
-        key=lambda node: (
-            node.source.file,
-            node.source.start_line,
-            node.source.end_line,
-            node.identifier,
-        ),
-    )
+    # DependencyGraph nodes were constructed in normalized workspace order.
+    # Preserve that canonical order instead of re-sorting by file path here.
+    dependencies = project.dependency_graph.direct_dependencies(result_identifier)
 
     item = SemanticReviewItem(
         identifier=f"semantic-review-eval:{result_identifier}",
