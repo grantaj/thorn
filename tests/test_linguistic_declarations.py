@@ -3,9 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from thorn.evidence import InferenceStatus
+from thorn.frontend import FrontendFile, ParsedProject
 from thorn.latex import extract_project
 from thorn.linguistic import LinguisticDocument, LinguisticToken
-from thorn.linguistic_declarations import ProseDeclarationCapability, ProseDeclarationRole
+from thorn.linguistic_declarations import (
+    ProseDeclarationCapability,
+    ProseDeclarationRole,
+    collect_project_prose_declarations,
+)
 
 
 class _DeclarationFrontend:
@@ -106,5 +111,19 @@ def test_structural_only_extraction_advertises_reduced_prose_capability(
     assert inventory is not None
     assert inventory.capability == ProseDeclarationCapability.REDUCED
     assert inventory.frontend is None
+    assert inventory.candidates == []
+    assert inventory.reasons
+
+
+def test_incomplete_source_projection_fails_closed_at_candidate_boundary() -> None:
+    project = ParsedProject(
+        main_file="paper.tex",
+        files=[FrontendFile(path="paper.tex", raw="We call a map admissible if it is continuous.")],
+    )
+
+    inventory = collect_project_prose_declarations(project, [], _DeclarationFrontend())
+
+    assert inventory.capability == ProseDeclarationCapability.PARTIAL
+    assert inventory.frontend == "fixture-declarations"
     assert inventory.candidates == []
     assert inventory.reasons
