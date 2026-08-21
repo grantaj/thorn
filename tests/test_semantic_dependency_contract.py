@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from declaration_contract_frontend import DeclarationContractFrontend
 from thorn.dependencies import ExtractedProject
 from thorn.evidence import InferenceStatus
 from thorn.frontend import LatexFrontend
@@ -32,6 +33,7 @@ LinguisticFactory = Callable[[], LinguisticFrontend]
 
 class ContractCapability(StrEnum):
     PROJECT_SEMANTICS = "project-semantics"
+    PROSE_AUTHORITY = "prose-authority"
     LINGUISTIC_CANDIDATES = "linguistic-candidates"
 
 
@@ -58,6 +60,16 @@ STRUCTURAL_CONFIGURATIONS = (
         frontend_factory=PylatexencLatexFrontend,
         capabilities=frozenset({ContractCapability.PROJECT_SEMANTICS}),
     ),
+)
+
+PROSE_AUTHORITY_CONFIGURATIONS = tuple(
+    ContractConfiguration(
+        name=f"{configuration.name}+declaration-nlp",
+        frontend_factory=configuration.frontend_factory,
+        linguistic_factory=DeclarationContractFrontend,
+        capabilities=configuration.capabilities | {ContractCapability.PROSE_AUTHORITY},
+    )
+    for configuration in STRUCTURAL_CONFIGURATIONS
 )
 
 
@@ -149,10 +161,6 @@ class ContractRun:
         initial = document.render_initial()
         matches = [source for source in document.sources if source.text == source_text]
 
-        # Packet placement is not part of the backend-independent contract. A
-        # future projection may render semantically sufficient canonical context
-        # directly; otherwise the exact manuscript source must be available
-        # through the bounded closed-world rescue map.
         if source_text in initial:
             for source in matches:
                 if source.source_span is None:
@@ -221,13 +229,14 @@ def _write_project(
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_named_definition_is_authoritative_and_boundedly_reachable(
     tmp_path: Path,
     configuration: ContractConfiguration,
 ) -> None:
+    configuration.require(ContractCapability.PROSE_AUTHORITY)
     definition = (
         "A simplicial complex is called flag-determined when every minimal non-face "
         "has two vertices."
@@ -256,7 +265,7 @@ This follows from the edge criterion.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_ambient_convention_applies_forward_but_not_backward(
@@ -289,7 +298,7 @@ Every compact subset is closed.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_non_document_and_nearby_exposition_are_not_authority(
@@ -332,7 +341,7 @@ The graph $G$ is chord-guarded, comment-defined, listing-defined, and code-defin
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_cross_file_redefinition_shadows_earlier_authority(
@@ -368,7 +377,7 @@ The map $f$ is fibre-regular.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_same_file_redefinition_shadows_earlier_authority(
@@ -399,7 +408,7 @@ The map $f$ is fibre-regular.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_parent_declaration_is_visible_inside_included_child(
@@ -431,7 +440,7 @@ The graph $G$ is edge-rigid.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_child_declaration_is_visible_after_returning_to_parent(
@@ -460,7 +469,7 @@ The cover $\mathcal U$ is star-finite.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_child_shadowing_applies_inside_child_and_after_return_to_parent(
@@ -504,7 +513,7 @@ The cover $\mathcal V$ is star-finite.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_parent_declaration_after_include_does_not_leak_backward_into_child(
@@ -535,7 +544,7 @@ The graph $G$ is edge-rigid.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_authoritative_context_preserves_exact_report_navigation(
@@ -561,9 +570,6 @@ The complex $K$ is shell-rigid.
     symbol = run.assert_authoritative("thm:main", "shell-rigid", definition)
     run.assert_observed_result_context("thm:main", definition)
 
-    # Review reachability and report navigation are separate stable boundaries.
-    # Navigation starts from the authoritative declaration's canonical provenance,
-    # not from whichever packet/source-handle placement the current projection uses.
     expected = symbol.introduction_source.source_range()
     navigation = report_source(expected, excerpt=definition)
 
@@ -576,7 +582,7 @@ The complex $K$ is shell-rigid.
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_transitive_semantics_compose_with_structured_dependencies(
