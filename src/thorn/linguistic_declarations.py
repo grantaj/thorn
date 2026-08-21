@@ -250,10 +250,10 @@ def propose_linguistic_declarations(
         for cue in [token for token in cues if token.lemma.casefold() == "mean"]:
             if _negated(tokens, cue) or "we" not in subject_words:
                 continue
-            term = _mean_term(tokens, cue)
-            if term is None:
+            mean_term = _mean_term(tokens, cue)
+            if mean_term is None:
                 continue
-            term_text, start, end, term_token_index = term
+            term_text, start, end, term_token_index = mean_term
             out.append(
                 _proposal(
                     role=ProseDeclarationRole.DEFINITION,
