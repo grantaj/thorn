@@ -20,7 +20,7 @@ def test_normal_review_is_result_level_even_without_uncertainty_trigger() -> Non
     item = context.items[0]
     assert item.target_kind == ReviewTargetKind.RESULT
     assert item.trigger_relation_identifiers == []
-    assert item.identifier == "semantic-review:result:thm:main"
+    assert item.identifier == "semantic-review-eval:thm:main"
 
     rendered = render_semantic_review_request(build_semantic_review_request(item))
     assert "Target kind: result" in rendered
@@ -37,12 +37,12 @@ def test_targeted_selector_remains_explicit_diagnostic_projection() -> None:
     assert context.items
     assert all(item.target_kind == ReviewTargetKind.SUPPORT_RELATION for item in context.items)
     item = context.items[0]
-    assert item.identifier.startswith("semantic-review:diagnostic:thm:main:")
+    assert item.identifier.startswith("semantic-review:thm:main:")
 
     rendered = render_semantic_review_request(build_semantic_review_request(item))
     assert "Target kind: support_relation" in rendered
     assert "reason this targeted view was selected" in rendered
-    assert "## Relations that caused diagnostic escalation" in rendered
+    assert "## Relations that caused semantic escalation" in rendered
 
 
 def test_compact_renderer_does_not_call_result_uncertainty_escalation() -> None:
