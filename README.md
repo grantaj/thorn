@@ -73,6 +73,7 @@ Canonical Proof IR is the semantic centre. `thorn-proof/1` is the model-facing r
 
 For the detailed design and assurance model, see:
 
+- [`docs/semantic-dependency-architecture.md`](docs/semantic-dependency-architecture.md)
 - [`docs/positioning.md`](docs/positioning.md)
 - [`docs/report.md`](docs/report.md)
 - [`docs/proof-visualizer.md`](docs/proof-visualizer.md)
