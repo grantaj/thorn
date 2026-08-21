@@ -3,12 +3,17 @@ from __future__ import annotations
 from thorn.dependencies import DependencyNode, ExtractedProject
 from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
+from thorn.semantic_dependencies import (
+    close_project_symbol_dependencies,
+    dependency_node_sort_key,
+    result_project_symbol_dependency_ids,
+    semantic_symbol_sort_key,
+)
 from thorn.semantic_review import (
     ReviewContext,
     ReviewSourceContext,
     ReviewTargetKind,
     SemanticReviewItem,
-    _close_project_symbol_dependencies,
 )
 from thorn.support import Claim, SupportEdge
 from thorn.symbols import (
@@ -38,10 +43,6 @@ def _claim_key(claim: Claim) -> tuple[str, int, int, int, int, int, int, str]:
 
 def _relation_key(edge: SupportEdge) -> tuple[str, int, int, int, int, int, int, str]:
     return (*_span_key(edge.source), edge.identifier)
-
-
-def _symbol_key(symbol: Symbol) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(symbol.source), symbol.identifier)
 
 
 def _definition_key(
@@ -100,40 +101,22 @@ def _result_symbol_context(
     list[SymbolIntroductionCandidate],
 ]:
     table = project.symbol_table
-    result = _result_node(project, result_identifier)
 
-    def is_target_use(source: SourceSpan) -> bool:
-        if (
-            source.file == result.source.file
-            and result.source.start_line <= source.start_line <= result.source.end_line
-        ):
-            return True
-        return any(
-            source.file == claim.source.file
-            and claim.source.start_offset <= source.start_offset
-            and source.end_offset <= claim.source.end_offset
-            for claim in claims
-        )
-
-    # Keep result-owned symbols, then close selectively over actually resolved
-    # symbol uses in the target statement/proof. This admits an outer/global
-    # definition only when the target really uses that symbol; it is not a
-    # whole-paper symbol-table dump.
+    # Result-to-project-declaration edges are already canonical SymbolUse
+    # identities. Seed from those identities, then close declaration-to-declaration
+    # dependencies over the same canonical table rather than reconstructing edges
+    # from source overlap.
     symbol_ids = {
         symbol.identifier
         for symbol in table.symbols
         if symbol.result_identifier == result_identifier
     }
-    symbol_ids.update(
-        use.resolved_symbol_identifier
-        for use in table.uses
-        if use.resolved_symbol_identifier is not None and is_target_use(use.source)
-    )
-    _close_project_symbol_dependencies(table, symbol_ids)
+    symbol_ids.update(result_project_symbol_dependency_ids(project, result_identifier))
+    symbol_ids = close_project_symbol_dependencies(project, symbol_ids)
 
     symbols = sorted(
         (symbol for symbol in table.symbols if symbol.identifier in symbol_ids),
-        key=_symbol_key,
+        key=lambda symbol: semantic_symbol_sort_key(project, symbol),
     )
     definitions = sorted(
         (
@@ -189,13 +172,12 @@ def build_result_review_context(
     project: ExtractedProject,
     result_identifier: str,
 ) -> ReviewContext:
-    """Build one bounded, result-level IR item for a controlled context A/B run.
+    """Build the canonical bounded result-level review item for one result.
 
-    Unlike ``build_review_context``, this evaluation seam does not decide whether
-    semantic escalation is warranted. It always returns exactly one item for the
-    selected result so explicit ``raw`` and ``ir`` runs perform comparable
-    attack-only semantic work. The normal targeted selector remains the sole
-    authority for deciding which uncertainty-bearing local items deserve review.
+    Unlike ``build_review_context``, this path does not decide whether an
+    uncertainty-focused diagnostic escalation is warranted. It always returns
+    exactly one item for the requested result and is the result-level projection
+    consumed by the normal review workflow and controlled context A/B runs.
 
     The item contains only Thorn-owned IR. Provider adapters still receive a
     ``SemanticReviewRequest`` and never receive or traverse the project graph.
@@ -225,12 +207,7 @@ def build_result_review_context(
     )
     dependencies = sorted(
         project.dependency_graph.direct_dependencies(result_identifier),
-        key=lambda node: (
-            node.source.file,
-            node.source.start_line,
-            node.source.end_line,
-            node.identifier,
-        ),
+        key=lambda node: dependency_node_sort_key(project, node),
     )
 
     item = SemanticReviewItem(
