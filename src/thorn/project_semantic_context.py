@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
 
-from thorn.frontend import FrontendFile, FrontendMath, ParsedProject, SourceSpan
-from thorn.symbol_extract import _span
+from thorn.frontend import FrontendFile, ParsedProject, SourceSpan
+from thorn.source_projection import (
+    LinguisticProjection,
+    ProjectionTokenKind,
+    build_linguistic_projection,
+)
 from thorn.symbols import (
     Constraint,
     Definition,
@@ -64,14 +67,6 @@ _AMBIENT_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _STYLE_WRAPPER_RE = re.compile(r"\\[A-Za-z]+\{(?P<inner>[^{}]+)\}\Z")
-_DOCUMENT_BEGIN = r"\begin{document}"
-_IGNORED_ENVIRONMENTS = {
-    "comment",
-    "lstlisting",
-    "minted",
-    "verbatim",
-    "verbatim*",
-}
 
 
 @dataclass(frozen=True)
@@ -112,130 +107,10 @@ class _ResolvedUse:
     target_identifier: str
 
 
-def _is_escaped(text: str, offset: int) -> bool:
-    backslashes = 0
-    index = offset - 1
-    while index >= 0 and text[index] == "\\":
-        backslashes += 1
-        index -= 1
-    return backslashes % 2 == 1
-
-
 def _mask_range(characters: list[str], start: int, end: int) -> None:
     for index in range(max(0, start), min(len(characters), end)):
         if characters[index] != "\n":
             characters[index] = " "
-
-
-def _semantic_view(file: FrontendFile, *, main_file: str) -> str:
-    """Return source-length-preserving document text eligible for semantic matching."""
-
-    raw = file.raw
-    characters = list(raw)
-
-    # The main file's preamble is syntax/configuration, not mathematical prose.
-    if file.path == main_file:
-        document = next(
-            (env for env in file.environments if env.name.casefold() == "document"),
-            None,
-        )
-        if document is not None:
-            _mask_range(characters, 0, document.body_span.start_offset)
-            _mask_range(characters, document.body_span.end_offset, len(characters))
-
-    # Verbatim-like or explicitly commented environments are not document prose.
-    for environment in file.environments:
-        if environment.name.casefold() in _IGNORED_ENVIRONMENTS:
-            _mask_range(
-                characters,
-                environment.span.start_offset,
-                environment.span.end_offset,
-            )
-
-    # TeX comments are masked rather than deleted so all offsets remain exact.
-    index = 0
-    while index < len(raw):
-        if raw[index] == "%" and not _is_escaped(raw, index):
-            newline = raw.find("\n", index)
-            end = len(raw) if newline < 0 else newline
-            _mask_range(characters, index, end)
-            index = len(raw) if newline < 0 else newline + 1
-            continue
-        index += 1
-
-    return "".join(characters)
-
-
-def _math_containing(file: FrontendFile, offset: int) -> FrontendMath | None:
-    for math in file.math:
-        if math.span.start_offset <= offset < math.span.end_offset:
-            return math
-    return None
-
-
-def _math_ends_sentence(raw: str) -> bool:
-    return (
-        re.search(r"[.!?]\s*(?:\\\]|\\\)|\$\$|\$)\s*\Z", raw, re.DOTALL)
-        is not None
-    )
-
-
-def _document_body_floor(raw: str, cue_offset: int) -> int:
-    start = raw.rfind(_DOCUMENT_BEGIN, 0, cue_offset)
-    return start + len(_DOCUMENT_BEGIN) if start >= 0 else 0
-
-
-def _sentence_bounds(
-    file: FrontendFile,
-    view: str,
-    cue_offset: int,
-) -> tuple[int, int]:
-    raw = file.raw
-    body_floor = _document_body_floor(raw, cue_offset)
-    paragraph_marker = view.rfind("\n\n", body_floor, cue_offset)
-    paragraph_start = (
-        paragraph_marker + 2 if paragraph_marker >= body_floor else body_floor
-    )
-    paragraph_end = view.find("\n\n", cue_offset)
-    if paragraph_end < 0:
-        paragraph_end = len(view)
-
-    start = cue_offset
-    cursor = cue_offset - 1
-    while cursor >= paragraph_start:
-        math = _math_containing(file, cursor)
-        if math is not None:
-            if _math_ends_sentence(math.raw):
-                start = math.span.end_offset
-                break
-            cursor = math.span.start_offset - 1
-            continue
-        if view[cursor] in ".!?":
-            start = cursor + 1
-            break
-        cursor -= 1
-    else:
-        start = paragraph_start
-    while start < cue_offset and view[start].isspace():
-        start += 1
-
-    cursor = cue_offset
-    end = paragraph_end
-    while cursor < paragraph_end:
-        math = _math_containing(file, cursor)
-        if math is not None:
-            cursor = math.span.end_offset
-            if _math_ends_sentence(math.raw):
-                end = cursor
-                break
-            continue
-        if view[cursor] in ".!?":
-            end = cursor + 1
-            break
-        cursor += 1
-    while end > start and view[end - 1].isspace():
-        end -= 1
-    return start, end
 
 
 def _unwrap_term(raw_term: str, absolute_start: int) -> tuple[str, int, int]:
@@ -266,31 +141,41 @@ def _overlaps_result(start: int, end: int, regions: list[ResultRegion]) -> bool:
 
 def _has_substantive_payload(
     file: FrontendFile,
-    view: str,
+    projection: LinguisticProjection,
     *,
     cue_end: int,
     source_end: int,
 ) -> bool:
     """Return whether a declaration cue has conservative defining content."""
 
-    characters = list(view[cue_end:source_end])
+    characters = list(projection.text[cue_end:source_end])
     syntax_starts: list[int] = []
     for macro in file.macros:
         if macro.span.end_offset <= cue_end or source_end <= macro.span.start_offset:
             continue
-        if _math_containing(file, macro.span.start_offset) is not None:
+        if projection.token_containing(
+            macro.span.start_offset,
+            kind=ProjectionTokenKind.MATH,
+        ) is not None:
             continue
         start = max(cue_end, macro.span.start_offset) - cue_end
         end = min(source_end, macro.span.end_offset) - cue_end
         syntax_starts.append(start)
         _mask_range(characters, start, end)
 
-    payload_start = next(
-        (index for index, character in enumerate(characters) if character.isalnum()),
-        None,
+    payload_starts = [
+        index for index, character in enumerate(characters) if character.isalnum()
+    ]
+    payload_starts.extend(
+        max(cue_end, token.source.start_offset) - cue_end
+        for token in projection.tokens
+        if token.kind == ProjectionTokenKind.MATH
+        and token.source.end_offset > cue_end
+        and token.source.start_offset < source_end
     )
-    if payload_start is None:
+    if not payload_starts:
         return False
+    payload_start = min(payload_starts)
 
     # If opaque/non-math TeX syntax appears before the first visible payload,
     # the source does not establish that the later text is its defining
@@ -301,8 +186,11 @@ def _has_substantive_payload(
 def _declarations(
     file: FrontendFile,
     regions: list[ResultRegion],
-    view: str,
+    projection: LinguisticProjection,
 ) -> list[_Declaration]:
+    if not projection.complete:
+        return []
+
     candidates: list[_Declaration] = []
     patterns = (
         ("definition", _CALLED_RE),
@@ -312,15 +200,17 @@ def _declarations(
         ("ambient", _AMBIENT_RE),
     )
     for kind, pattern in patterns:
-        for match in pattern.finditer(view):
-            source_start, source_end = _sentence_bounds(file, view, match.start())
+        for match in pattern.finditer(projection.text):
+            sentence = projection.sentence_span(match.start())
+            source_start = sentence.start_offset
+            source_end = sentence.end_offset
             if _overlaps_result(source_start, source_end, regions):
                 continue
             # A declaration-shaped cue is grammatical evidence, not mathematical
             # authority. Promotion requires an actual defining complement.
             if not _has_substantive_payload(
                 file,
-                view,
+                projection,
                 cue_end=match.end(),
                 source_end=source_end,
             ):
@@ -387,15 +277,6 @@ def _term_pattern(term: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![A-Za-z0-9]){body}(?![A-Za-z0-9])", re.IGNORECASE)
 
 
-def _included_path(file: FrontendFile, macro_name: str, argument: str) -> str | None:
-    if macro_name not in {"input", "include"}:
-        return None
-    child = Path(argument.strip())
-    if child.suffix == "":
-        child = child.with_suffix(".tex")
-    return str((Path(file.path).parent / child).resolve())
-
-
 def _document_order(
     project: ParsedProject,
     points: set[tuple[str, int]],
@@ -416,7 +297,7 @@ def _use_candidates(
     project: ParsedProject,
     regions: list[ResultRegion],
     sites: list[_DeclarationSite],
-    views: dict[str, str],
+    projections: dict[str, LinguisticProjection],
 ) -> list[_UseCandidate]:
     files = {file.path: file for file in project.files}
     terms: dict[str, str] = {}
@@ -429,14 +310,14 @@ def _use_candidates(
     # Direct result uses seed the semantic dependency closure.
     for region in regions:
         file = files.get(region.file)
-        view = views.get(region.file)
-        if file is None or view is None:
+        projection = projections.get(region.file)
+        if file is None or projection is None or not projection.complete:
             continue
         spans = [(region.statement_span, ScopeKind.STATEMENT)]
         if region.proof_span is not None:
             spans.append((region.proof_span, ScopeKind.PROOF))
         for span, scope_kind in spans:
-            text = view[span.start_offset : span.end_offset]
+            text = projection.text[span.start_offset : span.end_offset]
             for term, pattern in patterns:
                 for match in pattern.finditer(text):
                     candidates.append(
@@ -462,7 +343,8 @@ def _use_candidates(
                 site.declaration.term,
             )
     for region in regions:
-        if region.file not in files:
+        projection = projections.get(region.file)
+        if region.file not in files or projection is None or not projection.complete:
             continue
         for term in ambient_terms.values():
             candidates.append(
@@ -481,9 +363,9 @@ def _use_candidates(
     # definitions/conventions. Those edges are required before one-shot rescue.
     for owner in sites:
         file = files[owner.file]
-        view = views[owner.file]
+        projection = projections[owner.file]
         declaration = owner.declaration
-        text = view[declaration.source_start : declaration.source_end]
+        text = projection.text[declaration.source_start : declaration.source_end]
         for term, pattern in patterns:
             for match in pattern.finditer(text):
                 start = declaration.source_start + match.start()
@@ -525,10 +407,7 @@ def _resolve_uses(
             site
             for site in sites
             if _terms_match(site.declaration.term, candidate.matched_term)
-            and (
-                not candidate.ambient_scope
-                or site.declaration.kind == "ambient"
-            )
+            and (not candidate.ambient_scope or site.declaration.kind == "ambient")
             and site_order[site.identifier] < use_order
         ]
         if not eligible:
@@ -616,18 +495,8 @@ def _append_declaration(
     table: SymbolTable,
     declaration: _Declaration,
 ) -> Symbol:
-    source = _span(
-        file.path,
-        file.raw,
-        declaration.term_start,
-        declaration.term_end,
-    )
-    introduction = _span(
-        file.path,
-        file.raw,
-        declaration.source_start,
-        declaration.source_end,
-    )
+    source = file.span(declaration.term_start, declaration.term_end)
+    introduction = file.span(declaration.source_start, declaration.source_end)
     identifier = f"semantic:{file.path}:{declaration.term_start}"
     symbol = Symbol(
         identifier=identifier,
@@ -686,9 +555,8 @@ def add_project_semantic_context(
     another activated declaration. Explicit ambient cues are different: the cue
     itself establishes a forward scope dependency on later results, even when
     their wording omits the convention's subject. All lexical matching uses a
-    source-preserving document view, and all resolution follows expanded
-    project/include order. This keeps the normal Symbol IR -> canonical Proof-IR
-    -> bounded NEED_SOURCE path as the sole semantic-review representation.
+    reversible frontend-derived linguistic projection, and all resolution follows
+    expanded project/include order.
     """
 
     regions_by_file: dict[str, list[ResultRegion]] = {}
@@ -696,20 +564,24 @@ def add_project_semantic_context(
         regions_by_file.setdefault(region.file, []).append(region)
 
     files = {file.path: file for file in project.files}
-    views = {
-        file.path: _semantic_view(file, main_file=project.main_file)
+    projections = {
+        file.path: build_linguistic_projection(file)
         for file in project.files
     }
     sites: list[_DeclarationSite] = []
     for file in project.files:
         file_regions = regions_by_file.get(file.path, [])
-        for declaration in _declarations(file, file_regions, views[file.path]):
+        for declaration in _declarations(
+            file,
+            file_regions,
+            projections[file.path],
+        ):
             sites.append(_DeclarationSite(file=file.path, declaration=declaration))
 
     if not sites:
         return
 
-    candidates = _use_candidates(project, regions, sites, views)
+    candidates = _use_candidates(project, regions, sites, projections)
     points = {
         (site.file, site.declaration.source_end)
         for site in sites
@@ -768,7 +640,7 @@ def add_project_semantic_context(
             continue
 
         file = files[candidate.file]
-        source = _span(candidate.file, file.raw, candidate.start, candidate.end)
+        source = file.span(candidate.start, candidate.end)
         target_site = site_by_id[resolved.target_identifier]
         name = target_site.declaration.term
         use_key = (name.casefold(), source.file, source.start_offset, source.end_offset)
@@ -794,9 +666,7 @@ def add_project_semantic_context(
                 scope_identifier=resolved_scope_identifier,
                 source=source,
                 raw=source.text(file.raw),
-                resolved_symbol_identifier=(
-                    actual_symbol_ids[resolved.target_identifier]
-                ),
+                resolved_symbol_identifier=actual_symbol_ids[resolved.target_identifier],
             )
         )
         existing_uses.add(use_key)
