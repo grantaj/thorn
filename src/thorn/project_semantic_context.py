@@ -17,6 +17,7 @@ from thorn.symbols import (
     SymbolTable,
     SymbolUse,
 )
+from thorn.workspace import ProjectPositionLookup, build_project_workspace_facts
 
 # This module recognizes declaration *grammar*, never mathematical vocabulary.
 # Ordinary prose declarations become review context only when a theorem/proof
@@ -395,69 +396,15 @@ def _document_order(
     project: ParsedProject,
     points: set[tuple[str, int]],
 ) -> dict[tuple[str, int], int]:
-    """Assign source points a conservative order in the expanded LaTeX project."""
+    """Assign compatibility point ranks from normalized workspace positions."""
 
-    files = {file.path: file for file in project.files}
-    points_by_file: dict[str, list[int]] = {}
-    for point_file, offset in points:
-        points_by_file.setdefault(point_file, []).append(offset)
-    for offsets in points_by_file.values():
-        offsets.sort()
-
-    order: dict[tuple[str, int], int] = {}
-    visited: set[str] = set()
-    active: set[str] = set()
-    counter = 0
-
-    def assign(file_path: str, offset: int) -> None:
-        nonlocal counter
-        key = (file_path, offset)
-        if key in order:
-            return
-        order[key] = counter
-        counter += 1
-
-    def visit(file_path: str) -> None:
-        if file_path in active or file_path in visited:
-            return
-        file = files.get(file_path)
-        if file is None:
-            return
-        visited.add(file_path)
-        active.add(file_path)
-
-        includes: list[tuple[int, str]] = []
-        for macro in file.macros:
-            if macro.name not in {"input", "include"} or not macro.arguments:
-                continue
-            argument = macro.arguments[0]
-            if argument.optional:
-                continue
-            child = _included_path(file, macro.name, argument.value)
-            if child is not None and child in files:
-                includes.append((macro.span.start_offset, child))
-        includes.sort()
-
-        offsets = points_by_file.get(file_path, [])
-        point_index = 0
-        for include_offset, child in includes:
-            while point_index < len(offsets) and offsets[point_index] <= include_offset:
-                assign(file_path, offsets[point_index])
-                point_index += 1
-            visit(child)
-        while point_index < len(offsets):
-            assign(file_path, offsets[point_index])
-            point_index += 1
-
-        active.remove(file_path)
-
-    visit(project.main_file)
-    # ParsedProject normally contains only reachable files. This fallback keeps
-    # ordering deterministic if a parser backend supplies an extra loaded file.
-    for file in project.files:
-        visit(file.path)
-
-    return order
+    lookup = ProjectPositionLookup(build_project_workspace_facts(project))
+    # Declaration/use identities remain path-based until the occurrence-aware
+    # authority migration in #161 Slice D. Preserve that behavior here by using
+    # each path point's earliest occurrence while sourcing all order from the
+    # normalized workspace boundary rather than traversing includes again.
+    ordered = sorted(points, key=lambda point: lookup.sort_key(*point))
+    return {point: index for index, point in enumerate(ordered)}
 
 
 def _use_candidates(
