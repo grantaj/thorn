@@ -198,7 +198,7 @@ class ExtractedProject(BaseModel):
     dependency_graph: DependencyGraph
     symbol_table: SymbolTable = Field(default_factory=SymbolTable)
     proof_support_graph: ProofSupportGraph = Field(default_factory=ProofSupportGraph)
-    workspace: ProjectWorkspaceFacts | None = None
+    workspace: ProjectWorkspaceFacts | None = Field(default=None, exclude=True)
 
     def unit(self, identifier: str) -> TheoremUnit:
         for unit in self.units:
