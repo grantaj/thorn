@@ -179,24 +179,14 @@ class DeclarationContractFrontend:
             sentence_index += 1
 
         for match in _BY_MEAN.finditer(text):
-            cue_start, cue_end = match.span("cue")
-            cue_index = add(
-                match.group("cue"),
-                start=cue_start,
-                end=cue_end,
-                lemma="mean",
-                pos="VERB",
-                dependency="ROOT",
-            )
             term, start, end = _term_span(match)
-            add(
+            term_index = add(
                 term,
                 start=start,
                 end=end,
                 lemma=term.casefold(),
                 pos="NOUN",
-                dependency="attr",
-                head_index=cue_index,
+                dependency="pobj",
             )
             we_start, we_end = match.span("we")
             add(
@@ -206,7 +196,19 @@ class DeclarationContractFrontend:
                 lemma="we",
                 pos="PRON",
                 dependency="nsubj",
-                head_index=cue_index,
+                head_index=term_index,
+            )
+            cue_start, cue_end = match.span("cue")
+            cue_index = add(
+                match.group("cue"),
+                start=cue_start,
+                end=cue_end,
+                lemma="mean",
+                pos="VERB",
+                dependency="ROOT",
+            )
+            tokens[term_index] = tokens[term_index].model_copy(
+                update={"head_index": cue_index}
             )
             sentence_index += 1
 
