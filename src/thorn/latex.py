@@ -27,6 +27,7 @@ from thorn.project_partiality import normalize_project_structure
 from thorn.support_corroboration import corroborate_explicit_result_support
 from thorn.support_extract import extract_proof_support_graph
 from thorn.symbols import ResultRegion, extract_symbol_table
+from thorn.workspace import ProjectPositionLookup, build_project_workspace_facts
 
 _DEFAULT_THEOREM_ENVS = {
     "theorem",
@@ -167,6 +168,8 @@ def extract_project(
     parsed = normalize_project_structure(parser.parse_project(main_file))
     _raise_project_partiality_diagnostic(parsed)
     _raise_missing_file_diagnostic(parsed)
+    workspace = build_project_workspace_facts(parsed)
+    project_positions = ProjectPositionLookup(workspace)
     envs = _theorem_envs(parsed)
     all_labels = _project_labels(parsed)
     units: list[TheoremUnit] = []
@@ -234,7 +237,15 @@ def extract_project(
                     )
                 )
 
-    units.sort(key=lambda unit: (unit.statement_range.file, unit.statement_range.start_line))
+    ordered_results = sorted(
+        zip(units, regions, strict=True),
+        key=lambda item: project_positions.sort_key(
+            item[1].file,
+            item[1].statement_span.start_offset,
+        ),
+    )
+    units = [item[0] for item in ordered_results]
+    regions = [item[1] for item in ordered_results]
 
     by_label: dict[str, list[TheoremUnit]] = {}
     for unit in units:
