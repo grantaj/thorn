@@ -2,62 +2,13 @@ from __future__ import annotations
 
 import re
 
-from thorn.frontend import FrontendFile, ParsedProject, SourceSpan
+from thorn.frontend import ParsedProject, SourceSpan
+from thorn.source_projection import build_linguistic_projection
 from thorn.symbols import Constraint, ScopeKind, SymbolRole, SymbolTable
 
 _PROJECT_PROSE_CUE_RE = re.compile(
     r"(?is)^\s*(?:let|define|set|for(?:\s+(?:each|every|all))?)\b"
 )
-_START_BOUNDARY_RE = re.compile(
-    r"(?:\n\s*\n|[.!?](?=\s|$)|\\begin\{document\}\s*|\\end\{[^{}]+\}\s*)"
-)
-_END_BOUNDARY_RE = re.compile(r"(?:[.!?](?=\s|$)|\n\s*\n|(?=\\begin\{))")
-
-
-def _line_column(text: str, offset: int) -> tuple[int, int]:
-    line = text.count("\n", 0, offset) + 1
-    last_newline = text.rfind("\n", 0, offset)
-    column = offset + 1 if last_newline < 0 else offset - last_newline
-    return line, column
-
-
-def _span(file: FrontendFile, start: int, end: int) -> SourceSpan:
-    start_line, start_column = _line_column(file.raw, start)
-    end_line, end_column = _line_column(file.raw, end)
-    return SourceSpan(
-        file=file.path,
-        start_offset=start,
-        end_offset=end,
-        start_line=start_line,
-        start_column=start_column,
-        end_line=end_line,
-        end_column=end_column,
-    )
-
-
-def _sentence_start(file: FrontendFile, offset: int) -> int:
-    window_start = max(0, offset - 256)
-    prefix = file.raw[window_start:offset]
-    matches = list(_START_BOUNDARY_RE.finditer(prefix))
-    start = window_start + (matches[-1].end() if matches else 0)
-    while start < offset and file.raw[start].isspace():
-        start += 1
-    return start
-
-
-def _sentence_end(file: FrontendFile, offset: int) -> int:
-    window_end = min(len(file.raw), offset + 256)
-    suffix = file.raw[offset:window_end]
-    match = _END_BOUNDARY_RE.search(suffix)
-    if match is None:
-        return offset
-    end = offset + match.end()
-    # A blank-line/environment boundary marks the end of the prose block rather
-    # than source belonging to the declaration. Trim boundary whitespace while
-    # retaining ordinary sentence punctuation when present.
-    while end > offset and file.raw[end - 1].isspace():
-        end -= 1
-    return end
 
 
 def _same_span(left: SourceSpan, right: SourceSpan) -> bool:
@@ -77,11 +28,15 @@ def preserve_project_authoritative_source(
     Deterministic symbol recovery often needs only the mathematical token and its
     cue. Review rescue needs the complete local statement that gives that token
     authority, including ambient-domain wording and trailing local conventions.
-    This function changes provenance only: symbol identity and recovered semantic
-    content remain untouched.
+    Sentence provenance comes from the same reversible frontend-derived projection
+    used by semantic extraction; this layer does not reconstruct TeX boundaries.
     """
 
     files = {file.path: file for file in project.files}
+    projections = {
+        file.path: build_linguistic_projection(file)
+        for file in project.files
+    }
     expanded_by_symbol: dict[str, tuple[SourceSpan, SourceSpan]] = {}
 
     for index, symbol in enumerate(table.symbols):
@@ -90,13 +45,10 @@ def preserve_project_authoritative_source(
         if not _PROJECT_PROSE_CUE_RE.match(symbol.raw_introduction):
             continue
         file = files.get(symbol.introduction_source.file)
-        if file is None:
+        projection = projections.get(symbol.introduction_source.file)
+        if file is None or projection is None or not projection.complete:
             continue
-        expanded = _span(
-            file,
-            _sentence_start(file, symbol.introduction_source.start_offset),
-            _sentence_end(file, symbol.introduction_source.end_offset),
-        )
+        expanded = projection.sentence_span(symbol.introduction_source.start_offset)
         if _same_span(expanded, symbol.introduction_source):
             continue
         expanded_by_symbol[symbol.identifier] = (symbol.introduction_source, expanded)

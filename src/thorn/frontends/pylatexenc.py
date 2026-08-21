@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from pylatexenc.latexwalker import (  # type: ignore[import-untyped]
+    LatexCommentNode,
     LatexEnvironmentNode,
     LatexGroupNode,
     LatexMacroNode,
@@ -23,9 +24,12 @@ from thorn.frontend import (
     FrontendFile,
     FrontendMacro,
     FrontendMath,
+    FrontendRegion,
+    FrontendRegionKind,
     ParsedProject,
     SourceSpan,
 )
+from thorn.frontend_regions import build_frontend_regions
 
 _ONE_ARGUMENT_MACROS = {
     "Cref",
@@ -273,18 +277,35 @@ def _parse_file(path: Path) -> tuple[FrontendFile, list[FrontendDiagnostic]]:
         and _environment_is_explicitly_closed(text, node)
     ]
     math = [_math(path, text, node) for node in flattened if isinstance(node, LatexMathNode)]
+    comment_regions = [
+        FrontendRegion(
+            kind=FrontendRegionKind.COMMENT,
+            span=_span(path, text, *_raw_node_span(node)),
+        )
+        for node in flattened
+        if isinstance(node, LatexCommentNode)
+    ]
 
     macros.sort(key=lambda item: item.span.start_offset)
     environments.sort(key=lambda item: item.span.start_offset)
     math.sort(key=lambda item: item.span.start_offset)
 
+    file = FrontendFile(
+        path=str(path),
+        raw=text,
+        macros=macros,
+        environments=environments,
+        math=math,
+    )
     return (
-        FrontendFile(
-            path=str(path),
-            raw=text,
-            macros=macros,
-            environments=environments,
-            math=math,
+        file.model_copy(
+            update={
+                "regions": build_frontend_regions(
+                    file,
+                    explicit_regions=comment_regions,
+                ),
+                "regions_complete": True,
+            }
         ),
         diagnostics,
     )
