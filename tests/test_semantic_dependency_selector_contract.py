@@ -8,7 +8,7 @@ from typing import Protocol
 
 import pytest
 from test_semantic_dependency_contract import (
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ContractConfiguration,
     _write_project,
 )
@@ -172,7 +172,7 @@ def test_current_selectors_project_canonical_authority_and_uncertainty() -> None
 
 @pytest.mark.parametrize(
     "configuration",
-    STRUCTURAL_CONFIGURATIONS,
+    PROSE_AUTHORITY_CONFIGURATIONS,
     ids=lambda configuration: configuration.name,
 )
 def test_both_selectors_preserve_transitive_project_semantic_closure(
