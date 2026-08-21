@@ -35,12 +35,13 @@ def review_semantic_context(
     context: ReviewContext,
     provider: SemanticReviewProvider,
 ) -> list[SemanticReviewResult]:
-    """Review each pre-grouped IR item exactly once through a semantic provider.
+    """Review each already-selected Thorn IR item exactly once.
 
-    Selection and grouping stay in ``semantic_review.py``. This layer performs no
-    graph traversal, linguistic inference, caching, or provider-specific rendering.
-    The result keeps the exact request so item, relation, evidence, and source-span
-    provenance remains available for later diagnostic/report integration.
+    Selection is complete before this boundary: normal review supplies one
+    canonical result-level item, while ``thorn-eval`` may supply an explicitly
+    targeted diagnostic projection. This layer performs no graph traversal,
+    linguistic inference, caching, or provider-specific selection. The result
+    retains the exact request so provenance remains available downstream.
     """
 
     results: list[SemanticReviewResult] = []

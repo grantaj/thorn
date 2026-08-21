@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from thorn.dependencies import DependencyNode, ExtractedProject
 from thorn.evidence import InferenceStatus
-from thorn.frontend import SourceSpan
+from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
-    close_project_symbol_dependencies,
     dependency_node_sort_key,
     result_project_symbol_dependency_ids,
-    semantic_symbol_sort_key,
 )
 from thorn.semantic_review import (
     ReviewContext,
@@ -16,51 +14,14 @@ from thorn.semantic_review import (
     SemanticReviewItem,
 )
 from thorn.support import Claim, SupportEdge
-from thorn.symbols import (
-    Constraint,
-    Definition,
-    ScopeKind,
-    Symbol,
-    SymbolIntroductionCandidate,
-)
-
-
-def _span_key(span: SourceSpan) -> tuple[str, int, int, int, int, int, int]:
-    return (
-        span.file,
-        span.start_offset,
-        span.end_offset,
-        span.start_line,
-        span.start_column,
-        span.end_line,
-        span.end_column,
-    )
 
 
 def _claim_key(claim: Claim) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(claim.source), claim.identifier)
+    return (*span_key(claim.source), claim.identifier)
 
 
 def _relation_key(edge: SupportEdge) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(edge.source), edge.identifier)
-
-
-def _definition_key(
-    definition: Definition,
-) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(definition.source), definition.identifier)
-
-
-def _constraint_key(
-    constraint: Constraint,
-) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(constraint.source), constraint.identifier)
-
-
-def _candidate_key(
-    candidate: SymbolIntroductionCandidate,
-) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(candidate.source), candidate.identifier)
+    return (*span_key(edge.source), edge.identifier)
 
 
 def _result_node(project: ExtractedProject, result_identifier: str) -> DependencyNode:
@@ -92,65 +53,23 @@ def _result_relations(
 def _result_symbol_context(
     project: ExtractedProject,
     result_identifier: str,
-    claims: list[Claim],
-) -> tuple[
-    list[Constraint],
-    list[Constraint],
-    list[Symbol],
-    list[Definition],
-    list[SymbolIntroductionCandidate],
-]:
+) -> SelectedSymbolContext:
     table = project.symbol_table
 
-    # Result-to-project-declaration edges are already canonical SymbolUse
-    # identities. Seed from those identities, then close declaration-to-declaration
-    # dependencies over the same canonical table rather than reconstructing edges
-    # from source overlap.
+    # Result-wide breadth is policy here. Canonical project declaration closure,
+    # ordering, and constraint classification live in the shared selector primitive.
     symbol_ids = {
         symbol.identifier
         for symbol in table.symbols
         if symbol.result_identifier == result_identifier
     }
     symbol_ids.update(result_project_symbol_dependency_ids(project, result_identifier))
-    symbol_ids = close_project_symbol_dependencies(project, symbol_ids)
-
-    symbols = sorted(
-        (symbol for symbol in table.symbols if symbol.identifier in symbol_ids),
-        key=lambda symbol: semantic_symbol_sort_key(project, symbol),
+    candidates = (
+        candidate
+        for candidate in table.candidates
+        if candidate.result_identifier == result_identifier
     )
-    definitions = sorted(
-        (
-            definition
-            for definition in table.definitions
-            if definition.symbol_identifier in symbol_ids
-        ),
-        key=_definition_key,
-    )
-
-    symbol_by_id = {symbol.identifier: symbol for symbol in symbols}
-    hypotheses: list[Constraint] = []
-    local_constraints: list[Constraint] = []
-    for constraint in table.constraints:
-        symbol = symbol_by_id.get(constraint.symbol_identifier)
-        if symbol is None:
-            continue
-        scope_kind = table.scope(symbol.scope_identifier).kind
-        if scope_kind in {ScopeKind.RESULT, ScopeKind.STATEMENT}:
-            hypotheses.append(constraint)
-        else:
-            local_constraints.append(constraint)
-    hypotheses.sort(key=_constraint_key)
-    local_constraints.sort(key=_constraint_key)
-
-    candidates = sorted(
-        (
-            candidate
-            for candidate in table.candidates
-            if candidate.result_identifier == result_identifier
-        ),
-        key=_candidate_key,
-    )
-    return hypotheses, local_constraints, symbols, definitions, candidates
+    return select_symbol_context(project, symbol_ids, candidates)
 
 
 def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
@@ -163,7 +82,7 @@ def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
             text = evidence.context.strip()
             if not text:
                 continue
-            key = (text, _span_key(evidence.source))
+            key = (text, span_key(evidence.source))
             contexts[key] = ReviewSourceContext(text=text, source=evidence.source)
     return [contexts[key] for key in sorted(contexts)]
 
@@ -174,12 +93,12 @@ def build_result_review_context(
 ) -> ReviewContext:
     """Build the canonical bounded result-level review item for one result.
 
-    Unlike ``build_review_context``, this path does not decide whether an
-    uncertainty-focused diagnostic escalation is warranted. It always returns
-    exactly one item for the requested result and is the result-level projection
-    consumed by the normal review workflow and controlled context A/B runs.
+    Normal Thorn review is result-level and always returns exactly one item for a
+    requested result, whether or not deterministic support extraction contains an
+    uncertainty marker. The uncertainty-focused selector in ``semantic_review``
+    is a separate diagnostic/evaluation projection and never gates this path.
 
-    The item contains only Thorn-owned IR. Provider adapters still receive a
+    The item contains only Thorn-owned canonical IR. Provider adapters receive a
     ``SemanticReviewRequest`` and never receive or traverse the project graph.
     """
 
@@ -189,18 +108,8 @@ def build_result_review_context(
         key=_claim_key,
     )
     relations = _result_relations(project, claims)
-    (
-        hypotheses,
-        local_constraints,
-        symbols,
-        definitions,
-        candidates,
-    ) = _result_symbol_context(
-        project,
-        result_identifier,
-        claims,
-    )
-    trigger_ids = sorted(
+    symbol_context = _result_symbol_context(project, result_identifier)
+    uncertain_relation_ids = sorted(
         edge.identifier
         for edge in relations
         if edge.status in {InferenceStatus.AMBIGUOUS, InferenceStatus.UNRESOLVED}
@@ -212,16 +121,16 @@ def build_result_review_context(
 
     item = SemanticReviewItem(
         identifier=f"semantic-review-eval:{result_identifier}",
-        target_kind=ReviewTargetKind.SUPPORT_RELATION,
+        target_kind=ReviewTargetKind.RESULT,
         result=_result_node(project, result_identifier),
         claims=claims,
-        trigger_relation_identifiers=trigger_ids,
+        trigger_relation_identifiers=uncertain_relation_ids,
         support_relations=relations,
-        hypotheses=hypotheses,
-        local_constraints=local_constraints,
-        symbols=symbols,
-        definitions=definitions,
-        symbol_candidates=candidates,
+        hypotheses=symbol_context.hypotheses,
+        local_constraints=symbol_context.local_constraints,
+        symbols=symbol_context.symbols,
+        definitions=symbol_context.definitions,
+        symbol_candidates=symbol_context.candidates,
         dependencies=dependencies,
         nearby_context=_nearby_context(relations),
     )

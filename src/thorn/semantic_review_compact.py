@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from thorn.evidence import InferenceStatus
+from thorn.semantic_review import ReviewTargetKind
 from thorn.semantic_review_render import SemanticReviewRequest
 from thorn.support import Claim, SupportEdge
 
@@ -103,7 +104,12 @@ def render_compact_semantic_review_request(request: SemanticReviewRequest) -> st
         lines.append("(none extracted)")
 
     if trigger_relations:
-        lines.extend(["", "# Escalated support questions"])
+        heading = (
+            "# Escalated support questions"
+            if item.target_kind == ReviewTargetKind.SUPPORT_RELATION
+            else "# Uncertain support relations"
+        )
+        lines.extend(["", heading])
         _append_relations(lines, trigger_relations, claim_labels=claim_labels)
 
     if context_relations:

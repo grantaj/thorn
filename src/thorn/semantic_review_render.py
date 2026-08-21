@@ -8,7 +8,11 @@ from thorn.dependencies import DependencyNode
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import SourceSpan
 from thorn.models import SourceRange
-from thorn.semantic_review import ReviewSourceContext, SemanticReviewItem
+from thorn.semantic_review import (
+    ReviewSourceContext,
+    ReviewTargetKind,
+    SemanticReviewItem,
+)
 from thorn.support import Claim, ClaimQualifier, SupportEdge
 from thorn.symbols import Constraint, Definition, Symbol, SymbolIntroductionCandidate
 
@@ -190,6 +194,7 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
     """Render one semantic request deterministically for a mathematical reviewer."""
 
     item = request.item
+    targeted = item.target_kind == ReviewTargetKind.SUPPORT_RELATION
     trigger_ids = set(item.trigger_relation_identifiers)
     trigger_relations = sorted(
         (relation for relation in item.support_relations if relation.identifier in trigger_ids),
@@ -205,6 +210,23 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
         key=_relation_sort_key,
     )
 
+    if targeted:
+        selection_explanation = (
+            "Relations under semantic escalation are the reason this targeted view was selected. "
+            "CONFIDENT relations are interpretation context only; they are not assertions that the "
+            "mathematics is correct."
+        )
+        trigger_heading = "## Relations that caused semantic escalation"
+        trigger_role = "semantic escalation reason"
+    else:
+        selection_explanation = (
+            "This is the canonical result-level review view. AMBIGUOUS and UNRESOLVED relations "
+            "are highlighted because uncertainty is present, but they did not gate or cause the "
+            "review request. CONFIDENT relations are interpretation context only."
+        )
+        trigger_heading = "## Uncertain support relations in this result"
+        trigger_role = "uncertain result context"
+
     lines = [
         "# Thorn semantic review request",
         f"Review item: {item.identifier}",
@@ -212,7 +234,7 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
         "",
         "## Review task",
         (
-            "Judge the mathematics in this bounded neighbourhood: determine whether the audited "
+            "Judge the mathematics in this bounded Thorn-owned view: determine whether the audited "
             "claims and proposed support relations are valid, invalid, insufficiently supported, "
             "or genuinely unresolved from the supplied context."
         ),
@@ -221,11 +243,7 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
             "AMBIGUOUS and UNRESOLVED are uncertainty states, not correctness defects. Do not "
             "report a finding merely because a relation has one of those statuses."
         ),
-        (
-            "Relations under semantic escalation are the reason this local review was requested. "
-            "CONFIDENT relations are interpretation context only; they are not assertions that the "
-            "mathematics is correct."
-        ),
+        selection_explanation,
         "Use the retained source wording and provenance when wording matters. Do not assume that "
         "Thorn's parser conclusion is mathematically correct.",
         "",
@@ -247,12 +265,12 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
     else:
         lines.extend(["(no claims selected)", ""])
 
-    lines.append("## Relations that caused semantic escalation")
+    lines.append(trigger_heading)
     if trigger_relations:
         for relation in trigger_relations:
-            _append_relation(lines, relation, role="semantic escalation reason")
+            _append_relation(lines, relation, role=trigger_role)
     else:
-        lines.extend(["(no trigger relation present in request)", ""])
+        lines.extend(["(no uncertain relation present in request)", ""])
 
     lines.append("## Confident support context")
     if confident_relations:
