@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
 
 from thorn.frontend import FrontendFile, ParsedProject, SourceSpan
 from thorn.linguistic_declarations import (
@@ -131,7 +130,10 @@ def _has_substantive_payload(
     characters = list(projection.text[payload.start_offset : payload.end_offset])
     syntax_starts: list[int] = []
     for macro in file.macros:
-        if macro.span.end_offset <= payload.start_offset or payload.end_offset <= macro.span.start_offset:
+        if (
+            macro.span.end_offset <= payload.start_offset
+            or payload.end_offset <= macro.span.start_offset
+        ):
             continue
         if projection.token_containing(
             macro.span.start_offset,
@@ -307,13 +309,13 @@ def _use_candidates(
                 own_term = owner.candidate.term_source
                 if start < own_term.end_offset and own_term.start_offset < end:
                     continue
-                position = _position_for_occurrence(
+                occurrence_position = _position_for_occurrence(
                     lookup,
                     file=source.file,
                     offset=start,
                     occurrence_id=owner.position.occurrence_id,
                 )
-                if position is None:
+                if occurrence_position is None:
                     continue
                 candidates.append(
                     _UseCandidate(
@@ -321,7 +323,7 @@ def _use_candidates(
                         file=source.file,
                         start=start,
                         end=end,
-                        position=position,
+                        position=occurrence_position,
                         result_identifier=None,
                         scope_kind=ScopeKind.PROJECT,
                         owner_identifier=owner.identifier,
@@ -574,6 +576,7 @@ def add_project_semantic_context(
         if use_key in existing_uses:
             continue
 
+        resolved_scope_identifier: str | None
         if candidate.result_identifier is None:
             resolved_scope_identifier = "project"
         else:
