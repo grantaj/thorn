@@ -16,6 +16,7 @@ from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
 from thorn.semantic_dependencies import (
     close_project_symbol_dependencies,
+    dependency_node_sort_key,
     result_project_symbol_dependency_ids,
     semantic_symbol_sort_key,
 )
@@ -298,7 +299,7 @@ def _select_symbol_context(
 
     symbols = sorted(
         (symbol for symbol in table.symbols if symbol.identifier in selected_ids),
-        key=lambda symbol: (*semantic_symbol_sort_key(project, symbol), symbol.identifier),
+        key=lambda symbol: semantic_symbol_sort_key(project, symbol),
     )
     definitions = sorted(
         (
@@ -354,12 +355,12 @@ def _select_dependencies(
         and edge.resolution == DependencyResolution.RESOLVED
         and edge.target_identifier is not None
     }
-    # DependencyGraph node order is already normalized workspace order.
-    return [
+    nodes = [
         node
         for node in project.dependency_graph.nodes
         if node.identifier in identifiers
     ]
+    return sorted(nodes, key=lambda node: dependency_node_sort_key(project, node))
 
 
 def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
