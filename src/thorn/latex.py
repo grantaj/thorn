@@ -324,9 +324,11 @@ def extract_project(
         symbol_table=extract_symbol_table(
             parsed,
             regions,
+            workspace=workspace,
             linguistic_frontend=linguistic_frontend,
         ),
         proof_support_graph=support_graph,
+        workspace=workspace,
     )
 
 
