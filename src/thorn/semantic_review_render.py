@@ -212,12 +212,12 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
 
     if targeted:
         selection_explanation = (
-            "Relations under diagnostic escalation are the reason this targeted view was "
-            "selected. CONFIDENT relations are interpretation context only; they are not "
-            "assertions that the mathematics is correct."
+            "Relations under semantic escalation are the reason this targeted view was selected. "
+            "CONFIDENT relations are interpretation context only; they are not assertions that the "
+            "mathematics is correct."
         )
-        trigger_heading = "## Relations that caused diagnostic escalation"
-        trigger_role = "diagnostic escalation reason"
+        trigger_heading = "## Relations that caused semantic escalation"
+        trigger_role = "semantic escalation reason"
     else:
         selection_explanation = (
             "This is the canonical result-level review view. AMBIGUOUS and UNRESOLVED relations "
