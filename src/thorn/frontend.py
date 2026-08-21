@@ -23,6 +23,7 @@ class FrontendRegionKind(StrEnum):
     """
 
     PREAMBLE = "preamble"
+    NON_DOCUMENT = "non_document"
     DOCUMENT_TEXT = "document_text"
     COMMENT = "comment"
     VERBATIM = "verbatim"
@@ -107,6 +108,28 @@ class FrontendFile(BaseModel):
     environments: list[FrontendEnvironment] = Field(default_factory=list)
     math: list[FrontendMath] = Field(default_factory=list)
     regions: list[FrontendRegion] = Field(default_factory=list)
+    regions_complete: bool = False
+
+    def span(self, start: int, end: int) -> SourceSpan:
+        """Construct an exact span without duplicating line/column arithmetic."""
+
+        if start < 0 or end < start or end > len(self.raw):
+            raise ValueError(f"invalid source span [{start}, {end}) for {self.path!r}")
+        start_line = self.raw.count("\n", 0, start) + 1
+        start_newline = self.raw.rfind("\n", 0, start)
+        start_column = start + 1 if start_newline < 0 else start - start_newline
+        end_line = self.raw.count("\n", 0, end) + 1
+        end_newline = self.raw.rfind("\n", 0, end)
+        end_column = end + 1 if end_newline < 0 else end - end_newline
+        return SourceSpan(
+            file=self.path,
+            start_offset=start,
+            end_offset=end,
+            start_line=start_line,
+            start_column=start_column,
+            end_line=end_line,
+            end_column=end_column,
+        )
 
 
 class FrontendDiagnostic(BaseModel):
