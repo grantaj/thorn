@@ -11,9 +11,12 @@ from thorn.frontend import (
     FrontendFile,
     FrontendMacro,
     FrontendMath,
+    FrontendRegion,
+    FrontendRegionKind,
     ParsedProject,
     SourceSpan,
 )
+from thorn.frontend_regions import build_frontend_regions
 
 _ONE_ARGUMENT_MACROS = {
     "Cref",
@@ -174,12 +177,25 @@ def _parse_macro(
     )
 
 
-def _scan_macros(path: Path, text: str) -> list[FrontendMacro]:
+def _scan_macros(
+    path: Path,
+    text: str,
+) -> tuple[list[FrontendMacro], list[FrontendRegion]]:
+    """Scan compatibility macros and record comments in the same source pass."""
+
     macros: list[FrontendMacro] = []
+    comments: list[FrontendRegion] = []
     index = 0
     while index < len(text):
         if text[index] == "%" and not _is_escaped(text, index):
             newline = text.find("\n", index)
+            end = len(text) if newline < 0 else newline
+            comments.append(
+                FrontendRegion(
+                    kind=FrontendRegionKind.COMMENT,
+                    span=_span(path, text, index, end),
+                )
+            )
             index = len(text) if newline < 0 else newline + 1
             continue
         if text[index] == "\\":
@@ -188,7 +204,7 @@ def _scan_macros(path: Path, text: str) -> list[FrontendMacro]:
             index = max(next_index, index + 1)
             continue
         index += 1
-    return macros
+    return macros, comments
 
 
 def _environment_name(macro: FrontendMacro) -> str | None:
@@ -333,15 +349,24 @@ def _scan_math(path: Path, text: str) -> list[FrontendMath]:
 
 def _parse_file(path: Path) -> tuple[FrontendFile, list[FrontendDiagnostic]]:
     text = path.read_text(encoding="utf-8")
-    macros = _scan_macros(path, text)
+    macros, comment_regions = _scan_macros(path, text)
     environments, diagnostics = _scan_environments(path, text, macros)
+    file = FrontendFile(
+        path=str(path),
+        raw=text,
+        macros=macros,
+        environments=environments,
+        math=_scan_math(path, text),
+    )
     return (
-        FrontendFile(
-            path=str(path),
-            raw=text,
-            macros=macros,
-            environments=environments,
-            math=_scan_math(path, text),
+        file.model_copy(
+            update={
+                "regions": build_frontend_regions(
+                    file,
+                    explicit_regions=comment_regions,
+                ),
+                "regions_complete": True,
+            }
         ),
         diagnostics,
     )
