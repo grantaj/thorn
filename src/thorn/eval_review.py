@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from thorn.dependencies import DependencyNode, ExtractedProject
 from thorn.evidence import InferenceStatus
-from thorn.frontend import SourceSpan
 from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
     dependency_node_sort_key,
