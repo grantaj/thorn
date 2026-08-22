@@ -16,15 +16,16 @@ evaluation, and the final #161 Slice G production/default decision.
 | `tree-sitter` | preferred source-structure backend and mandatory differential lane when installed | no; packaging blocker |
 | `pylatexenc` | independent parser/conformance backend | no |
 
-The code makes this distinction explicit through:
+The runtime default is single-sourced through:
 
 ```text
-DEFAULT_FRONTEND_NAME   = regex
-PREFERRED_FRONTEND_NAME = tree-sitter
+DEFAULT_FRONTEND_NAME = regex
 ```
 
 `current` resolves through `DEFAULT_FRONTEND_NAME`; `latex.extract_project()` uses the
-same default selector rather than hard-coding a second choice.
+same default selector rather than hard-coding a second choice. Tree-sitter's preferred
+role is an evidence-backed architecture disposition documented here, not a second
+runtime setting that could drift independently.
 
 ## Why Tree-sitter is preferred
 
