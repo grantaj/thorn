@@ -77,14 +77,16 @@ or mathematical placeholders.
 
 ### Backend/default disposition
 
-Slice G makes the distinction explicit in `thorn.frontends`:
+The actual runtime default is explicit and single-sourced in `thorn.frontends`:
 
-- `DEFAULT_FRONTEND_NAME = "regex"`;
-- `PREFERRED_FRONTEND_NAME = "tree-sitter"`.
+```text
+DEFAULT_FRONTEND_NAME = "regex"
+```
 
 Tree-sitter is the preferred source-structure substrate on the empirical evidence from
-#158 and the completed #162 contracts. It is **not** the production default yet because
-the pinned `tree-sitter-latex` grammar still lacks a frictionless reproducible normal
+#158 and the completed #162 contracts. That preference is an architecture disposition,
+not a second runtime setting. It is **not** the production default yet because the
+pinned `tree-sitter-latex` grammar still lacks a frictionless reproducible normal
 installation path: the evaluated revision requires source checkout, parser generation
 with Node/tree-sitter-cli, and a local build. `thorn-math[treesitter]` therefore installs
 the Python runtime but cannot by itself establish the exact evaluated grammar runtime.
