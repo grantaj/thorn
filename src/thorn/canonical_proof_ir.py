@@ -270,26 +270,6 @@ def canonicalize_mathematical_text(text: str) -> str | None:
     return None
 
 
-def _span_key(span: SourceSpan) -> tuple[str, int, int, str]:
-    return (span.file, span.start_offset, span.end_offset, "")
-
-
-def _claim_key(claim: Claim) -> tuple[str, int, int, str]:
-    return (*_span_key(claim.source)[:3], claim.identifier)
-
-
-def _constraint_key(constraint: Constraint) -> tuple[str, int, int, str]:
-    return (*_span_key(constraint.source)[:3], constraint.identifier)
-
-
-def _definition_key(definition: Definition) -> tuple[str, int, int, str]:
-    return (*_span_key(definition.source)[:3], definition.identifier)
-
-
-def _edge_key(edge: SupportEdge) -> tuple[str, int, int, str]:
-    return (*_span_key(edge.source)[:3], edge.identifier)
-
-
 def _status_marker(status: InferenceStatus) -> str:
     if status == InferenceStatus.AMBIGUOUS:
         return "?"
@@ -435,7 +415,11 @@ def build_canonical_proof_ir(
     unit: TheoremUnit,
     request: SemanticReviewRequest,
 ) -> CanonicalProofIR:
-    """Build a proof slice, remove narration, and retain irreducible proof prose."""
+    """Build a proof slice while preserving the review selector's canonical order.
+
+    Project/workspace order is established before this projection. Canonical Proof IR
+    owns address assignment, not a competing physical-file ordering policy.
+    """
 
     item = request.item
     if item.result.identifier != unit.identifier:
@@ -471,9 +455,7 @@ def build_canonical_proof_ir(
         )
     )
 
-    for index, hypothesis in enumerate(
-        sorted(item.hypotheses, key=_constraint_key), start=1
-    ):
+    for index, hypothesis in enumerate(item.hypotheses, start=1):
         address = f"H{index}"
         nodes.append(
             CanonicalProofNode(
@@ -491,9 +473,7 @@ def build_canonical_proof_ir(
             )
         )
 
-    for index, constraint in enumerate(
-        sorted(item.local_constraints, key=_constraint_key), start=1
-    ):
+    for index, constraint in enumerate(item.local_constraints, start=1):
         address = f"L{index}"
         nodes.append(
             CanonicalProofNode(
@@ -511,9 +491,7 @@ def build_canonical_proof_ir(
             )
         )
 
-    for index, definition in enumerate(
-        sorted(item.definitions, key=_definition_key), start=1
-    ):
+    for index, definition in enumerate(item.definitions, start=1):
         address = f"D{index}"
         nodes.append(
             CanonicalProofNode(
@@ -531,8 +509,8 @@ def build_canonical_proof_ir(
             )
         )
 
-    claims = sorted(item.claims, key=_claim_key)
-    support_edges = sorted(item.support_relations, key=_edge_key)
+    claims = item.claims
+    support_edges = item.support_relations
     core_ids = _core_slice_claim_identifiers(claims, support_edges)
     math_context_ids = {
         claim.identifier
@@ -551,20 +529,10 @@ def build_canonical_proof_ir(
         )
     ]
 
-    # SemanticReviewItem has already bounded direct dependencies for this
-    # review target. Preserve that dependency-driven closure here, including
-    # assumptions/results referenced by the theorem statement itself. Filtering
-    # again by proof-body support edges made load-bearing statement assumptions
-    # disappear and, worse, removed their source-rescue addresses.
-    dependencies = sorted(
-        item.dependencies,
-        key=lambda dependency: (
-            dependency.source.file,
-            dependency.source.start_line,
-            dependency.source.end_line,
-            dependency.identifier,
-        ),
-    )
+    # SemanticReviewItem has already bounded and canonically ordered direct
+    # dependencies for this review target. Preserve that dependency-driven closure
+    # here, including assumptions/results referenced by the theorem statement itself.
+    dependencies = item.dependencies
     dependency_labels: dict[str, str] = {}
     for index, dependency in enumerate(dependencies, start=1):
         address = f"R{index}"

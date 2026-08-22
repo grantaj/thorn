@@ -16,7 +16,9 @@ from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
 from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
+    ProjectSourceSortKey,
     dependency_node_sort_key,
+    project_source_sort_key,
     result_project_symbol_dependency_ids,
 )
 from thorn.support import Claim, SupportEdge
@@ -105,22 +107,18 @@ def _edge_claim_ids(edge: SupportEdge) -> set[str]:
     return identifiers
 
 
-def _edge_sort_key(edge: SupportEdge) -> tuple[str, int, int, str]:
-    return (
-        edge.source.file,
-        edge.source.start_offset,
-        edge.source.end_offset,
-        edge.identifier,
-    )
+def _edge_sort_key(
+    project: ExtractedProject,
+    edge: SupportEdge,
+) -> ProjectSourceSortKey:
+    return project_source_sort_key(project, edge.source, edge.identifier)
 
 
-def _claim_sort_key(claim: Claim) -> tuple[str, int, int, str]:
-    return (
-        claim.source.file,
-        claim.source.start_offset,
-        claim.source.end_offset,
-        claim.identifier,
-    )
+def _claim_sort_key(
+    project: ExtractedProject,
+    claim: Claim,
+) -> ProjectSourceSortKey:
+    return project_source_sort_key(project, claim.source, claim.identifier)
 
 
 def _trigger_edges(project: ExtractedProject) -> list[SupportEdge]:
@@ -130,7 +128,7 @@ def _trigger_edges(project: ExtractedProject) -> list[SupportEdge]:
             for edge in project.proof_support_graph.edges
             if edge.status in {InferenceStatus.AMBIGUOUS, InferenceStatus.UNRESOLVED}
         ),
-        key=_edge_sort_key,
+        key=lambda edge: _edge_sort_key(project, edge),
     )
 
 
@@ -171,7 +169,7 @@ def _group_trigger_edges(
     graph = project.proof_support_graph
     result_claims = sorted(
         graph.claims_for_result(result_identifier),
-        key=_claim_sort_key,
+        key=lambda claim: _claim_sort_key(project, claim),
     )
     claim_order = {claim.identifier: index for index, claim in enumerate(result_claims)}
     result_claim_ids = set(claim_order)
@@ -209,9 +207,14 @@ def _group_trigger_edges(
                 remaining.remove(neighbour)
                 component.add(neighbour)
                 pending.append(neighbour)
-        groups.append(sorted((edges[index] for index in component), key=_edge_sort_key))
+        groups.append(
+            sorted(
+                (edges[index] for index in component),
+                key=lambda edge: _edge_sort_key(project, edge),
+            )
+        )
 
-    return sorted(groups, key=lambda group: _edge_sort_key(group[0]))
+    return sorted(groups, key=lambda group: _edge_sort_key(project, group[0]))
 
 
 def _relevant_spans(
@@ -306,7 +309,10 @@ def _select_dependencies(
     return sorted(nodes, key=lambda node: dependency_node_sort_key(project, node))
 
 
-def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
+def _nearby_context(
+    project: ExtractedProject,
+    relations: list[SupportEdge],
+) -> list[ReviewSourceContext]:
     contexts: dict[
         tuple[str, tuple[str, int, int, int, int, int, int]], ReviewSourceContext
     ] = {}
@@ -317,10 +323,19 @@ def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
                 continue
             key = (text, span_key(evidence.source))
             contexts[key] = ReviewSourceContext(text=text, source=evidence.source)
-    return [contexts[key] for key in sorted(contexts)]
+    return sorted(
+        contexts.values(),
+        key=lambda context: project_source_sort_key(
+            project,
+            context.source,
+            context.text,
+        ),
+    )
 
 
 def _item_identifier(result_identifier: str, trigger_edges: list[SupportEdge]) -> str:
+    # Identity is intentionally order-insensitive: presentation order must not
+    # create a distinct review item for the same trigger set.
     trigger_ids = sorted(edge.identifier for edge in trigger_edges)
     payload = "\0".join([result_identifier, *trigger_ids]).encode()
     digest = hashlib.sha256(payload).hexdigest()[:16]
@@ -338,7 +353,7 @@ def _build_item(
         core_claim_ids.update(_edge_claim_ids(edge))
     claims = sorted(
         (claim for claim in graph.claims if claim.identifier in core_claim_ids),
-        key=_claim_sort_key,
+        key=lambda claim: _claim_sort_key(project, claim),
     )
 
     contextual_relations = [
@@ -354,7 +369,10 @@ def _build_item(
     relations_by_id = {
         edge.identifier: edge for edge in [*trigger_edges, *contextual_relations]
     }
-    relations = sorted(relations_by_id.values(), key=_edge_sort_key)
+    relations = sorted(
+        relations_by_id.values(),
+        key=lambda edge: _edge_sort_key(project, edge),
+    )
     spans = _relevant_spans(claims, relations)
     symbol_context = _select_symbol_context(project, result_identifier, spans)
 
@@ -368,7 +386,7 @@ def _build_item(
         target_kind=ReviewTargetKind.SUPPORT_RELATION,
         result=result,
         claims=claims,
-        trigger_relation_identifiers=sorted(edge.identifier for edge in trigger_edges),
+        trigger_relation_identifiers=[edge.identifier for edge in trigger_edges],
         support_relations=relations,
         hypotheses=symbol_context.hypotheses,
         local_constraints=symbol_context.local_constraints,
@@ -376,7 +394,7 @@ def _build_item(
         definitions=symbol_context.definitions,
         symbol_candidates=symbol_context.candidates,
         dependencies=_select_dependencies(project, result_identifier, relations),
-        nearby_context=_nearby_context(trigger_edges),
+        nearby_context=_nearby_context(project, trigger_edges),
     )
 
 

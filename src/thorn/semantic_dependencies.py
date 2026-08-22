@@ -7,7 +7,19 @@ from thorn.frontend import SourceSpan
 from thorn.symbols import ScopeKind, Symbol
 from thorn.workspace import ProjectPositionLookup
 
-SemanticSymbolSortKey = tuple[int, tuple[int, ...], str, int, int, str]
+ProjectSourceSortKey = tuple[
+    int,
+    tuple[int, ...],
+    str,
+    int,
+    int,
+    int,
+    int,
+    int,
+    int,
+    str,
+]
+SemanticSymbolSortKey = ProjectSourceSortKey
 DependencyNodeSortKey = tuple[int, int, str, int, int, str]
 
 
@@ -19,11 +31,18 @@ def _span_contains(outer: SourceSpan, inner: SourceSpan) -> bool:
     )
 
 
-def semantic_symbol_sort_key(
+def project_source_sort_key(
     project: ExtractedProject,
-    symbol: Symbol,
-) -> SemanticSymbolSortKey:
-    """Order a canonical symbol by workspace position, then stable provenance."""
+    span: SourceSpan,
+    stable_identifier: str = "",
+) -> ProjectSourceSortKey:
+    """Order source-backed IR by expanded workspace position when available.
+
+    The exact physical source provenance remains a deterministic tie-break and is
+    the fallback for synthetic/no-workspace projects. Source-backed IR does not
+    invent occurrence identity: repeated physical files retain the established
+    earliest-occurrence collapse used by ``ProjectPositionLookup.sort_key``.
+    """
 
     workspace = project.workspace
     if workspace is not None:
@@ -31,13 +50,17 @@ def semantic_symbol_sort_key(
             return (
                 0,
                 ProjectPositionLookup(workspace).sort_key(
-                    symbol.source.file,
-                    symbol.source.start_offset,
+                    span.file,
+                    span.start_offset,
                 ),
-                symbol.source.file,
-                symbol.source.start_offset,
-                symbol.source.end_offset,
-                symbol.identifier,
+                span.file,
+                span.start_offset,
+                span.end_offset,
+                span.start_line,
+                span.start_column,
+                span.end_line,
+                span.end_column,
+                stable_identifier,
             )
         except KeyError:
             pass
@@ -45,11 +68,24 @@ def semantic_symbol_sort_key(
     return (
         1,
         (),
-        symbol.source.file,
-        symbol.source.start_offset,
-        symbol.source.end_offset,
-        symbol.identifier,
+        span.file,
+        span.start_offset,
+        span.end_offset,
+        span.start_line,
+        span.start_column,
+        span.end_line,
+        span.end_column,
+        stable_identifier,
     )
+
+
+def semantic_symbol_sort_key(
+    project: ExtractedProject,
+    symbol: Symbol,
+) -> SemanticSymbolSortKey:
+    """Order a canonical symbol by workspace position, then stable provenance."""
+
+    return project_source_sort_key(project, symbol.source, symbol.identifier)
 
 
 def dependency_node_sort_key(

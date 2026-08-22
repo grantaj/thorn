@@ -7,6 +7,7 @@ from thorn.dependencies import ExtractedProject
 from thorn.frontend import SourceSpan
 from thorn.semantic_dependencies import (
     close_project_symbol_dependencies,
+    project_source_sort_key,
     semantic_symbol_sort_key,
 )
 from thorn.symbols import (
@@ -30,6 +31,8 @@ class SelectedSymbolContext:
 
 
 def span_key(span: SourceSpan) -> tuple[str, int, int, int, int, int, int]:
+    """Exact physical provenance key for identity/deduplication, not project order."""
+
     return (
         span.file,
         span.start_offset,
@@ -67,7 +70,11 @@ def select_symbol_context(
             for definition in table.definitions
             if definition.symbol_identifier in selected_ids
         ),
-        key=lambda definition: (*span_key(definition.source), definition.identifier),
+        key=lambda definition: project_source_sort_key(
+            project,
+            definition.source,
+            definition.identifier,
+        ),
     )
 
     symbol_by_id = {symbol.identifier: symbol for symbol in symbols}
@@ -82,12 +89,20 @@ def select_symbol_context(
             hypotheses.append(constraint)
         else:
             local_constraints.append(constraint)
-    hypotheses.sort(key=lambda item: (*span_key(item.source), item.identifier))
-    local_constraints.sort(key=lambda item: (*span_key(item.source), item.identifier))
+    hypotheses.sort(
+        key=lambda item: project_source_sort_key(project, item.source, item.identifier)
+    )
+    local_constraints.sort(
+        key=lambda item: project_source_sort_key(project, item.source, item.identifier)
+    )
 
     selected_candidates = sorted(
         candidates,
-        key=lambda candidate: (*span_key(candidate.source), candidate.identifier),
+        key=lambda candidate: project_source_sort_key(
+            project,
+            candidate.source,
+            candidate.identifier,
+        ),
     )
     return SelectedSymbolContext(
         hypotheses=hypotheses,

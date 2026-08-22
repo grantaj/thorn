@@ -4,17 +4,12 @@ import json
 
 from pydantic import BaseModel
 
-from thorn.dependencies import DependencyNode
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import SourceSpan
 from thorn.models import SourceRange
-from thorn.semantic_review import (
-    ReviewSourceContext,
-    ReviewTargetKind,
-    SemanticReviewItem,
-)
-from thorn.support import Claim, ClaimQualifier, SupportEdge
-from thorn.symbols import Constraint, Definition, Symbol, SymbolIntroductionCandidate
+from thorn.semantic_review import ReviewTargetKind, SemanticReviewItem
+from thorn.support import Claim, SupportEdge
+from thorn.symbols import Constraint
 
 
 class SemanticReviewRequest(BaseModel):
@@ -42,22 +37,6 @@ def build_semantic_review_request(item: SemanticReviewItem) -> SemanticReviewReq
     return SemanticReviewRequest(item=item.model_copy(deep=True))
 
 
-def _span_key(span: SourceSpan) -> tuple[str, int, int, int, int, int, int]:
-    return (
-        span.file,
-        span.start_offset,
-        span.end_offset,
-        span.start_line,
-        span.start_column,
-        span.end_line,
-        span.end_column,
-    )
-
-
-def _range_key(source: SourceRange) -> tuple[str, int, int]:
-    return source.file, source.start_line, source.end_line
-
-
 def _format_span(span: SourceSpan) -> str:
     return (
         f"{span.file}:{span.start_line}:{span.start_column}-"
@@ -70,61 +49,12 @@ def _format_range(source: SourceRange) -> str:
     return f"{source.file}:{source.start_line}-{source.end_line}"
 
 
-def _evidence_sort_key(
-    item: StructuralEvidence,
-) -> tuple[str, int, int, int, int, int, int, str, int, int, int, int, int, int, str, str]:
-    target = _span_key(item.target) if item.target is not None else ("", 0, 0, 0, 0, 0, 0)
-    return (*_span_key(item.source), *target, item.reason, item.context)
-
-
-def _claim_sort_key(item: Claim) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(item.source), item.identifier)
-
-
-def _qualifier_sort_key(
-    item: ClaimQualifier,
-) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(item.source), item.identifier)
-
-
-def _relation_sort_key(item: SupportEdge) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(item.source), item.identifier)
-
-
-def _constraint_sort_key(item: Constraint) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(item.source), item.identifier)
-
-
-def _definition_sort_key(item: Definition) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(item.source), item.identifier)
-
-
-def _symbol_sort_key(item: Symbol) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(item.source), item.identifier)
-
-
-def _candidate_sort_key(
-    item: SymbolIntroductionCandidate,
-) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(item.source), item.identifier)
-
-
-def _dependency_sort_key(item: DependencyNode) -> tuple[str, int, int, str]:
-    return (*_range_key(item.source), item.identifier)
-
-
-def _context_sort_key(
-    item: ReviewSourceContext,
-) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*_span_key(item.source), item.text)
-
-
 def _append_evidence(lines: list[str], evidence: list[StructuralEvidence]) -> None:
     if not evidence:
         lines.append("Evidence: (none retained)")
         return
     lines.append("Evidence:")
-    for item in sorted(evidence, key=_evidence_sort_key):
+    for item in evidence:
         lines.append(f"- Reason: {item.reason}")
         lines.append(f"  Source: {_format_span(item.source)}")
         lines.append(
@@ -164,10 +94,9 @@ def _append_claim(lines: list[str], claim: Claim) -> None:
     lines.append(f"Source: {_format_span(claim.source)}")
     lines.append("Exact wording:")
     lines.append(claim.raw)
-    qualifiers = sorted(claim.qualifiers, key=_qualifier_sort_key)
-    if qualifiers:
+    if claim.qualifiers:
         lines.append("Qualifiers:")
-        for qualifier in qualifiers:
+        for qualifier in claim.qualifiers:
             lines.append(f"- ID: {qualifier.identifier}")
             lines.append(f"  Kind: {qualifier.kind.value}")
             lines.append(f"  Status: {qualifier.status.value.upper()}")
@@ -181,7 +110,7 @@ def _append_constraints(lines: list[str], constraints: list[Constraint], *, noun
         lines.append(f"(no {noun} selected)")
         lines.append("")
         return
-    for item in sorted(constraints, key=_constraint_sort_key):
+    for item in constraints:
         lines.append(f"- {noun.title()} ID: {item.identifier}")
         lines.append(f"  Symbol ID: {item.symbol_identifier}")
         lines.append(f"  Relation: {item.relation} {item.expression_latex}")
@@ -191,24 +120,25 @@ def _append_constraints(lines: list[str], constraints: list[Constraint], *, noun
 
 
 def render_semantic_review_request(request: SemanticReviewRequest) -> str:
-    """Render one semantic request deterministically for a mathematical reviewer."""
+    """Render one semantic request deterministically for a mathematical reviewer.
+
+    The review selector owns collection ordering. This rendering boundary preserves
+    that canonical order rather than inventing a physical-filename order that can
+    disagree with expanded workspace/manuscript order.
+    """
 
     item = request.item
     targeted = item.target_kind == ReviewTargetKind.SUPPORT_RELATION
     trigger_ids = set(item.trigger_relation_identifiers)
-    trigger_relations = sorted(
-        (relation for relation in item.support_relations if relation.identifier in trigger_ids),
-        key=_relation_sort_key,
-    )
-    confident_relations = sorted(
-        (
-            relation
-            for relation in item.support_relations
-            if relation.identifier not in trigger_ids
-            and relation.status == InferenceStatus.CONFIDENT
-        ),
-        key=_relation_sort_key,
-    )
+    trigger_relations = [
+        relation for relation in item.support_relations if relation.identifier in trigger_ids
+    ]
+    confident_relations = [
+        relation
+        for relation in item.support_relations
+        if relation.identifier not in trigger_ids
+        and relation.status == InferenceStatus.CONFIDENT
+    ]
 
     if targeted:
         selection_explanation = (
@@ -258,9 +188,8 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
         "## Audited claims",
     ]
 
-    claims = sorted(item.claims, key=_claim_sort_key)
-    if claims:
-        for claim in claims:
+    if item.claims:
+        for claim in item.claims:
             _append_claim(lines, claim)
     else:
         lines.extend(["(no claims selected)", ""])
@@ -286,9 +215,8 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
     _append_constraints(lines, item.local_constraints, noun="local constraint")
 
     lines.append("## Relevant definitions")
-    definitions = sorted(item.definitions, key=_definition_sort_key)
-    if definitions:
-        for definition in definitions:
+    if item.definitions:
+        for definition in item.definitions:
             lines.append(f"- Definition ID: {definition.identifier}")
             lines.append(f"  Symbol ID: {definition.symbol_identifier}")
             lines.append(f"  Operator: {definition.operator}")
@@ -300,9 +228,8 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
     lines.append("")
 
     lines.append("## Relevant symbols")
-    symbols = sorted(item.symbols, key=_symbol_sort_key)
-    if symbols:
-        for symbol in symbols:
+    if item.symbols:
+        for symbol in item.symbols:
             lines.append(f"- Symbol ID: {symbol.identifier}")
             lines.append(f"  Name: {symbol.name}")
             lines.append(f"  Role: {symbol.role.value}")
@@ -315,13 +242,12 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
     lines.append("")
 
     lines.append("## Uncertain symbol candidates supplied as context only")
-    candidates = sorted(item.symbol_candidates, key=_candidate_sort_key)
-    if candidates:
+    if item.symbol_candidates:
         lines.append(
             "These candidates did not trigger semantic review; they are retained only to help "
             "interpret nearby notation."
         )
-        for candidate in candidates:
+        for candidate in item.symbol_candidates:
             lines.append(f"- Candidate ID: {candidate.identifier}")
             lines.append(f"  Name: {candidate.name}")
             lines.append(f"  Kind: {candidate.kind.value}")
@@ -335,9 +261,8 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
     lines.append("")
 
     lines.append("## Relevant result dependencies")
-    dependencies = sorted(item.dependencies, key=_dependency_sort_key)
-    if dependencies:
-        for dependency in dependencies:
+    if item.dependencies:
+        for dependency in item.dependencies:
             lines.append(f"- Dependency ID: {dependency.identifier}")
             lines.append(f"  Environment: {dependency.environment}")
             lines.append(f"  Label: {dependency.label or '(none)'}")
@@ -348,9 +273,8 @@ def render_semantic_review_request(request: SemanticReviewRequest) -> str:
     lines.append("")
 
     lines.append("## Nearby source wording retained by the deterministic front-end")
-    contexts = sorted(item.nearby_context, key=_context_sort_key)
-    if contexts:
-        for context in contexts:
+    if item.nearby_context:
+        for context in item.nearby_context:
             lines.append(f"- Source: {_format_span(context.source)}")
             lines.append(f"  Wording: {context.text}")
     else:
