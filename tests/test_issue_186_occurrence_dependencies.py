@@ -175,11 +175,13 @@ The conclusion follows from Lemma~\ref{lem:unique}.
         assert len(dependency.target_occurrence_ids) == 1
 
     assert project.workspace is not None
-    expected_source_occurrences = [
-        fact.occurrence_id
-        for fact in project.workspace.references
-        if fact.name == "lem:unique"
-    ]
+    expected_source_occurrences = list(
+        dict.fromkeys(
+            fact.occurrence_id
+            for fact in project.workspace.references
+            if fact.name == "lem:unique"
+        )
+    )
     assert dependencies[0].source_occurrence_ids == expected_source_occurrences
     assert dependencies[1].source_occurrence_ids == expected_source_occurrences
     assert project.dependency_graph.direct_dependency_ids("thm:repeated") == ["lem:unique"]
