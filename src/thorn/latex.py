@@ -43,7 +43,6 @@ _DEFAULT_THEOREM_ENVS = {
     "claim",
 }
 _REF_MACROS = {"ref", "eqref", "autoref", "cref", "Cref"}
-_DEFAULT_FRONTEND = get_default_frontend()
 
 
 def _theorem_envs(project: FrontendProject) -> set[str]:
@@ -208,7 +207,7 @@ def extract_project(
     Thorn-owned above both parser boundaries.
     """
 
-    parser = frontend or _DEFAULT_FRONTEND
+    parser = frontend or get_default_frontend()
     parsed = normalize_project_structure(parser.parse_project(main_file))
     _raise_project_partiality_diagnostic(parsed)
     _raise_missing_file_diagnostic(parsed)
