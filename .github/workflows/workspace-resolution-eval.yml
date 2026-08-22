@@ -42,3 +42,79 @@ jobs:
         with:
           name: workspace-resolution-evidence
           path: workspace-evidence.json
+
+  issue-183-historical-differential:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+      TREE_SITTER_LATEX_REVISION: fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
+      - name: Build historical evaluated grammar exactly as in #158
+        run: |
+          git clone --filter=blob:none https://github.com/latex-lsp/tree-sitter-latex.git /tmp/tree-sitter-latex
+          git -C /tmp/tree-sitter-latex checkout "$TREE_SITTER_LATEX_REVISION"
+          (cd /tmp/tree-sitter-latex && npx --yes tree-sitter-cli@0.24.7 generate)
+          python -m pip install /tmp/tree-sitter-latex
+      - name: Re-run the two full-gate failures with historical grammar
+        run: |
+          PYTHONPATH=tests python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          import tree_sitter_latex
+          from tree_sitter import Language, Parser
+          from declaration_contract_frontend import DeclarationContractFrontend
+          from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
+          from thorn.latex import extract_project
+          from thorn.review_workflow import prepare_proof_review
+
+          def historical_frontend():
+              frontend = object.__new__(TreeSitterLatexFrontend)
+              frontend._parser = Parser(Language(tree_sitter_latex.language()))
+              return frontend
+
+          a2 = Path("eval/robustness/issue_101/variant_prose_uniformity.tex").resolve()
+          project = extract_project(a2, frontend=historical_frontend(), linguistic_frontend=DeclarationContractFrontend())
+          prepared = prepare_proof_review(project, project.unit("thm:uniform-decay"))
+          texts = [source.text for source in prepared.document.sources]
+          a2_ok = sum("will be called \\emph{stable}" in text for text in texts) == 1 and sum("Throughout, the observation window is" in text for text in texts) == 1
+          print("historical A2 semantic context:", "PASS" if a2_ok else "FAIL")
+          if not a2_ok:
+              print("source texts:", *map(repr, texts), sep="\n")
+
+          with TemporaryDirectory() as tmp:
+              tex = Path(tmp) / "macro-definition.tex"
+              tex.write_text(r'''\documentclass{article}
+\usepackage{amsthm}
+\newcommand{\meaningop}{\stackrel{\text{\tiny def}}{=}}
+\newcommand{\noteop}{\stackrel{\text{\tiny note}}{=}}
+\newtheorem{proposition}{Proposition}
+\begin{document}
+\begin{equation}
+A_{\tau} \meaningop F(\tau^2)
+\end{equation}
+\begin{equation}
+B_{\tau} \noteop G(\tau^2)
+\end{equation}
+\begin{proposition}\label{prop:main}
+$A_\tau$ has property $Q$.
+\end{proposition}
+\begin{proof}
+\[
+Q(A_\tau)
+\]
+\end{proof}
+\end{document}
+''', encoding="utf-8")
+              project = extract_project(tex, frontend=historical_frontend())
+              symbols = [s.name for s in project.symbol_table.symbols if s.result_identifier is None]
+              macro_ok = symbols == [r"A_\tau"]
+              print("historical local definitional operator:", "PASS" if macro_ok else "FAIL", symbols)
+
+          assert a2_ok and macro_ok
+          PY
