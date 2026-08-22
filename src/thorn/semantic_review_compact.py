@@ -3,25 +3,7 @@ from __future__ import annotations
 from thorn.evidence import InferenceStatus
 from thorn.semantic_review import ReviewTargetKind
 from thorn.semantic_review_render import SemanticReviewRequest
-from thorn.support import Claim, SupportEdge
-
-
-def _claim_key(claim: Claim) -> tuple[str, int, int, str]:
-    return (
-        claim.source.file,
-        claim.source.start_offset,
-        claim.source.end_offset,
-        claim.identifier,
-    )
-
-
-def _relation_key(edge: SupportEdge) -> tuple[str, int, int, str]:
-    return (
-        edge.source.file,
-        edge.source.start_offset,
-        edge.source.end_offset,
-        edge.identifier,
-    )
+from thorn.support import SupportEdge
 
 
 def _compact_text(text: str) -> str:
@@ -34,7 +16,7 @@ def _append_relations(
     *,
     claim_labels: dict[str, str],
 ) -> None:
-    for index, relation in enumerate(sorted(relations, key=_relation_key), start=1):
+    for index, relation in enumerate(relations, start=1):
         source = (
             claim_labels.get(relation.source_claim_identifier, relation.source_claim_identifier)
             if relation.source_claim_identifier is not None
@@ -67,10 +49,14 @@ def render_compact_semantic_review_request(request: SemanticReviewRequest) -> st
     confidence metadata, symbol bookkeeping, and repeated instructions while
     preserving the theorem, proof claims, support structure, explicit constraints,
     definitions, and referenced mathematical results.
+
+    Collection order is inherited from the already-bounded review item. The
+    project-aware review selector owns canonical ordering; this rendering layer
+    must not replace manuscript/workspace order with physical filename order.
     """
 
     item = request.item
-    claims = sorted(item.claims, key=_claim_key)
+    claims = item.claims
     claim_labels = {claim.identifier: f"C{index}" for index, claim in enumerate(claims, start=1)}
     trigger_ids = set(item.trigger_relation_identifiers)
     trigger_relations = [
