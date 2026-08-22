@@ -1,0 +1,105 @@
+name: issue-183-historical-differential
+
+on:
+  push:
+    branches:
+      - issue-183-historical-differential
+  workflow_dispatch:
+
+jobs:
+  compare-historical-grammar:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+      TREE_SITTER_LATEX_REVISION: fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - run: python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
+      - name: Build historical evaluated grammar exactly as in #158
+        run: |
+          git clone --filter=blob:none https://github.com/latex-lsp/tree-sitter-latex.git /tmp/tree-sitter-latex
+          git -C /tmp/tree-sitter-latex checkout "$TREE_SITTER_LATEX_REVISION"
+          (cd /tmp/tree-sitter-latex && npx --yes tree-sitter-cli@0.24.7 generate)
+          python -m pip install /tmp/tree-sitter-latex
+      - name: Re-run the two full-gate failures with historical grammar
+        run: |
+          PYTHONPATH=tests python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          import tree_sitter_latex
+          from tree_sitter import Language, Parser
+
+          from declaration_contract_frontend import DeclarationContractFrontend
+          from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
+          from thorn.latex import extract_project
+          from thorn.review_workflow import prepare_proof_review
+
+          def historical_frontend() -> TreeSitterLatexFrontend:
+              frontend = object.__new__(TreeSitterLatexFrontend)
+              frontend._parser = Parser(Language(tree_sitter_latex.language()))
+              return frontend
+
+          a2 = Path("eval/robustness/issue_101/variant_prose_uniformity.tex").resolve()
+          project = extract_project(
+              a2,
+              frontend=historical_frontend(),
+              linguistic_frontend=DeclarationContractFrontend(),
+          )
+          prepared = prepare_proof_review(project, project.unit("thm:uniform-decay"))
+          source_texts = [source.text for source in prepared.document.sources]
+          stable_matches = [text for text in source_texts if "will be called \\emph{stable}" in text]
+          window_matches = [text for text in source_texts if "Throughout, the observation window is" in text]
+          a2_ok = len(stable_matches) == 1 and len(window_matches) == 1
+          print(f"historical A2 semantic context: {'PASS' if a2_ok else 'FAIL'}")
+          if not a2_ok:
+              print("historical A2 source texts:")
+              for text in source_texts:
+                  print(repr(text))
+
+          with TemporaryDirectory() as tmp:
+              tex = Path(tmp) / "macro-definition.tex"
+              tex.write_text(
+                  r"""\documentclass{article}
+\usepackage{amsthm}
+\newcommand{\meaningop}{\stackrel{\text{\tiny def}}{=}}
+\newcommand{\noteop}{\stackrel{\text{\tiny note}}{=}}
+\newtheorem{proposition}{Proposition}
+\begin{document}
+\begin{equation}
+A_{\tau} \meaningop F(\tau^2)
+\end{equation}
+\begin{equation}
+B_{\tau} \noteop G(\tau^2)
+\end{equation}
+\begin{proposition}\label{prop:main}
+$A_\tau$ has property $Q$.
+\end{proposition}
+\begin{proof}
+\[
+Q(A_\tau)
+\]
+\end{proof}
+\end{document}
+""",
+                  encoding="utf-8",
+              )
+              project = extract_project(tex, frontend=historical_frontend())
+              project_symbols = [
+                  symbol.name
+                  for symbol in project.symbol_table.symbols
+                  if symbol.result_identifier is None
+              ]
+              macro_ok = project_symbols == [r"A_\tau"]
+              print(
+                  "historical local definitional operator: "
+                  f"{'PASS' if macro_ok else 'FAIL'}; symbols={project_symbols!r}"
+              )
+
+          if not (a2_ok and macro_ok):
+              raise SystemExit(1)
+          PY
