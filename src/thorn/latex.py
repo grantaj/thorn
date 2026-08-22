@@ -114,7 +114,6 @@ def _find_proof_after(
 def _block_references(
     file: FrontendFile,
     environment: FrontendEnvironment,
-    source_identifier: str,
     context: ReferenceContext,
 ) -> list[tuple[str, SourceSpan, ReferenceContext]]:
     references: list[tuple[str, SourceSpan, ReferenceContext]] = []
@@ -258,7 +257,6 @@ def extract_project(
                 for target_label, source, context in _block_references(
                     file,
                     block,
-                    identifier,
                     ReferenceContext.STATEMENT,
                 )
             )
@@ -273,7 +271,6 @@ def extract_project(
                     for target_label, source, context in _block_references(
                         file,
                         proof,
-                        identifier,
                         ReferenceContext.PROOF,
                     )
                 )
@@ -303,10 +300,6 @@ def extract_project(
                 source=source,
             )
         )
-        edge_provenance = {
-            "source_occurrence_ids": source_occurrence_ids,
-            "target_occurrence_ids": target_occurrence_ids,
-        }
         if not candidates:
             if target_label not in all_labels:
                 edges.append(
@@ -316,7 +309,8 @@ def extract_project(
                         source=source.source_range(),
                         context=context,
                         resolution=DependencyResolution.MISSING,
-                        **edge_provenance,
+                        source_occurrence_ids=source_occurrence_ids,
+                        target_occurrence_ids=target_occurrence_ids,
                     )
                 )
             continue
@@ -329,7 +323,8 @@ def extract_project(
                     source=source.source_range(),
                     context=context,
                     resolution=DependencyResolution.RESOLVED,
-                    **edge_provenance,
+                    source_occurrence_ids=source_occurrence_ids,
+                    target_occurrence_ids=target_occurrence_ids,
                 )
             )
         else:
@@ -340,7 +335,8 @@ def extract_project(
                     source=source.source_range(),
                     context=context,
                     resolution=DependencyResolution.AMBIGUOUS,
-                    **edge_provenance,
+                    source_occurrence_ids=source_occurrence_ids,
+                    target_occurrence_ids=target_occurrence_ids,
                 )
             )
 
