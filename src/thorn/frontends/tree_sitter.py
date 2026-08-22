@@ -164,8 +164,10 @@ def _command_macro(
     # enclosing structural node.
     start = coordinates.character_offset(int(command.start_byte))
     end = max(
-        coordinates.character_offset(int(command.end_byte)),
-        *(argument.span.end_offset for argument in arguments),
+        [
+            coordinates.character_offset(int(command.end_byte)),
+            *(argument.span.end_offset for argument in arguments),
+        ]
     )
     raw = coordinates.text[start:end]
     return FrontendMacro(
