@@ -16,6 +16,7 @@ from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
 from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
+    ProjectSourceSortKey,
     dependency_node_sort_key,
     project_source_sort_key,
     result_project_symbol_dependency_ids,
@@ -106,11 +107,17 @@ def _edge_claim_ids(edge: SupportEdge) -> set[str]:
     return identifiers
 
 
-def _edge_sort_key(project: ExtractedProject, edge: SupportEdge):
+def _edge_sort_key(
+    project: ExtractedProject,
+    edge: SupportEdge,
+) -> ProjectSourceSortKey:
     return project_source_sort_key(project, edge.source, edge.identifier)
 
 
-def _claim_sort_key(project: ExtractedProject, claim: Claim):
+def _claim_sort_key(
+    project: ExtractedProject,
+    claim: Claim,
+) -> ProjectSourceSortKey:
     return project_source_sort_key(project, claim.source, claim.identifier)
 
 
