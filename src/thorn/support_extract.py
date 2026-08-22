@@ -55,6 +55,27 @@ def _span(file: FrontendFile, start: int, end: int) -> SourceSpan:
     return file.span(start, end)
 
 
+def _eligible_previous_claim(
+    projection: LinguisticProjection,
+    previous_claim: Claim | None,
+    current_span: SourceSpan,
+) -> Claim | None:
+    """Return the previous claim only when no excluded source lies between spans."""
+
+    if previous_claim is None:
+        return None
+    previous_span = previous_claim.source
+    if (
+        previous_span.file != current_span.file
+        or previous_span.end_offset > current_span.start_offset
+    ):
+        return None
+    gap = projection.source_span(previous_span.end_offset, current_span.start_offset)
+    if not projection.source_span_eligible(gap):
+        return None
+    return previous_claim
+
+
 def _proof_body_span(file: FrontendFile, region: ResultRegion) -> SourceSpan | None:
     if region.proof_span is None:
         return None
@@ -619,31 +640,30 @@ def extract_proof_support_graph(
             if not projection.source_span_eligible(span):
                 continue
             raw = span.text(file.raw)
-            if form == ClaimForm.PROSE and result_claims:
-                qualifier = _qualifier_for(file, result_claims[-1], raw, span)
-                if qualifier is not None and result_claims[-1].form == ClaimForm.DISPLAY:
-                    updated = result_claims[-1].model_copy(
-                        update={"qualifiers": [*result_claims[-1].qualifiers, qualifier]}
+            candidate_previous = result_claims[-1] if result_claims else None
+            previous = _eligible_previous_claim(projection, candidate_previous, span)
+            if form == ClaimForm.PROSE and previous is not None:
+                qualifier = _qualifier_for(file, previous, raw, span)
+                if qualifier is not None and previous.form == ClaimForm.DISPLAY:
+                    updated = previous.model_copy(
+                        update={"qualifiers": [*previous.qualifiers, qualifier]}
                     )
                     result_claims[-1] = updated
                     claims[-1] = updated
                     continue
-                if (
-                    linguistic_frontend is not None
-                    and result_claims[-1].form == ClaimForm.DISPLAY
-                ):
+                if linguistic_frontend is not None and previous.form == ClaimForm.DISPLAY:
                     qualifier = _ambiguous_qualifier_for(
                         file,
                         projection,
-                        result_claims[-1],
+                        previous,
                         raw,
                         span,
                         result_identifiers,
                         linguistic_frontend,
                     )
                     if qualifier is not None:
-                        updated = result_claims[-1].model_copy(
-                            update={"qualifiers": [*result_claims[-1].qualifiers, qualifier]}
+                        updated = previous.model_copy(
+                            update={"qualifiers": [*previous.qualifiers, qualifier]}
                         )
                         result_claims[-1] = updated
                         claims[-1] = updated
@@ -655,7 +675,6 @@ def extract_proof_support_graph(
                 raw=raw.strip(),
                 source=span,
             )
-            previous = result_claims[-1] if result_claims else None
             result_claims.append(claim)
             claims.append(claim)
             _attach_explicit_support(
