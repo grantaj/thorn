@@ -59,6 +59,8 @@ def _request():
             statement="For x > 0, x^2 > 0.",
             source=SourceRange(file="paper.tex", start_line=2, end_line=4),
         ),
+        # Deliberately non-source-sorted: renderers preserve the already-selected
+        # canonical request order rather than silently imposing a filename/offset sort.
         claims=[second, first],
         trigger_relation_identifiers=[relation.identifier],
         support_relations=[relation],
@@ -118,9 +120,9 @@ def test_compact_renderer_keeps_mathematics_and_drops_machine_provenance() -> No
     rendered = render_compact_semantic_review_request(_request())
 
     assert "For x > 0, x^2 > 0." in rendered
-    assert "C1: Assume x > 0." in rendered
-    assert "C2: Therefore x^2 > 0." in rendered
-    assert "R1: C1 -> C2; kind=prior_claim; wording=therefore" in rendered
+    assert "C1: Therefore x^2 > 0." in rendered
+    assert "C2: Assume x > 0." in rendered
+    assert "R1: C2 -> C1; kind=prior_claim; wording=therefore" in rendered
     assert "# Explicit hypotheses\n- x > 0" in rendered
     assert "# Definitions\n- P(x) iff x^2 > 0" in rendered
     assert "lem:needed: If x > 0 then x^2 > 0." in rendered
@@ -134,10 +136,11 @@ def test_compact_renderer_keeps_mathematics_and_drops_machine_provenance() -> No
     assert "AMBIGUOUS" not in rendered
 
 
-def test_compact_renderer_is_deterministic() -> None:
+def test_compact_renderer_preserves_request_order_deterministically() -> None:
     first = render_compact_semantic_review_request(_request())
     second = render_compact_semantic_review_request(_request())
     assert first == second
+    assert first.index("C1: Therefore x^2 > 0.") < first.index("C2: Assume x > 0.")
 
 
 def test_semantic_envelope_uses_compact_renderer_only_when_explicitly_selected(
