@@ -1,19 +1,19 @@
 from importlib.util import find_spec
 from pathlib import Path
 
-from thorn.frontends import RegexLatexFrontend, get_frontend
+from thorn.frontends import DEFAULT_FRONTEND_NAME, RegexLatexFrontend, get_frontend
 from thorn.frontends.pylatexenc import PylatexencLatexFrontend
 from thorn.latex import extract_project
 
 _HAS_TREE_SITTER = (
-    find_spec("tree_sitter") is not None and find_spec("tree_sitter_latex") is not None
+    find_spec("tree_sitter") is not None and find_spec("tree_sitter_language_pack") is not None
 )
 if _HAS_TREE_SITTER:
     from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
 
 
 def test_frontend_registry_selects_independent_backends() -> None:
-    assert get_frontend("current").name == "regex"
+    assert get_frontend("current").name == DEFAULT_FRONTEND_NAME
     assert get_frontend("regex").name == "regex"
     assert get_frontend("pylatexenc").name == "pylatexenc"
     if _HAS_TREE_SITTER:
