@@ -119,7 +119,9 @@ def test_same_name_project_shadowing_uses_include_order_not_filename_or_byte_off
         ),
         encoding="utf-8",
     )
-    first.write_text("ordinary prose\n" * 30 + "Set $q = 1$.\n", encoding="utf-8")
+    # Deliberately give both declarations the same local byte offset. Distinct
+    # physical provenance and expanded include order must still keep them distinct.
+    first.write_text("Set $q = 1$.\n", encoding="utf-8")
     second.write_text("Set $q = 2$.\n", encoding="utf-8")
 
     project = extract_project(main, frontend=RegexLatexFrontend())
