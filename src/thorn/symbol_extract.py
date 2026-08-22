@@ -109,7 +109,23 @@ def _span(file: str, text: str, start: int, end: int) -> SourceSpan:
     )
 
 
-def _math_inner(math: FrontendMath) -> tuple[str, int]:
+def _math_inner(file: FrontendFile, math: FrontendMath) -> tuple[str, int]:
+    # Some frontends expose a display environment as both FrontendMath and
+    # FrontendEnvironment.  Prefer the normalized environment body when those
+    # facts describe the same source span so consumers see equivalent math
+    # content without parsing an environment wrapper themselves.
+    environment = next(
+        (
+            candidate
+            for candidate in file.environments
+            if candidate.span.start_offset == math.span.start_offset
+            and candidate.span.end_offset == math.span.end_offset
+        ),
+        None,
+    )
+    if environment is not None:
+        return environment.body(file.raw), environment.body_span.start_offset
+
     raw = math.raw
     if raw.startswith("$$") and raw.endswith("$$"):
         return raw[2:-2], math.span.start_offset + 2
@@ -330,7 +346,7 @@ def _add_quantifiers(
     result_identifier: str,
     local_scope_by_math: dict[tuple[str, int, int], str],
 ) -> None:
-    content, content_start = _math_inner(math)
+    content, content_start = _math_inner(file, math)
     matches = list(_QUANTIFIER_RE.finditer(content))
     if not matches:
         return
@@ -387,7 +403,7 @@ def _add_explicit_introductions(
         if cue is None:
             continue
         kind, introduction_start = cue
-        content, content_start = _math_inner(math)
+        content, content_start = _math_inner(file, math)
         for candidate in _parse_candidates(content, kind):
             _append_candidate(
                 table=table,
@@ -548,7 +564,7 @@ def _project_definition_blocks(
     blocks: list[tuple[str, int, int, int, SourceSpan]] = []
     covered: list[tuple[int, int]] = []
     for math in file.math:
-        content, content_start = _math_inner(math)
+        content, content_start = _math_inner(file, math)
         blocks.append(
             (
                 content,
@@ -673,7 +689,7 @@ def _add_uses(
 ) -> None:
     known_names = sorted({symbol.name for symbol in table.symbols}, key=len, reverse=True)
     for math in _math_in_span(file, span):
-        content, content_start = _math_inner(math)
+        content, content_start = _math_inner(file, math)
         masked = _masked_content(content)
         math_scope = local_scope_by_math.get(
             (file.path, math.span.start_offset, math.span.end_offset),
