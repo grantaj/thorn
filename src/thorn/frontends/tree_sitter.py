@@ -83,16 +83,14 @@ class _Coordinates:
 
 def _load_parser() -> Any:
     try:
-        import tree_sitter_latex
-        from tree_sitter import Language, Parser
+        from tree_sitter_language_pack import get_parser
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "tree-sitter frontend requires tree-sitter plus the tree-sitter-latex grammar; "
-            "see docs/parser-evaluation.md for the pinned optional installation"
+            "tree-sitter frontend requires the pinned tree-sitter runtime and "
+            "tree-sitter-language-pack grammar bundle; install `thorn-math[treesitter]`"
         ) from exc
 
-    language = Language(tree_sitter_latex.language())
-    return Parser(language)
+    return get_parser("latex")
 
 
 def _walk(node: Any) -> list[Any]:
@@ -160,8 +158,17 @@ def _command_macro(
         if child.type.startswith(_GROUP_PREFIXES):
             arguments.append(_group_argument(path, source_bytes, coordinates, child))
 
-    start = coordinates.character_offset(int(node.start_byte))
-    end = coordinates.character_offset(int(node.end_byte))
+    # Structural nodes such as sections may own following document content.  A
+    # FrontendMacro represents only the command invocation, so derive its span
+    # from the parser-owned command and direct argument nodes rather than the
+    # enclosing structural node.
+    start = coordinates.character_offset(int(command.start_byte))
+    end = max(
+        [
+            coordinates.character_offset(int(command.end_byte)),
+            *(argument.span.end_offset for argument in arguments),
+        ]
+    )
     raw = coordinates.text[start:end]
     return FrontendMacro(
         name=name,

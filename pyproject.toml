@@ -13,15 +13,16 @@ dependencies = [
   "openai>=2.47.0",
   "pydantic>=2.10",
   "spacy==3.8.14",
+  "tree-sitter==0.26.0",
+  "tree-sitter-language-pack==1.14.3",
 ]
 
 [project.optional-dependencies]
 pylatexenc = [
   "pylatexenc==2.10",
 ]
-treesitter = [
-  "tree-sitter==0.26.0",
-]
+# Kept as a compatibility extra name after Tree-sitter became the core/default frontend.
+treesitter = []
 dev = [
   "hatchling>=1.27",
   "mypy>=1.15",
@@ -66,5 +67,5 @@ strict = true
 packages = ["thorn"]
 
 [[tool.mypy.overrides]]
-module = ["tree_sitter", "tree_sitter_latex"]
+module = ["tree_sitter", "tree_sitter_language_pack"]
 ignore_missing_imports = true

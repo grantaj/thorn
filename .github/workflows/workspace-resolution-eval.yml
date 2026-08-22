@@ -2,6 +2,10 @@ name: workspace-resolution-eval
 on:
   pull_request:
     paths:
+      - 'pyproject.toml'
+      - 'src/thorn/frontend.py'
+      - 'src/thorn/frontends/**'
+      - 'src/thorn/latex.py'
       - 'src/thorn/workspace.py'
       - 'eval/workspace_resolution/**'
       - 'tests/test_workspace*.py'

@@ -1,126 +1,141 @@
-# Tree-sitter LaTeX packaging and production-default gate
+# Tree-sitter LaTeX packaging and production identity
 
-This note records the packaging investigation for issue #183. It is deliberately
-separate from the source-frontend evaluation: #158 established Tree-sitter as Thorn's
-preferred source-structure substrate, while #183 asks whether the exact evaluated
-runtime can be installed and supported as an ordinary production dependency.
+Issue #183 removes the last installation blocker identified by #158/#161. The rule is
+not that Thorn must retain the first grammar revision it evaluated. The rule is that the
+production frontend must use an exact, reproducible grammar identity that has passed
+Thorn's evidence gate.
 
-## Supported identity under evaluation
+## Supported production identity
 
-The evaluated combination is:
+The supported combination is:
 
 - Python runtime: `tree-sitter==0.26.0`;
-- grammar source: `latex-lsp/tree-sitter-latex` 0.6.0 at
-  `fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9`;
-- generation used by Thorn's reproducible CI lane: `tree-sitter-cli@0.24.7`;
-- upstream grammar license: MIT.
+- released grammar bundle: `tree-sitter-language-pack==1.14.3`;
+- language-pack release tag commit:
+  `df3bcc39862da6972032d7537d49b782a50a25bb`;
+- LaTeX grammar source: `latex-lsp/tree-sitter-latex` at
+  `7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957`.
 
-The source revision is part of the contract. A package containing another 0.6.0
-revision is not the parser that Thorn evaluated merely because the package version is
-the same.
+The mapping is not inferred from the LaTeX grammar's version number. The
+`tree-sitter-language-pack` v1.14.3 source definition explicitly pins its `latex`
+language to that exact upstream revision. Thorn records all four identities in
+`thorn.frontends.tree_sitter_identity`, pins the two installed distributions in
+`pyproject.toml`, and checks the installed versions in CI.
 
-## Packaging candidates checked on 2026-08-23
+Both `tree-sitter-language-pack` and `latex-lsp/tree-sitter-latex` are MIT licensed.
+The grammar remains external generated parser machinery; Thorn does not vendor or fork
+its parser implementation.
 
-### Upstream grammar repository
+Relevant upstream provenance:
 
-The evaluated source revision does not contain generated `src/parser.c`. Installing it
-from source therefore still requires a Tree-sitter generator. The upstream 0.6.0 tag is
-`7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957`, not the evaluated revision, so replacing
-the revision with the release tag would weaken the existing pin.
+- <https://github.com/xberg-io/tree-sitter-language-pack/tree/v1.14.3>
+- <https://github.com/xberg-io/tree-sitter-language-pack/blob/v1.14.3/sources/language_definitions.json>
+- <https://github.com/latex-lsp/tree-sitter-latex/tree/7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957>
 
-Upstream source and license:
+## Why the historical pin moved
 
-- <https://github.com/latex-lsp/tree-sitter-latex>
-- <https://github.com/latex-lsp/tree-sitter-latex/blob/fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9/LICENSE>
+The #158 evaluation used
+`fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9`. That revision was pinned because it was
+the exact revision Thorn had tested, not because it was intended to be immutable.
+It lacked a frictionless released Python installation path and required CI to clone the
+grammar, run a pinned Node Tree-sitter generator, and install the generated local
+package.
 
-### `tree-sitter-language-pack`
+PR #195 correctly refused to substitute a differently packaged grammar without evidence.
+After #195, issue #183 was reopened with the clarified invariant: a different released
+revision may become the supported pin only after passing the same Thorn conformance gate.
 
-`tree-sitter-language-pack` is the strongest conventional packaging candidate because
-it publishes platform wheels and manages precompiled grammars. The latest version on
-the public PyPI index checked for this issue, 1.13.5, does **not** package the evaluated
-LaTeX source identity: its release source definition pins LaTeX to
-`7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957`.
+`tree-sitter-language-pack==1.14.3` still packages LaTeX revision `7e0ecdc...`. PR #196
+therefore evaluated that released grammar as a genuinely different candidate rather than
+assuming equivalence with `fa8df448...`.
 
-The project's current unreleased source definition has since moved to
-`fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9`, but depending on an unreleased moving
-branch would replace one reproducibility problem with another. Thorn should reconsider
-this route when a released package records the evaluated revision (or when Thorn
-deliberately evaluates and pins a newer released revision).
+## Candidate evidence
 
-Relevant source:
+The isolated candidate commit `9b9df9de581e98e87305e925ad58eb3ac540ffcf`
+changed only the grammar/runtime loading and packaging seam; the Thorn normalization
+logic below `_load_parser()` was unchanged and `DEFAULT_FRONTEND_NAME` remained `regex`.
+That made failures attributable to the packaged grammar/runtime path rather than to a
+simultaneous default cutover.
 
-- <https://pypi.org/project/tree-sitter-language-pack/1.13.5/>
-- <https://github.com/xberg-io/tree-sitter-language-pack/blob/55cb1d8b98bed6a604f53ab0c21dfbee600c7e0c/sources/language_definitions.json>
+On GitHub Actions run `32599835472`, the released candidate passed:
 
-`tree-sitter-language-pack` is MIT licensed.
+- ordinary wheel installation of `tree-sitter==0.26.0` and
+  `tree-sitter-language-pack==1.14.3`;
+- the parser API under `DeprecationWarning`-as-error;
+- frontend/differential/source-projection conformance: 26 passed;
+- completed Tree-sitter semantic-dependency contract: 64 passed, 1 skipped, 1 xfailed;
+- focused Ruff;
+- mypy over all 78 source files.
 
-### Generated-source mirror
+The same candidate commit also passed the Local NLP and Lean workflows. No material
+regression relative to the previously evaluated revision was found, so the issue's
+stop-before-bespoke-machinery condition did not apply.
 
-`Willie169/tree-sitter-latex` currently commits a generated `src/parser.c` and records
-`fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9` in its `commit` file, so it is useful
-independent evidence that the evaluated grammar can be generated without changing its
-source semantics. It is not a production dependency for Thorn:
+The measured 40-pair, 7,231-byte synthetic fixture gave a Tree-sitter parse median of
+19.923 ms and full extraction median of 70.691 ms over 20 iterations. The installed
+`tree-sitter` distribution occupied 2,078,154 bytes and the language pack 5,825,300
+bytes on that Linux runner. These measurements are operational evidence, not acceptance
+thresholds.
 
-- it is not a released Python distribution on a public package index;
-- its generation workflow uses `tree-sitter/setup-action@v2` rather than pinning the
-  exact generator version used by Thorn's evaluation;
-- its Python binding still returns the language pointer through `PyLong_FromVoidPtr`.
+## Runtime/deprecation resolution
 
-The last point matters with `tree-sitter==0.26.0`: modern generated Python bindings
-return a `PyCapsule` named `tree_sitter.Language`, while the integer-language-handle
-path is deprecated. Thorn will not suppress that warning and call the compatibility
-question solved.
+Thorn no longer converts `tree_sitter_latex.language()` through the legacy integer
+language-handle path. The adapter uses the released bundle's
+`get_parser("latex") -> tree_sitter.Parser` API directly. CI also exercises
+`get_language("latex")` and `get_parser("latex")` with Python deprecation warnings
+promoted to errors.
 
-Mirror provenance:
+This resolves the binding deprecation rather than suppressing its warning. No Thorn
+compatibility shim, grammar downloader, generated-source mirror, or patched parser is
+needed.
 
-- <https://github.com/Willie169/tree-sitter-latex>
-- generated-mirror revision checked: `ab5121def07b340c2ecf382808efd3bb3cc6c702`;
-- generated `src/parser.c` blob checked: `1ca6bd199796acb93cc265c24c2f00f76ca1235f`;
-- the mirror and upstream grammar are MIT licensed.
+## Production/default decision
 
-A direct VCS/URL dependency on this mirror was rejected. Public Python indexes should
-not accept direct references in uploaded distribution metadata, and making Thorn's
-normal package depend on an unpublished Git checkout is not a frictionless production
-install path.
+Tree-sitter is now the production source frontend:
 
-### Thorn-owned vendoring or downloader
+```text
+DEFAULT_FRONTEND_NAME = tree-sitter
+```
 
-Copying the generated parser into Thorn, maintaining a patched grammar fork, or adding
-a Thorn-specific grammar downloader would make the dependency problem look solved by
-moving generic parser/distribution machinery into Thorn. #183 explicitly rules that
-out. Generated parser logic must remain an external parser dependency or build artifact,
-not become a second Thorn-owned LaTeX implementation.
+Because a production default must exist after a plain installation, `tree-sitter` and
+`tree-sitter-language-pack` are core Thorn dependencies rather than optional runtime
+requirements. The historical `treesitter` extra name remains as an empty compatibility
+extra so existing `thorn-math[treesitter]` install commands continue to work without
+selecting a different dependency set.
 
-## Runtime/default decision
+The regex frontend remains available for compatibility and differential evidence. This
+cutover is not permission to grow the regex scanner, move workspace ownership into the
+CST, or move mathematical authority/scope into Tree-sitter.
 
-The packaging gate is **not satisfied as of 2026-08-23**. `thorn-math[treesitter]`
-therefore continues to install the supported Tree-sitter Python runtime only, and
-`DEFAULT_FRONTEND_NAME` remains `"regex"`.
+## Production evidence gate
 
-This is not a reversal of the source-substrate decision. Tree-sitter remains the
-preferred source-structure backend and the dedicated CI lane continues to exercise the
-exact grammar by generating it from the pinned source revision. The production default
-stays on the compatibility frontend because there is no ordinary installable artifact
-that simultaneously has:
+The default-cutover contract is deliberately broader than the parser unit tests. CI must
+keep the following green on the packaged production identity:
 
-1. the evaluated grammar source identity;
-2. a reproducible generated-parser/build identity;
-3. a modern non-deprecated Python language binding; and
-4. public-package-compatible installation semantics.
+1. frontend/differential and source-region/provenance conformance;
+2. the completed semantic-dependency/#162 contracts;
+3. workspace occurrence/order/partiality evaluation;
+4. Local NLP contract;
+5. Lean contract;
+6. a clean built-wheel installation with no Tree-sitter extra, followed by ordinary CLI
+   use of the default frontend;
+7. full pytest, Ruff and mypy;
+8. zero provider/model calls.
 
-The end-to-end blockers found after #161 (#185–#188) have been repaired. This issue also
-identified a parser-lifecycle hazard independent of packaging: a module-level cached
-default frontend would become a shared `tree_sitter.Parser` if the default changed.
-Thorn now resolves the default frontend at each extraction call instead.
+The workspace workflow's path filters include frontend/default and dependency changes so
+a future parser/default change cannot silently skip that gate.
 
-## Exit criteria for a future cutover
+## Architectural boundary
 
-Reconsider the default when a conventional released artifact provides the exact
-supported grammar identity (or after deliberately re-evaluating a newer released
-identity), pins or records its generated-parser build provenance, and exposes the
-modern capsule-based Python binding without compatibility warnings. At that point run
-the complete #183 cutover gate unchanged: frontend/differential, source provenance,
-semantic-dependency, workspace occurrence/partiality, Local NLP, Lean, clean-package
-CLI, full pytest/Ruff/mypy, and zero provider/model calls.
+Tree-sitter supplies generic source structure only. Parser-native objects remain inside
+`thorn.frontends.tree_sitter`; downstream code receives Thorn-owned `LatexFrontend`
+models and exact normalized `SourceSpan` data. `ProjectWorkspaceFacts` remains above the
+source-CST boundary and owns repeated occurrence identity, include relationships,
+expanded order, and project partiality. Thorn continues to own mathematical authority,
+scope, ambiguity, semantic dependency identity, closure, and review/formalisation IR.
 
-No provider/model calls were used in this packaging investigation.
+Valid but unsupported dynamic source may remain explicitly unresolved. Malformed source
+may fail closed. Thorn does not add raw-source scanners to make the released grammar
+pretend to execute TeX.
+
+No provider/model calls were used in the #183 packaging or cutover evaluation.

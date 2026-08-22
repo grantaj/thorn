@@ -107,7 +107,7 @@ def _standard_candidate(
     kind: IntroductionKind,
     projection: LinguisticProjection,
 ) -> tuple[int, _Candidate] | None:
-    content, content_start = _math_inner(math)
+    content, content_start = _math_inner(file, math)
     candidates = _parse_candidates(content, kind)
 
     # ``Let A=[-1,1]`` is a definitional introduction. Reuse the shared SET
@@ -132,11 +132,12 @@ def _standard_candidate(
 
 
 def _alias_candidate(
+    file: FrontendFile,
     left_math: FrontendMath,
     right_math: FrontendMath,
 ) -> tuple[int, _Candidate] | None:
-    left, left_start = _math_inner(left_math)
-    right, _ = _math_inner(right_math)
+    left, left_start = _math_inner(file, left_math)
+    right, _ = _math_inner(file, right_math)
     infix = _INFIX_ALIAS_RE.fullmatch(left)
     if infix is None:
         return None
@@ -274,7 +275,7 @@ def _record_uses(
                     and projection.source_span_eligible(math.span)
                 ):
                     continue
-                content, content_start = _math_inner(math)
+                content, content_start = _math_inner(file, math)
                 masked = _masked_content(content)
                 for symbol in added:
                     for start, end in _symbol_occurrences(masked, symbol.name):
@@ -377,7 +378,7 @@ def add_project_authoritative_context(
                 next_math = outside[index + 1]
                 bridge = projection.text[math.span.end_offset : next_math.span.start_offset]
                 if _ALIAS_BRIDGE_RE.fullmatch(bridge) is not None:
-                    parsed_alias = _alias_candidate(math, next_math)
+                    parsed_alias = _alias_candidate(file, math, next_math)
                     if parsed_alias is not None:
                         content_start, candidate = parsed_alias
                         symbol = _append_project_candidate(
