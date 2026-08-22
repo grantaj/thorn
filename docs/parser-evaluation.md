@@ -74,6 +74,9 @@ path that does not ask users to clone source and run Node code generation. Slice
 therefore keeps `regex` as the compatibility default and records a separate packaging
 cutover as follow-up work.
 
+The #183 packaging audit and exact exit criteria are recorded in
+[`tree-sitter-packaging.md`](tree-sitter-packaging.md).
+
 This must not be misread as permission to improve the regex backend into a more complete
 TeX parser. Tree-sitter remains the preferred destination.
 
