@@ -9,7 +9,12 @@ from pydantic import BaseModel, Field
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import ParsedProject, SourceSpan
 from thorn.linguistic import LinguisticFrontend
-from thorn.workspace import ProjectWorkspaceFacts
+from thorn.workspace import (
+    ProjectPosition,
+    ProjectPositionLookup,
+    ProjectWorkspaceFacts,
+    WorkspaceResolution,
+)
 
 if TYPE_CHECKING:
     from thorn.linguistic_declarations import ProseDeclarationInventory
@@ -170,11 +175,20 @@ class SymbolTable(BaseModel):
         scope_identifier: str,
         source: SourceSpan | None = None,
     ) -> list[Symbol]:
+        """Return lexically visible symbols without guessing project occurrence order.
+
+        Project symbols are returned for scope introspection when no source position is
+        requested. Source-sensitive project visibility belongs to ``resolve`` because it
+        requires ``ProjectWorkspaceFacts`` rather than physical file offsets.
+        """
+
         chain = self.scope_chain(scope_identifier)
         rank = {scope_id: index for index, scope_id in enumerate(chain)}
         visible: list[Symbol] = []
         for symbol in self.symbols:
             if symbol.scope_identifier not in rank:
+                continue
+            if source is not None and symbol.scope_identifier == "project":
                 continue
             if (
                 source is not None
@@ -188,17 +202,85 @@ class SymbolTable(BaseModel):
             key=lambda symbol: (rank[symbol.scope_identifier], -symbol.source.start_offset),
         )
 
+    def _resolve_project_symbol(
+        self,
+        canonical_name: str,
+        scope_identifier: str,
+        source: SourceSpan,
+        workspace: ProjectWorkspaceFacts | None,
+    ) -> Symbol | None:
+        if (
+            workspace is None
+            or workspace.resolution != WorkspaceResolution.RESOLVED
+            or "project" not in self.scope_chain(scope_identifier)
+        ):
+            return None
+
+        lookup = ProjectPositionLookup(workspace)
+        use_positions = lookup.positions(source.file, source.start_offset)
+        if not use_positions:
+            return None
+        candidates = [
+            symbol
+            for symbol in self.symbols
+            if symbol.scope_identifier == "project"
+            and canonical_symbol_name(symbol.name) == canonical_name
+        ]
+        if not candidates:
+            return None
+
+        occurrence_targets: set[str | None] = set()
+        for use_position in use_positions:
+            best_position: ProjectPosition | None = None
+            best_identifiers: set[str] = set()
+            for symbol in candidates:
+                declaration = symbol.introduction_source
+                for position in lookup.positions(
+                    declaration.file,
+                    declaration.end_offset,
+                ):
+                    if position >= use_position:
+                        continue
+                    if best_position is None or best_position < position:
+                        best_position = position
+                        best_identifiers = {symbol.identifier}
+                    elif position == best_position:
+                        best_identifiers.add(symbol.identifier)
+            occurrence_targets.add(
+                next(iter(best_identifiers)) if len(best_identifiers) == 1 else None
+            )
+
+        # One physical use can represent several expanded project occurrences. It
+        # acquires path-level authority only when every occurrence resolves identically.
+        if len(occurrence_targets) != 1:
+            return None
+        target_identifier = next(iter(occurrence_targets))
+        if target_identifier is None:
+            return None
+        return self.symbol(target_identifier)
+
     def resolve(
         self,
         name: str,
         scope_identifier: str,
         source: SourceSpan,
+        *,
+        workspace: ProjectWorkspaceFacts | None = None,
     ) -> Symbol | None:
         canonical_name = canonical_symbol_name(name)
+
+        # Bounded result/proof/local scope remains ordinary lexical scope. Project
+        # authority is deliberately excluded here and resolved from occurrence facts
+        # below, so cross-file byte offsets can never decide mathematical shadowing.
         for symbol in self.visible_symbols(scope_identifier, source):
             if canonical_symbol_name(symbol.name) == canonical_name:
                 return symbol
-        return None
+        return self._resolve_project_symbol(
+            canonical_name,
+            scope_identifier,
+            source,
+            workspace,
+        )
 
 
 def extract_symbol_table(
@@ -215,14 +297,27 @@ def extract_symbol_table(
 
     table = run_extractor(project, regions)
 
+    # Structured recognition is not itself authority. Normalize it immediately
+    # through parser-owned source eligibility and workspace availability before a
+    # project-context pass can consume it.
+    from thorn.structured_authority import enforce_structured_authority_boundary
+
+    enforce_structured_authority_boundary(project, table, workspace=workspace)
+
     # Mathematical project declarations remain Thorn-owned authority. Prose
     # authority is a separate policy layer consuming the normalized candidate and
     # workspace boundaries established by #161; it never reparses declaration grammar.
     from thorn.project_context import add_project_authoritative_context
     from thorn.project_context_source import preserve_project_authoritative_source
 
-    add_project_authoritative_context(project, regions, table)
+    add_project_authoritative_context(
+        project,
+        regions,
+        table,
+        workspace=workspace,
+    )
     preserve_project_authoritative_source(project, table)
+    enforce_structured_authority_boundary(project, table, workspace=workspace)
 
     if workspace is not None and prose_declarations is not None:
         from thorn.project_semantic_context import add_project_semantic_context
