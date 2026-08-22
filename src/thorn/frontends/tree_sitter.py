@@ -158,8 +158,15 @@ def _command_macro(
         if child.type.startswith(_GROUP_PREFIXES):
             arguments.append(_group_argument(path, source_bytes, coordinates, child))
 
-    start = coordinates.character_offset(int(node.start_byte))
-    end = coordinates.character_offset(int(node.end_byte))
+    # Structural nodes such as sections may own following document content.  A
+    # FrontendMacro represents only the command invocation, so derive its span
+    # from the parser-owned command and direct argument nodes rather than the
+    # enclosing structural node.
+    start = coordinates.character_offset(int(command.start_byte))
+    end = max(
+        coordinates.character_offset(int(command.end_byte)),
+        *(argument.span.end_offset for argument in arguments),
+    )
     raw = coordinates.text[start:end]
     return FrontendMacro(
         name=name,
