@@ -23,12 +23,16 @@ from thorn.frontends import get_default_frontend
 from thorn.linguistic import LinguisticFrontend
 from thorn.linguistic_declarations import collect_project_prose_declarations
 from thorn.linguistic_support import apply_linguistic_uncertainty
-from thorn.models import SourceRange, TheoremUnit
+from thorn.models import TheoremUnit
 from thorn.project_partiality import normalize_project_structure
 from thorn.support_corroboration import corroborate_explicit_result_support
 from thorn.support_extract import extract_proof_support_graph
 from thorn.symbols import ResultRegion, extract_symbol_table
-from thorn.workspace import ProjectPositionLookup, build_project_workspace_facts
+from thorn.workspace import (
+    ProjectPositionLookup,
+    ProjectWorkspaceFacts,
+    build_project_workspace_facts,
+)
 
 _DEFAULT_THEOREM_ENVS = {
     "theorem",
@@ -112,28 +116,64 @@ def _block_references(
     environment: FrontendEnvironment,
     source_identifier: str,
     context: ReferenceContext,
-) -> list[tuple[str, SourceRange, ReferenceContext]]:
-    references: list[tuple[str, SourceRange, ReferenceContext]] = []
+) -> list[tuple[str, SourceSpan, ReferenceContext]]:
+    references: list[tuple[str, SourceSpan, ReferenceContext]] = []
     for macro in _macros_in_span(file, environment.body_span, _REF_MACROS):
         raw_labels = _first_required_argument(macro)
         if not raw_labels:
             continue
         for label in (item.strip() for item in raw_labels.split(",")):
             if label:
-                references.append((label, macro.span.source_range(), context))
+                references.append((label, macro.span, context))
     return references
 
 
-def _project_labels(project: FrontendProject) -> set[str]:
-    labels: set[str] = set()
-    for file in project.files:
-        for macro in file.macros:
-            if macro.name != "label":
-                continue
-            label = _first_required_argument(macro)
-            if label:
-                labels.add(label)
-    return labels
+def _same_source_span(left: SourceSpan, right: SourceSpan) -> bool:
+    return (
+        left.file == right.file
+        and left.start_offset == right.start_offset
+        and left.end_offset == right.end_offset
+    )
+
+
+def _occurrence_reference_consensus(
+    workspace: ProjectWorkspaceFacts,
+    *,
+    target_label: str,
+    source: SourceSpan,
+) -> tuple[list[str], list[str], bool]:
+    """Return occurrence provenance and whether path-level target collapse is safe.
+
+    The normalized workspace is authoritative here. A physical reference site may be
+    expanded into several project occurrences. It may collapse to one path-level
+    theorem target only when every expanded reference has the same unique workspace
+    definition. Repeated target labels therefore fail closed even when the parser has
+    only one physical theorem unit for them.
+    """
+
+    reference_facts = [
+        fact
+        for fact in workspace.references
+        if fact.name == target_label and _same_source_span(fact.source, source)
+    ]
+    target_facts = [fact for fact in workspace.labels if fact.name == target_label]
+    source_occurrence_ids = list(
+        dict.fromkeys(fact.occurrence_id for fact in reference_facts)
+    )
+    target_occurrence_ids = list(
+        dict.fromkeys(fact.occurrence_id for fact in target_facts)
+    )
+
+    if not reference_facts or len(target_facts) != 1:
+        return source_occurrence_ids, target_occurrence_ids, False
+
+    target_source = target_facts[0].source
+    consensus = all(
+        fact.definition is not None
+        and _same_source_span(fact.definition, target_source)
+        for fact in reference_facts
+    )
+    return source_occurrence_ids, target_occurrence_ids, consensus
 
 
 def _raise_missing_file_diagnostic(project: FrontendProject) -> None:
@@ -172,10 +212,10 @@ def extract_project(
     workspace = build_project_workspace_facts(parsed)
     project_positions = ProjectPositionLookup(workspace)
     envs = _theorem_envs(parsed)
-    all_labels = _project_labels(parsed)
+    all_labels = {fact.name for fact in workspace.labels}
     units: list[TheoremUnit] = []
     regions: list[ResultRegion] = []
-    references: list[tuple[str, str, SourceRange, ReferenceContext]] = []
+    references: list[tuple[str, str, SourceSpan, ReferenceContext]] = []
 
     for file in parsed.files:
         blocks = sorted(
@@ -256,27 +296,40 @@ def extract_project(
     edges: list[DependencyEdge] = []
     for source_identifier, target_label, source, context in references:
         candidates = by_label.get(target_label, [])
+        source_occurrence_ids, target_occurrence_ids, occurrence_consensus = (
+            _occurrence_reference_consensus(
+                workspace,
+                target_label=target_label,
+                source=source,
+            )
+        )
+        edge_provenance = {
+            "source_occurrence_ids": source_occurrence_ids,
+            "target_occurrence_ids": target_occurrence_ids,
+        }
         if not candidates:
             if target_label not in all_labels:
                 edges.append(
                     DependencyEdge(
                         source_identifier=source_identifier,
                         target_label=target_label,
-                        source=source,
+                        source=source.source_range(),
                         context=context,
                         resolution=DependencyResolution.MISSING,
+                        **edge_provenance,
                     )
                 )
             continue
-        if len(candidates) == 1:
+        if len(candidates) == 1 and occurrence_consensus:
             edges.append(
                 DependencyEdge(
                     source_identifier=source_identifier,
                     target_label=target_label,
                     target_identifier=candidates[0].identifier,
-                    source=source,
+                    source=source.source_range(),
                     context=context,
                     resolution=DependencyResolution.RESOLVED,
+                    **edge_provenance,
                 )
             )
         else:
@@ -284,9 +337,10 @@ def extract_project(
                 DependencyEdge(
                     source_identifier=source_identifier,
                     target_label=target_label,
-                    source=source,
+                    source=source.source_range(),
                     context=context,
                     resolution=DependencyResolution.AMBIGUOUS,
+                    **edge_provenance,
                 )
             )
 
