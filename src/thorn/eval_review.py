@@ -4,6 +4,7 @@ from thorn.dependencies import DependencyNode, ExtractedProject
 from thorn.evidence import InferenceStatus
 from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
+    ProjectSourceSortKey,
     dependency_node_sort_key,
     project_source_sort_key,
     result_project_symbol_dependency_ids,
@@ -17,11 +18,11 @@ from thorn.semantic_review import (
 from thorn.support import Claim, SupportEdge
 
 
-def _claim_key(project: ExtractedProject, claim: Claim):
+def _claim_key(project: ExtractedProject, claim: Claim) -> ProjectSourceSortKey:
     return project_source_sort_key(project, claim.source, claim.identifier)
 
 
-def _relation_key(project: ExtractedProject, edge: SupportEdge):
+def _relation_key(project: ExtractedProject, edge: SupportEdge) -> ProjectSourceSortKey:
     return project_source_sort_key(project, edge.source, edge.identifier)
 
 
