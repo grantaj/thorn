@@ -31,6 +31,7 @@ from thorn.symbols import ResultRegion, extract_symbol_table
 from thorn.workspace import (
     ProjectPositionLookup,
     ProjectWorkspaceFacts,
+    WorkspaceResolution,
     build_project_workspace_facts,
 )
 
@@ -147,7 +148,8 @@ def _occurrence_reference_consensus(
     expanded into several project occurrences. It may collapse to one path-level
     theorem target only when every expanded reference has the same unique workspace
     definition. Repeated target labels therefore fail closed even when the parser has
-    only one physical theorem unit for them.
+    only one physical theorem unit for them. A partial workspace can retain observed
+    provenance, but it can never prove occurrence-level uniqueness.
     """
 
     reference_facts = [
@@ -163,6 +165,8 @@ def _occurrence_reference_consensus(
         dict.fromkeys(fact.occurrence_id for fact in target_facts)
     )
 
+    if workspace.resolution != WorkspaceResolution.RESOLVED:
+        return source_occurrence_ids, target_occurrence_ids, False
     if not reference_facts or len(target_facts) != 1:
         return source_occurrence_ids, target_occurrence_ids, False
 
