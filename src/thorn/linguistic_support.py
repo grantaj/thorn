@@ -5,7 +5,7 @@ from pathlib import Path
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import FrontendFile, ParsedProject
 from thorn.linguistic import LinguisticDocument, LinguisticFrontend
-from thorn.semantic_projection import project_semantic_span
+from thorn.source_projection import build_linguistic_projection
 from thorn.support import ProofSupportGraph, SupportEdge, SupportKind
 from thorn.symbols import ResultRegion
 
@@ -47,33 +47,32 @@ def _evidence_for(
     dependency_path: list[str] = []
     context = target_claim.raw
 
+    span_projection = None
+    if file is not None:
+        projection = build_linguistic_projection(file)
+        if projection.source_span_eligible(target_claim.source):
+            span_projection = projection.project_span(
+                target_claim.source,
+                result_identifiers=result_identifiers,
+            )
+
     if edge.kind == SupportKind.PRIOR_CLAIM:
         if edge.source_claim_identifier is not None:
             source_claim = graph.claim(edge.source_claim_identifier)
             context = f"{source_claim.raw}\n{target_claim.raw}"
-        if file is not None:
-            projection = project_semantic_span(
-                file,
-                target_claim.source,
-                result_identifiers=result_identifiers,
-            )
-            dependency_path = _root_path(frontend.parse(projection.text))
+        if span_projection is not None:
+            dependency_path = _root_path(frontend.parse(span_projection.text))
         reason = (
             "explicit conclusion wording and local dependency structure permit a prior-claim "
             "support reading; lexical overlap alone is not enough for confidence"
         )
     else:
-        if file is not None:
-            projection = project_semantic_span(
-                file,
-                target_claim.source,
-                result_identifiers=result_identifiers,
-            )
-            document = frontend.parse(projection.text)
+        if span_projection is not None:
+            document = frontend.parse(span_projection.text)
             placeholder = next(
                 (
                     item
-                    for item in projection.placeholders
+                    for item in span_projection.placeholders
                     if item.source.start_offset == edge.source.start_offset
                     and item.source.end_offset == edge.source.end_offset
                     and item.label == edge.target_label
@@ -107,11 +106,11 @@ def apply_linguistic_uncertainty(
 ) -> ProofSupportGraph:
     """Keep cue-only relations as candidates when local NLP is enabled.
 
-    The legacy #19 extractor remains unchanged for core/offline compatibility.
-    With a linguistic frontend present, cue-only conclusion/reference edges are
-    not allowed to become deterministic premises merely because a familiar word
-    appeared. Their exact source relation is retained, enriched with parser-neutral
-    evidence, and marked ambiguous/unresolved for later targeted review.
+    Source eligibility and NLP-safe projection come from the same reversible
+    ``LinguisticProjection`` used by the rest of production semantics. Cue-only
+    conclusion/reference edges are not allowed to become deterministic premises merely
+    because a familiar word appeared. Their exact source relation is retained, enriched
+    with parser-neutral evidence, and marked ambiguous/unresolved for later review.
     """
 
     result_identifiers = {region.identifier for region in regions}

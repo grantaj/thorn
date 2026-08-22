@@ -6,7 +6,11 @@ from pathlib import Path
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import FrontendFile, FrontendMath, ParsedProject, SourceSpan
 from thorn.linguistic import LinguisticFrontend
-from thorn.semantic_projection import SemanticPlaceholderKind, project_semantic_span
+from thorn.source_projection import (
+    LinguisticProjection,
+    LinguisticSpanTokenKind,
+    build_linguistic_projection,
+)
 from thorn.symbols import (
     ResultRegion,
     ScopeKind,
@@ -34,25 +38,8 @@ _DECLARATION_REST_RE = re.compile(
 )
 
 
-def _line_column(text: str, offset: int) -> tuple[int, int]:
-    line = text.count("\n", 0, offset) + 1
-    last_newline = text.rfind("\n", 0, offset)
-    column = offset + 1 if last_newline < 0 else offset - last_newline
-    return line, column
-
-
 def _span(file: FrontendFile, start: int, end: int) -> SourceSpan:
-    start_line, start_column = _line_column(file.raw, start)
-    end_line, end_column = _line_column(file.raw, end)
-    return SourceSpan(
-        file=file.path,
-        start_offset=start,
-        end_offset=end,
-        start_line=start_line,
-        start_column=start_column,
-        end_line=end_line,
-        end_column=end_column,
-    )
+    return file.span(start, end)
 
 
 def _math_inner(math: FrontendMath) -> tuple[str, int]:
@@ -68,11 +55,17 @@ def _math_inner(math: FrontendMath) -> tuple[str, int]:
     return raw, math.span.start_offset
 
 
-def _math_in_span(file: FrontendFile, span: SourceSpan) -> list[FrontendMath]:
+def _math_in_span(
+    file: FrontendFile,
+    span: SourceSpan,
+    projection: LinguisticProjection,
+) -> list[FrontendMath]:
     return [
         math
         for math in file.math
-        if math.span.start_offset >= span.start_offset and math.span.end_offset <= span.end_offset
+        if math.span.start_offset >= span.start_offset
+        and math.span.end_offset <= span.end_offset
+        and projection.source_span_eligible(math.span)
     ]
 
 
@@ -127,16 +120,37 @@ def _scope_identifier(
     return None
 
 
+def _eligible_context_span(
+    projection: LinguisticProjection,
+    containing: SourceSpan,
+    math: FrontendMath,
+) -> SourceSpan | None:
+    """Return a bounded local context that cannot cross excluded source."""
+
+    window = projection.source_span(
+        max(containing.start_offset, math.span.start_offset - 96),
+        min(containing.end_offset, math.span.end_offset + 96),
+    )
+    for segment in projection.eligible_segments(window):
+        if (
+            segment.start_offset <= math.span.start_offset
+            and math.span.end_offset <= segment.end_offset
+        ):
+            return segment
+    return None
+
+
 def _append_candidates_in_span(
     *,
     table: SymbolTable,
     file: FrontendFile,
+    projection: LinguisticProjection,
     span: SourceSpan,
     scope_identifier: str,
     result_identifier: str,
     frontend: LinguisticFrontend,
 ) -> None:
-    for math in _math_in_span(file, span):
+    for math in _math_in_span(file, span, projection):
         shape = _candidate_shape(math)
         if shape is None:
             continue
@@ -145,15 +159,15 @@ def _append_candidates_in_span(
         if table.resolve(name, scope_identifier, source) is not None:
             continue
 
-        context_start = max(span.start_offset, math.span.start_offset - 96)
-        context_end = min(span.end_offset, math.span.end_offset + 96)
-        context_span = _span(file, context_start, context_end)
-        projection = project_semantic_span(file, context_span)
+        context_span = _eligible_context_span(projection, span, math)
+        if context_span is None:
+            continue
+        projected_context = projection.project_span(context_span)
         placeholder = next(
             (
                 item
-                for item in projection.placeholders
-                if item.kind == SemanticPlaceholderKind.MATH
+                for item in projected_context.placeholders
+                if item.kind == LinguisticSpanTokenKind.MATH
                 and item.source.start_offset == math.span.start_offset
                 and item.source.end_offset == math.span.end_offset
             ),
@@ -161,7 +175,7 @@ def _append_candidates_in_span(
         )
         dependency_path: list[str] = []
         if placeholder is not None:
-            document = frontend.parse(projection.text)
+            document = frontend.parse(projected_context.text)
             token = document.token_by_text(placeholder.token)
             if token is not None:
                 dependency_path = document.root_path_signature(token.index)
@@ -169,6 +183,7 @@ def _append_candidates_in_span(
         status = (
             InferenceStatus.AMBIGUOUS if dependency_path else InferenceStatus.UNRESOLVED
         )
+        raw_context = context_span.text(file.raw)
         table.candidates.append(
             SymbolIntroductionCandidate(
                 identifier=(
@@ -186,7 +201,7 @@ def _append_candidates_in_span(
                 result_identifier=result_identifier,
                 source=source,
                 math_source=math.span,
-                raw_context=context_span.text(file.raw),
+                raw_context=raw_context,
                 definition_operator=operator,
                 expression_latex=rhs,
                 status=status,
@@ -198,7 +213,7 @@ def _append_candidates_in_span(
                         ),
                         source=math.span,
                         target=source,
-                        context=context_span.text(file.raw),
+                        context=raw_context,
                         dependency_path=dependency_path,
                         frontend=frontend.name,
                     )
@@ -216,15 +231,21 @@ def add_linguistic_symbol_candidates(
     """Add reviewable declaration candidates without mutating deterministic scope."""
 
     files = {file.path: file for file in project.files}
+    projections = {
+        file.path: build_linguistic_projection(file)
+        for file in project.files
+    }
     for region in regions:
         file = files.get(region.file)
-        if file is None:
+        projection = projections.get(region.file)
+        if file is None or projection is None or not projection.complete:
             continue
         result_scope = _scope_identifier(table, region.identifier, ScopeKind.RESULT)
         if result_scope is not None:
             _append_candidates_in_span(
                 table=table,
                 file=file,
+                projection=projection,
                 span=region.statement_span,
                 scope_identifier=result_scope,
                 result_identifier=region.identifier,
@@ -237,6 +258,7 @@ def add_linguistic_symbol_candidates(
             _append_candidates_in_span(
                 table=table,
                 file=file,
+                projection=projection,
                 span=region.proof_span,
                 scope_identifier=proof_scope,
                 result_identifier=region.identifier,

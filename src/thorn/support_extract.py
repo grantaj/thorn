@@ -6,10 +6,11 @@ from pathlib import Path
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import FrontendFile, FrontendMacro, ParsedProject, SourceSpan
 from thorn.linguistic import LinguisticDocument, LinguisticFrontend
-from thorn.semantic_projection import (
-    SemanticPlaceholder,
-    SemanticPlaceholderKind,
-    project_semantic_span,
+from thorn.source_projection import (
+    LinguisticProjection,
+    LinguisticSpanPlaceholder,
+    LinguisticSpanTokenKind,
+    build_linguistic_projection,
 )
 from thorn.support import (
     BoundName,
@@ -50,25 +51,8 @@ _BOUND_NAME_RE = re.compile(
 _REF_MACROS = {"ref", "eqref", "autoref", "cref", "Cref"}
 
 
-def _line_column(text: str, offset: int) -> tuple[int, int]:
-    line = text.count("\n", 0, offset) + 1
-    last_newline = text.rfind("\n", 0, offset)
-    column = offset + 1 if last_newline < 0 else offset - last_newline
-    return line, column
-
-
 def _span(file: FrontendFile, start: int, end: int) -> SourceSpan:
-    start_line, start_column = _line_column(file.raw, start)
-    end_line, end_column = _line_column(file.raw, end)
-    return SourceSpan(
-        file=file.path,
-        start_offset=start,
-        end_offset=end,
-        start_line=start_line,
-        start_column=start_column,
-        end_line=end_line,
-        end_column=end_column,
-    )
+    return file.span(start, end)
 
 
 def _proof_body_span(file: FrontendFile, region: ResultRegion) -> SourceSpan | None:
@@ -84,48 +68,68 @@ def _proof_body_span(file: FrontendFile, region: ResultRegion) -> SourceSpan | N
     return None
 
 
-def _display_math_spans(file: FrontendFile, body: SourceSpan) -> list[SourceSpan]:
+def _display_math_spans(
+    file: FrontendFile,
+    body: SourceSpan,
+    projection: LinguisticProjection,
+) -> list[SourceSpan]:
     return [
         item.span
         for item in file.math
         if item.span.start_offset >= body.start_offset
         and item.span.end_offset <= body.end_offset
         and item.delimiter not in {"$", "\\(\\)"}
+        and projection.source_span_eligible(item.span)
     ]
 
 
-def _sentence_spans(file: FrontendFile, start: int, end: int) -> list[SourceSpan]:
-    text = file.raw[start:end]
+def _sentence_spans(
+    projection: LinguisticProjection,
+    start: int,
+    end: int,
+) -> list[SourceSpan]:
+    """Segment only contiguous parser-owned eligible source.
+
+    Excluded source is a hard boundary. It is never copied into a larger raw claim and
+    is never reparsed here as comments/verbatim syntax.
+    """
+
     spans: list[SourceSpan] = []
-    for match in _SENTENCE_RE.finditer(text):
-        raw = match.group(0)
-        if not raw.strip():
-            continue
-        left = len(raw) - len(raw.lstrip())
-        right = len(raw.rstrip())
-        absolute_start = start + match.start() + left
-        absolute_end = start + match.start() + right
-        if absolute_end > absolute_start:
-            spans.append(_span(file, absolute_start, absolute_end))
+    for segment in projection.eligible_segments(projection.source_span(start, end)):
+        text = projection.text[segment.start_offset : segment.end_offset]
+        for match in _SENTENCE_RE.finditer(text):
+            raw = match.group(0)
+            if not raw.strip():
+                continue
+            left = len(raw) - len(raw.lstrip())
+            right = len(raw.rstrip())
+            absolute_start = segment.start_offset + match.start() + left
+            absolute_end = segment.start_offset + match.start() + right
+            if absolute_end > absolute_start:
+                spans.append(projection.source_span(absolute_start, absolute_end))
     return spans
 
 
-def _claim_spans(file: FrontendFile, body: SourceSpan) -> list[tuple[SourceSpan, ClaimForm]]:
-    displays = _display_math_spans(file, body)
+def _claim_spans(
+    file: FrontendFile,
+    body: SourceSpan,
+    projection: LinguisticProjection,
+) -> list[tuple[SourceSpan, ClaimForm]]:
+    displays = _display_math_spans(file, body, projection)
     pieces: list[tuple[SourceSpan, ClaimForm]] = []
     cursor = body.start_offset
     for display in displays:
         if cursor < display.start_offset:
             pieces.extend(
                 (span, ClaimForm.PROSE)
-                for span in _sentence_spans(file, cursor, display.start_offset)
+                for span in _sentence_spans(projection, cursor, display.start_offset)
             )
         pieces.append((display, ClaimForm.DISPLAY))
         cursor = display.end_offset
     if cursor < body.end_offset:
         pieces.extend(
             (span, ClaimForm.PROSE)
-            for span in _sentence_spans(file, cursor, body.end_offset)
+            for span in _sentence_spans(projection, cursor, body.end_offset)
         )
     return sorted(pieces, key=lambda item: item[0].start_offset)
 
@@ -148,11 +152,11 @@ def _macros_in_span(file: FrontendFile, span: SourceSpan) -> list[FrontendMacro]
 
 
 def _reference_is_explicit_support(
-    file: FrontendFile,
+    projection: LinguisticProjection,
     claim: Claim,
     macro: FrontendMacro,
 ) -> bool:
-    prefix = file.raw[claim.source.start_offset : macro.span.start_offset]
+    prefix = projection.text[claim.source.start_offset : macro.span.start_offset]
     # Keep the cue local to the reference rather than treating an unrelated
     # word near the start of a long sentence as evidence for every later ref.
     return _REFERENCE_SUPPORT_CUE_RE.search(prefix[-96:]) is not None
@@ -193,6 +197,7 @@ def _add_edge(
 
 def _attach_explicit_support(
     file: FrontendFile,
+    projection: LinguisticProjection,
     claim: Claim,
     result_identifiers: set[str],
     previous_claim: Claim | None,
@@ -201,7 +206,9 @@ def _attach_explicit_support(
     raw = claim.raw.strip()
 
     for macro in _macros_in_span(file, claim.source):
-        if not _reference_is_explicit_support(file, claim, macro):
+        if not projection.source_span_eligible(macro.span):
+            continue
+        if not _reference_is_explicit_support(projection, claim, macro):
             continue
         labels = _first_required_argument(macro)
         if not labels:
@@ -330,22 +337,21 @@ def _attach_explicit_support(
 
 
 def _projection_document(
-    file: FrontendFile,
+    projection: LinguisticProjection,
     span: SourceSpan,
     result_identifiers: set[str],
     frontend: LinguisticFrontend,
-) -> tuple[LinguisticDocument, list[SemanticPlaceholder]]:
-    projection = project_semantic_span(
-        file,
+) -> tuple[LinguisticDocument, tuple[LinguisticSpanPlaceholder, ...]]:
+    projected_span = projection.project_span(
         span,
         result_identifiers=result_identifiers,
     )
-    return frontend.parse(projection.text), projection.placeholders
+    return frontend.parse(projected_span.text), projected_span.placeholders
 
 
 def _placeholder_path(
     document: LinguisticDocument,
-    placeholder: SemanticPlaceholder,
+    placeholder: LinguisticSpanPlaceholder,
 ) -> list[str]:
     token = document.token_by_text(placeholder.token)
     if token is None:
@@ -354,22 +360,22 @@ def _placeholder_path(
 
 
 def _attach_linguistic_reference_candidates(
-    file: FrontendFile,
+    projection: LinguisticProjection,
     claim: Claim,
     result_identifiers: set[str],
     frontend: LinguisticFrontend,
     edges: list[SupportEdge],
 ) -> None:
     document, placeholders = _projection_document(
-        file,
+        projection,
         claim.source,
         result_identifiers,
         frontend,
     )
     for placeholder in placeholders:
-        if placeholder.kind == SemanticPlaceholderKind.RESULT_REFERENCE:
+        if placeholder.kind == LinguisticSpanTokenKind.RESULT_REFERENCE:
             kind = SupportKind.RESULT_REFERENCE
-        elif placeholder.kind == SemanticPlaceholderKind.EQUATION_REFERENCE:
+        elif placeholder.kind == LinguisticSpanTokenKind.EQUATION_REFERENCE:
             kind = SupportKind.EQUATION_REFERENCE
         else:
             continue
@@ -415,7 +421,7 @@ def _attach_adjacent_claim_candidate(
     claim: Claim,
     previous_claim: Claim | None,
     result_identifiers: set[str],
-    file: FrontendFile,
+    projection: LinguisticProjection,
     frontend: LinguisticFrontend,
     edges: list[SupportEdge],
 ) -> None:
@@ -434,7 +440,12 @@ def _attach_adjacent_claim_candidate(
     ):
         return
 
-    document, _ = _projection_document(file, claim.source, result_identifiers, frontend)
+    document, _ = _projection_document(
+        projection,
+        claim.source,
+        result_identifiers,
+        frontend,
+    )
     roots = [
         token
         for token in document.tokens
@@ -506,6 +517,7 @@ def _qualifier_for(
 
 def _ambiguous_qualifier_for(
     file: FrontendFile,
+    projection: LinguisticProjection,
     claim: Claim,
     raw: str,
     source: SourceSpan,
@@ -516,7 +528,7 @@ def _ambiguous_qualifier_for(
         return None
 
     document, placeholders = _projection_document(
-        file,
+        projection,
         source,
         result_identifiers,
         frontend,
@@ -524,7 +536,7 @@ def _ambiguous_qualifier_for(
     math_placeholders = [
         placeholder
         for placeholder in placeholders
-        if placeholder.kind == SemanticPlaceholderKind.MATH
+        if placeholder.kind == LinguisticSpanTokenKind.MATH
     ]
     if len(math_placeholders) != 1:
         return None
@@ -579,23 +591,33 @@ def extract_proof_support_graph(
     *,
     linguistic_frontend: LinguisticFrontend | None = None,
 ) -> ProofSupportGraph:
-    """Recover an explicit-first proof skeleton with optional local NLP candidates."""
+    """Recover an explicit-first proof skeleton from normalized eligible source facts."""
 
     files = {file.path: file for file in project.files}
     result_identifiers = {region.identifier for region in regions}
     claims: list[Claim] = []
     edges: list[SupportEdge] = []
+    projections = {
+        file.path: build_linguistic_projection(file)
+        for file in project.files
+    }
 
     for region in regions:
         file = files.get(str(Path(region.file).resolve())) or files.get(region.file)
         if file is None:
+            continue
+        projection = projections.get(file.path)
+        if projection is None or not projection.complete:
+            # Source-role uncertainty cannot become proof evidence.
             continue
         body = _proof_body_span(file, region)
         if body is None:
             continue
 
         result_claims: list[Claim] = []
-        for span, form in _claim_spans(file, body):
+        for span, form in _claim_spans(file, body, projection):
+            if not projection.source_span_eligible(span):
+                continue
             raw = span.text(file.raw)
             if form == ClaimForm.PROSE and result_claims:
                 qualifier = _qualifier_for(file, result_claims[-1], raw, span)
@@ -612,6 +634,7 @@ def extract_proof_support_graph(
                 ):
                     qualifier = _ambiguous_qualifier_for(
                         file,
+                        projection,
                         result_claims[-1],
                         raw,
                         span,
@@ -637,6 +660,7 @@ def extract_proof_support_graph(
             claims.append(claim)
             _attach_explicit_support(
                 file,
+                projection,
                 claim,
                 result_identifiers,
                 previous,
@@ -644,7 +668,7 @@ def extract_proof_support_graph(
             )
             if linguistic_frontend is not None and form == ClaimForm.PROSE:
                 _attach_linguistic_reference_candidates(
-                    file,
+                    projection,
                     claim,
                     result_identifiers,
                     linguistic_frontend,
@@ -654,7 +678,7 @@ def extract_proof_support_graph(
                     claim,
                     previous,
                     result_identifiers,
-                    file,
+                    projection,
                     linguistic_frontend,
                     edges,
                 )

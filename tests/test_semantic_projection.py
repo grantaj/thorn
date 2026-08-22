@@ -6,7 +6,7 @@ import pytest
 from thorn.frontend import LatexFrontend
 from thorn.frontends import RegexLatexFrontend
 from thorn.frontends.pylatexenc import PylatexencLatexFrontend
-from thorn.semantic_projection import SemanticPlaceholderKind, project_semantic_span
+from thorn.source_projection import LinguisticSpanTokenKind, build_linguistic_projection
 
 FrontendFactory = Callable[[], LatexFrontend]
 _FRONTENDS: tuple[FrontendFactory, ...] = (RegexLatexFrontend, PylatexencLatexFrontend)
@@ -48,8 +48,8 @@ By Lemma~\ref{lem:base}, $P(x)$ follows from \eqref{eq:key}; see \ref{fig:plot}.
     proofs = [environment for environment in file.environments if environment.name == "proof"]
     assert len(proofs) == 2
 
-    projection = project_semantic_span(
-        file,
+    source_projection = build_linguistic_projection(file)
+    projection = source_projection.project_span(
         proofs[1].body_span,
         result_identifiers={"lem:base", "lem:main"},
     )
@@ -58,10 +58,10 @@ By Lemma~\ref{lem:base}, $P(x)$ follows from \eqref{eq:key}; see \ref{fig:plot}.
         "see THORNREFERENCE1."
     )
     assert [item.kind for item in projection.placeholders] == [
-        SemanticPlaceholderKind.RESULT_REFERENCE,
-        SemanticPlaceholderKind.MATH,
-        SemanticPlaceholderKind.EQUATION_REFERENCE,
-        SemanticPlaceholderKind.GENERIC_REFERENCE,
+        LinguisticSpanTokenKind.RESULT_REFERENCE,
+        LinguisticSpanTokenKind.MATH,
+        LinguisticSpanTokenKind.EQUATION_REFERENCE,
+        LinguisticSpanTokenKind.GENERIC_REFERENCE,
     ]
     assert [item.label for item in projection.placeholders] == [
         "lem:base",
@@ -98,7 +98,10 @@ x_{\ref{eq:index}} = 1
     parsed = frontend_factory().parse_project(tex)
     file = parsed.files[0]
     display = next(math for math in file.math if math.delimiter == r"\[\]")
-    projection = project_semantic_span(file, display.span, result_identifiers=set())
+    projection = build_linguistic_projection(file).project_span(
+        display.span,
+        result_identifiers=set(),
+    )
     assert projection.text == "THORNMATH1"
     assert len(projection.placeholders) == 1
-    assert projection.placeholders[0].kind == SemanticPlaceholderKind.MATH
+    assert projection.placeholders[0].kind == LinguisticSpanTokenKind.MATH

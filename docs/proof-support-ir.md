@@ -10,6 +10,12 @@ The current architecture is:
 LaTeX frontend facts
         |
         v
+normalized reversible source projection
+  - parser-owned source eligibility
+  - exact source offsets
+  - typed math/reference placeholders
+        |
+        v
 +---------------- rich Thorn Math IR ----------------+
 | result dependency graph                            |
 | symbol / definition / scope evidence               |
@@ -37,9 +43,22 @@ LaTeX frontend facts
 
 The purpose of the support layer is to make the author's visible argument structure addressable, source-located, queryable and available as evidence for elaboration. Once Thorn can safely identify a stronger mathematical operation, that operation belongs in canonical Proof IR rather than being left permanently as a generic support annotation.
 
-The [`semantic-dependency contract`](semantic-dependency-contract.md) tests the
-backend-independent authority, ambiguity, provenance, closure, and bounded-reachability
-properties that this evidence must preserve through canonical Proof IR.
+The [`semantic-dependency contract`](semantic-dependency-contract.md) tests the backend-independent authority, ambiguity, provenance, closure, and bounded-reachability properties that this evidence must preserve through canonical Proof IR.
+
+## Source eligibility and the reversible projection
+
+Proof-support extraction does not decide for itself which bytes are comments, preamble, verbatim, listings, minted material or other opaque/non-document source. Those source roles belong to `LatexFrontend` and are normalized by `build_linguistic_projection()`.
+
+The same `LinguisticProjection` is the single production source-to-linguistic boundary used by declaration and proof-support semantics:
+
+- offsets remain reversible to exact LaTeX `SourceSpan`s;
+- parser-owned ineligible regions cannot become mathematical evidence;
+- incomplete source-region coverage fails closed rather than guessing;
+- math and reference syntax can be projected to typed NLP-safe placeholders without losing their original source identity.
+
+For proof claims, an excluded region is a **hard semantic boundary**, not merely whitespace. Eligible prose on opposite sides of a comment or verbatim block is segmented separately so that a raw `Claim` span can never contain excluded bytes. Display-math claims are likewise retained only when the frontend marks their source span eligible.
+
+This invariant is downstream-facing: excluded source cannot become a `Claim`, a `SupportEdge`, canonical Proof-IR content, or an advertised bounded source-rescue handle.
 
 ## Claims
 
@@ -66,6 +85,21 @@ By compactness, pass to a convergent subsequence.
 can produce a named-property support edge even when compactness is inapplicable in the ambient setting.
 
 Later elaboration can turn sufficiently understood evidence into a typed proof operation such as result application, implication elimination, definition use, rewriting, instantiation or witness introduction. If it cannot, canonical Proof IR retains an explicit unknown or unresolved inference rather than pretending the generic support edge is a complete semantic account.
+
+## Retained support grammar
+
+The extractor deliberately retains a small Thorn-owned evidence grammar over **eligible normalized source**. These rules are not generic English parsing and do not decide mathematical truth. They currently cover bounded forms such as:
+
+- explicit application/reference cues (`by`, `from`, `using`, `apply`, `invoke` and close inflections);
+- `by definition`;
+- the small named-property family historically used by the support IR (`compactness`, `continuity`, `linearity`, `monotonicity`, `convexity`);
+- explicit `since ... , ...` reason structure;
+- explicit conclusion cues (`therefore`, `hence`, `thus`, `consequently`);
+- conservative trailing-binder forms after display mathematics.
+
+A generic asserted support phrase that matches the bounded application shape but is not otherwise identified is retained as `UNRESOLVED`, not promoted to a known property. Local NLP may add parser-neutral grammatical evidence, but cue-only support remains ambiguous/unresolved where semantics are not established.
+
+The important ownership split is: **source eligibility and reversible projection come from the frontend/source substrate; support-relation semantics remain bounded Thorn-owned evidence rules.** New source-format corner cases must not be repaired by adding comment/verbatim scanners here.
 
 ## Load-bearing prose
 
@@ -108,6 +142,7 @@ The extractor intentionally recognizes only mechanically strong cues. It does no
 
 In particular:
 
+- excluded/non-document source is never proof evidence;
 - `clearly` and `obviously` are not support edges;
 - equal symbol spellings are not automatically the same binding;
 - prose may be represented without being classified as load-bearing;
@@ -151,8 +186,6 @@ These fixtures strengthen deterministic evidence recovery without implying that 
 
 ## Downstream consumers
 
-The earlier issue #20 work showed that LLM review can consume structured Thorn-owned context rather than rediscovering project structure from raw LaTeX. The later Proof-IR programme established a stronger model interface: issue #65 froze `thorn-proof/1`, a deterministic projection of canonical semantics with explicit uncertainty and bounded exact source rescue.
+Normal production semantic review now consumes the canonical bounded result-level state and `thorn-proof/1`; proof-support evidence reaches that interface only through the canonical selection/elaboration path. Exact source rescue is restricted to handles already advertised by canonical state.
 
-Issue #78 now tracks wiring that representation into the production semantic-review path and evaluating it against the existing raw baseline. Until #78 is complete, the support graph and earlier review contexts remain useful infrastructure but are not the intended final model-facing interface.
-
-The same canonical Proof IR also feeds the bounded Lean handoff tracked in #77. Support-extraction vocabulary should not leak into generated formal proof merely because it was part of the evidence used to recover a stronger mathematical operation.
+The same canonical Proof IR feeds the bounded Lean handoff. Support-extraction vocabulary should not leak into generated formal proof merely because it was part of the evidence used to recover a stronger mathematical operation.
