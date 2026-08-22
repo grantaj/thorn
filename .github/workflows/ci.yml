@@ -16,7 +16,7 @@ jobs:
           python-version: "3.11.16"
           cache: pip
       - run: python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
-      - name: Verify provider runtime identity survives wheel installation
+      - name: Verify provider identity and default frontend from a clean wheel install
         run: |
           rm -rf /tmp/thorn-wheel /tmp/thorn-wheel-venv
           mkdir -p /tmp/thorn-wheel
@@ -28,13 +28,19 @@ jobs:
           (
             cd /tmp
             PYTHONPATH= THORN_CONSTRAINTS="$GITHUB_WORKSPACE/constraints/provider-runtime.txt" \
-              /tmp/thorn-wheel-venv/bin/python - <<'PY'
+              /tmp/thorn-wheel-venv/bin/python -W error::DeprecationWarning - <<'PY'
           import hashlib
+          import importlib.metadata
           import os
           import sys
           from pathlib import Path
 
           import thorn
+          from thorn.frontends import DEFAULT_FRONTEND_NAME, get_default_frontend
+          from thorn.frontends.tree_sitter_identity import (
+              TREE_SITTER_LANGUAGE_PACK_VERSION,
+              TREE_SITTER_RUNTIME_VERSION,
+          )
           from thorn.providers.execution_contract import (
               current_provider_runtime,
               provider_lock_sha256,
@@ -52,8 +58,17 @@ jobs:
           assert set(runtime.locked_packages) == expected_names
           assert provider_runtime_matches_lock(runtime)
           assert Path(thorn.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
+          assert importlib.metadata.version("tree-sitter") == TREE_SITTER_RUNTIME_VERSION
+          assert (
+              importlib.metadata.version("tree-sitter-language-pack")
+              == TREE_SITTER_LANGUAGE_PACK_VERSION
+          )
+          assert DEFAULT_FRONTEND_NAME == "tree-sitter"
+          assert get_default_frontend().name == "tree-sitter"
           PY
           )
+          PYTHONPATH= /tmp/thorn-wheel-venv/bin/thorn analyze \
+            "$GITHUB_WORKSPACE/examples/demo.tex" --structural-only
       - run: pytest -q
       - run: python scripts/issue_101_robustness.py --check
       - run: thorn-eval eval/cases --validate-only
@@ -85,25 +100,36 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ""
-      TREE_SITTER_LANGUAGE_PACK_VERSION: "1.14.3"
-      TREE_SITTER_LATEX_REVISION: 7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11.16"
           cache: pip
-      - run: python -m pip install -c constraints/provider-runtime.txt -e '.[dev,treesitter]'
-      - name: Verify packaged grammar and warning-free runtime
+      - run: python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
+      - name: Verify packaged grammar identity and warning-free runtime
         run: |
           python -W error::DeprecationWarning - <<'PY'
           import importlib.metadata
 
           from tree_sitter import Language, Parser
           from tree_sitter_language_pack import get_language, get_parser
+          from thorn.frontends.tree_sitter_identity import (
+              TREE_SITTER_LANGUAGE_PACK_RELEASE,
+              TREE_SITTER_LANGUAGE_PACK_VERSION,
+              TREE_SITTER_LATEX_REVISION,
+              TREE_SITTER_RUNTIME_VERSION,
+          )
 
-          assert importlib.metadata.version("tree-sitter") == "0.26.0"
-          assert importlib.metadata.version("tree-sitter-language-pack") == "1.14.3"
+          assert TREE_SITTER_RUNTIME_VERSION == "0.26.0"
+          assert TREE_SITTER_LANGUAGE_PACK_VERSION == "1.14.3"
+          assert TREE_SITTER_LANGUAGE_PACK_RELEASE == "df3bcc39862da6972032d7537d49b782a50a25bb"
+          assert TREE_SITTER_LATEX_REVISION == "7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957"
+          assert importlib.metadata.version("tree-sitter") == TREE_SITTER_RUNTIME_VERSION
+          assert (
+              importlib.metadata.version("tree-sitter-language-pack")
+              == TREE_SITTER_LANGUAGE_PACK_VERSION
+          )
           assert isinstance(get_language("latex"), Language)
           assert isinstance(get_parser("latex"), Parser)
           PY

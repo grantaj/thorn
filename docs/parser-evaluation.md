@@ -6,79 +6,78 @@ authority, dependency identity, scope, ambiguity, and semantic closure remain
 Thorn-owned.
 
 This document records the #16 regex/pylatexenc comparison, the #158 Tree-sitter
-evaluation, and the final #161 Slice G production/default decision.
+evaluation, the #161 architectural disposition, and the #183 production cutover.
 
 ## Current backend roles
 
 | Backend | Current role | Default? |
 | --- | --- | --- |
-| `regex` | compatibility production frontend | **yes, for now** |
-| `tree-sitter` | preferred source-structure backend and mandatory differential lane when installed | no; packaging blocker |
+| `tree-sitter` | production source-structure frontend and mandatory conformance lane | **yes** |
+| `regex` | compatibility and differential backend; frozen as parser infrastructure | no |
 | `pylatexenc` | independent parser/conformance backend | no |
 
-The runtime default is single-sourced through:
+The runtime choice is single-sourced through:
 
 ```text
-DEFAULT_FRONTEND_NAME = regex
+DEFAULT_FRONTEND_NAME = tree-sitter
 ```
 
-`current` resolves through `DEFAULT_FRONTEND_NAME`; `latex.extract_project()` uses the
-same default selector rather than hard-coding a second choice. Tree-sitter's preferred
-role is an evidence-backed architecture disposition documented here, not a second
-runtime setting that could drift independently.
+`current` resolves through `DEFAULT_FRONTEND_NAME`; `latex.extract_project()` asks for a
+fresh default frontend at each extraction rather than caching a shared mutable parser.
+That lifecycle rule was established by #195 before the default changed.
 
-## Why Tree-sitter is preferred
+## Why Tree-sitter is the production backend
 
-The #158 evidence showed that `latex-lsp/tree-sitter-latex` can supply the generic
-source structure Thorn wants behind `LatexFrontend`:
+The #158 evidence showed that `latex-lsp/tree-sitter-latex` supplies the generic source
+structure Thorn wants behind `LatexFrontend`:
 
 - exact macros, environments and math structure;
 - normalized exact source provenance, including UTF-8 byte-to-character conversion;
 - grammar-native comments and opaque/raw-code regions;
 - conservative document-text eligibility;
 - useful parse-error evidence without exposing parser-native nodes downstream;
-- good conformance on ordinary mathematical LaTeX and the completed semantic-dependency
-  contract.
+- strong conformance on ordinary mathematical LaTeX and the completed
+  semantic-dependency contract.
 
-The adapter also guards tolerant parser recovery where Thorn needs fail-closed source
-facts. In particular, mismatched `\begin{...}` / `\end{...}` names are not promoted to
-a valid `FrontendEnvironment` merely because the CST recovered a node.
+The adapter guards tolerant parser recovery where Thorn needs fail-closed source facts.
+For example, mismatched `\begin{...}` / `\end{...}` names are not promoted to a valid
+`FrontendEnvironment` merely because the CST recovered a node.
 
 The architecture does **not** require Tree-sitter to execute TeX, infer unknown macro
 semantics, or repair malformed author input. Valid but unsupported structure may remain
 partial; malformed structure may fail closed.
 
-## Why Tree-sitter is not the default yet
+## Packaged identity and #183 cutover
 
-The remaining blocker is installation/packaging, not semantic quality.
+The historical #158 grammar pin was
+`fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9`. It remained non-default because installing
+that exact generated grammar required a source clone plus Node-based generation.
 
-The evaluated grammar is `latex-lsp/tree-sitter-latex` 0.6.0 at revision
-`fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9`. That revision does not contain generated
-`src/parser.c`, so installing the exact evaluated grammar requires generating it first:
+Issue #183 clarified the actual invariant: Thorn must ship an exact grammar identity
+that has passed the evidence gate; the first evaluated revision is not immutable.
+The conventionally released candidate was therefore evaluated independently before the
+default changed.
 
-```text
-git clone --filter=blob:none https://github.com/latex-lsp/tree-sitter-latex.git /tmp/tree-sitter-latex
-git -C /tmp/tree-sitter-latex checkout fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9
-(cd /tmp/tree-sitter-latex && npx --yes tree-sitter-cli@0.24.7 generate)
-pip install /tmp/tree-sitter-latex
-```
+The production identity is now:
 
-`thorn-math[treesitter]` currently installs `tree-sitter==0.26.0`, but it cannot by
-itself install the exact generated grammar used by Thorn's conformance lane. The
-0.6.0 grammar metadata also advertises an older Tree-sitter runtime range, while the
-#158 evaluation intentionally exercised 0.26.0 and observed the binding's legacy
-integer-language-handle deprecation warning.
+- `tree-sitter==0.26.0`;
+- `tree-sitter-language-pack==1.14.3`;
+- language-pack v1.14.3 release tag commit
+  `df3bcc39862da6972032d7537d49b782a50a25bb`;
+- packaged LaTeX grammar revision
+  `7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957`.
 
-A production-default switch must have a reproducible, pinned, ordinary installation
-path that does not ask users to clone source and run Node code generation. Slice G
-therefore keeps `regex` as the compatibility default and records a separate packaging
-cutover as follow-up work.
-
-The #183 packaging audit and exact exit criteria are recorded in
+The exact packaging/provenance evidence is recorded in
 [`tree-sitter-packaging.md`](tree-sitter-packaging.md).
 
-This must not be misread as permission to improve the regex backend into a more complete
-TeX parser. Tree-sitter remains the preferred destination.
+The released package exposes modern `get_language("latex")` and `get_parser("latex")`
+APIs. Thorn uses `get_parser` directly and runs the API with Python deprecation warnings
+as errors in CI, removing the legacy integer-language-handle problem rather than hiding
+it.
+
+Because Tree-sitter is the production default, its runtime and grammar bundle are core
+Thorn dependencies. A plain install is therefore sufficient; users do not clone a
+grammar repository, run Node, or select a special backend extra.
 
 ## Normalized source contract
 
@@ -123,53 +122,58 @@ The Tree-sitter adapter contains two deliberately bounded source-role fallbacks:
 
 - an environment-name expression applied only to a Tree-sitter-owned `begin` node when
   the grammar does not expose the convenient name field;
-- `verbatim*` classification over an already CST-owned environment span because the
-  pinned grammar parses it as a generic environment.
+- `verbatim*` classification over an already CST-owned environment span when the grammar
+  represents it generically.
 
-Neither fallback rescans the whole document or executes TeX. They are normalization of
-parser-owned evidence, not a parallel parser.
+Neither fallback rescans the whole document or executes TeX. They normalize parser-owned
+evidence rather than forming a parallel parser.
 
-The regex backend necessarily retains handwritten raw-source scanning because it is the
-current compatibility frontend. That code is frozen as compatibility infrastructure in
-architectural terms: new source corner cases should be addressed through the preferred
-structured substrate or explicit capability limits, not by expanding the scanner.
+The regex backend necessarily retains handwritten raw-source scanning because it is a
+compatibility backend. That code is frozen in architectural terms: new source corner
+cases should be addressed through the structured substrate or explicit capability
+limits, not by expanding the scanner.
 
 ## Workspace boundary above the parser
 
 A source CST does not own expanded project occurrence semantics. `ProjectWorkspaceFacts`
-now sits above every frontend and is the production owner of repeated occurrence
-identity, include-site relationships, expanded order, and project partiality. TexLab and
-LaTeXML remain independent workspace/deeper-expansion evidence as documented in
+sits above every frontend and owns repeated occurrence identity, include-site
+relationships, expanded order, and project partiality. TexLab and LaTeXML remain
+independent workspace/deeper-expansion evidence as documented in
 `workspace-resolution-evaluation.md`.
 
-This separation is important: choosing Tree-sitter as the preferred source backend does
-not turn it into Thorn's mathematical authority or a complete TeX workspace engine.
+Choosing Tree-sitter as the production source backend therefore does not turn it into
+Thorn's mathematical authority or a complete TeX workspace engine.
 
-## Historical measurements
+## Evidence behind the cutover
 
-The final #158 review run reported:
+Before changing the default, PR #196 evaluated the released grammar while keeping the
+old runtime default. Candidate commit `9b9df9de581e98e87305e925ad58eb3ac540ffcf`
+passed the warning-free packaged-runtime check, 26 frontend/differential/source-projection
+tests, and the completed Tree-sitter semantic-dependency contract (64 passed, 1 skipped,
+1 xfailed), together with Ruff and mypy. The same candidate also passed the Local NLP
+and Lean workflows. No material regression against the previously evaluated grammar was
+found.
 
-| Backend | Parse median | Full extraction median | Installed parser bytes |
-| --- | ---: | ---: | ---: |
-| regex | 14.710 ms | 65.373 ms | none |
-| pylatexenc | 32.452 ms | 64.793 ms | 1,143,296 |
-| tree-sitter | 25.316 ms | 75.365 ms | 5,819,485 combined |
+The representative #183 measurement reported:
 
-These small runtime differences were not architecturally decisive. Packaging was more
-material: the pinned Tree-sitter grammar generation/build added roughly 50 seconds to
-observed hosted-CI setup and required Node/tree-sitter-cli.
+| Backend | Parse median | Full extraction median |
+| --- | ---: | ---: |
+| regex | 14.430 ms | 65.685 ms |
+| pylatexenc | 22.844 ms | 54.480 ms |
+| tree-sitter | 19.923 ms | 70.691 ms |
 
-## Final #161 disposition
+These small runtime differences are not architecturally decisive. The decisive change
+from #161 is that the preferred structured backend now has a conventional released,
+pinned, warning-free installation path that has passed Thorn's gate.
+
+## Production disposition
 
 - Keep `LatexFrontend` as the sole parser boundary.
-- Keep Tree-sitter as the preferred source-structure backend.
-- Keep regex as the explicit compatibility default until exact grammar packaging is
-  frictionless and reproducible.
+- Use the exact released Tree-sitter identity recorded above as the production default.
+- Keep regex as compatibility/differential evidence, not a parser-development target.
 - Keep pylatexenc as independent conformance evidence.
 - Do not add raw-source compensation to make backends agree on unsupported semantics.
 - Keep source/workspace partiality explicit and fail closed on malformed source.
-- Re-run the full frontend, workspace, #162, Local NLP and Lean contracts before any
-  later default switch.
-
-The default decision is therefore settled for #161 without pretending the packaging
-blocker has disappeared.
+- Keep `ProjectWorkspaceFacts` above the CST boundary.
+- Re-run frontend/provenance, workspace, #162, Local NLP, Lean, clean-install CLI, full
+  pytest, Ruff, and mypy whenever the production grammar/default identity changes.
