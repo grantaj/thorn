@@ -102,6 +102,12 @@ jobs:
       OPENAI_API_KEY: ""
     steps:
       - uses: actions/checkout@v4
+      - name: Snapshot PR source for local patching
+        run: tar --exclude=.git -czf /tmp/issue-183-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-183-source-snapshot
+          path: /tmp/issue-183-source.tar.gz
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11.16"
