@@ -42,6 +42,71 @@ def _source_eligible(
     return _span_eligible(projections, symbol.introduction_source)
 
 
+def _project_symbol_key(symbol: Symbol) -> tuple[str, int, int]:
+    return (symbol.source.file, symbol.source.start_offset, symbol.source.end_offset)
+
+
+def _disambiguate_project_symbol_identifiers(table: SymbolTable) -> None:
+    """Make distinct physical project declarations distinct Symbol-IR identities."""
+
+    groups: dict[str, list[Symbol]] = {}
+    for symbol in table.symbols:
+        if symbol.scope_identifier == "project":
+            groups.setdefault(symbol.identifier, []).append(symbol)
+    collisions = {
+        identifier: symbols
+        for identifier, symbols in groups.items()
+        if len({_project_symbol_key(symbol) for symbol in symbols}) > 1
+    }
+    if not collisions:
+        return
+
+    replacements: dict[tuple[str, str], str] = {}
+    rewritten: list[Symbol] = []
+    for symbol in table.symbols:
+        if symbol.identifier not in collisions:
+            rewritten.append(symbol)
+            continue
+        new_identifier = (
+            f"{symbol.identifier}:{symbol.source.file}:"
+            f"{symbol.source.start_offset}:{symbol.source.end_offset}"
+        )
+        replacements[(symbol.identifier, symbol.source.file)] = new_identifier
+        rewritten.append(symbol.model_copy(update={"identifier": new_identifier}))
+    table.symbols = rewritten
+
+    for index, definition in enumerate(table.definitions):
+        replacement = replacements.get((definition.symbol_identifier, definition.source.file))
+        if replacement is None:
+            continue
+        table.definitions[index] = definition.model_copy(
+            update={
+                "identifier": definition.identifier.replace(
+                    definition.symbol_identifier, replacement, 1
+                ),
+                "symbol_identifier": replacement,
+            }
+        )
+    for index, constraint in enumerate(table.constraints):
+        replacement = replacements.get((constraint.symbol_identifier, constraint.source.file))
+        if replacement is None:
+            continue
+        table.constraints[index] = constraint.model_copy(
+            update={
+                "identifier": constraint.identifier.replace(
+                    constraint.symbol_identifier, replacement, 1
+                ),
+                "symbol_identifier": replacement,
+            }
+        )
+    table.uses = [
+        use.model_copy(update={"resolved_symbol_identifier": None})
+        if use.resolved_symbol_identifier in collisions
+        else use
+        for use in table.uses
+    ]
+
+
 def enforce_structured_authority_boundary(
     project: ParsedProject,
     table: SymbolTable,
@@ -56,6 +121,8 @@ def enforce_structured_authority_boundary(
     project-order availability, and every retained use is resolved again through the
     occurrence-aware resolver. No TeX or include structure is rediscovered here.
     """
+
+    _disambiguate_project_symbol_identifiers(table)
 
     projections = {
         file.path: build_linguistic_projection(file)
