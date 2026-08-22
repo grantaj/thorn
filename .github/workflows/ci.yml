@@ -133,6 +133,8 @@ jobs:
           assert isinstance(get_language("latex"), Language)
           assert isinstance(get_parser("latex"), Parser)
           PY
+      - name: Issue #183 normalized fact differential
+        run: PYTHONPATH=tests python scripts/issue_183_normalized_fact_diff.py
       - name: Frontend and differential conformance
         run: >-
           pytest -q
