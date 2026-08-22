@@ -67,6 +67,13 @@ def _distribution_bytes(name: str) -> int | None:
     return total
 
 
+def _distribution_version(name: str) -> str | None:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--iterations", type=int, default=20)
@@ -86,10 +93,14 @@ def main() -> int:
             "fixture": {"pairs": args.pairs, "source_bytes": source_bytes},
             "iterations": args.iterations,
             "backends": {},
+            "package_versions": {
+                "tree-sitter": _distribution_version("tree-sitter"),
+                "tree-sitter-language-pack": _distribution_version("tree-sitter-language-pack"),
+            },
             "installed_bytes": {
                 "pylatexenc": _distribution_bytes("pylatexenc"),
                 "tree-sitter": _distribution_bytes("tree-sitter"),
-                "tree-sitter-latex": _distribution_bytes("tree-sitter-latex"),
+                "tree-sitter-language-pack": _distribution_bytes("tree-sitter-language-pack"),
             },
         }
         results = payload["backends"]

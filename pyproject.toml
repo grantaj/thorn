@@ -21,6 +21,7 @@ pylatexenc = [
 ]
 treesitter = [
   "tree-sitter==0.26.0",
+  "tree-sitter-language-pack==1.14.3",
 ]
 dev = [
   "hatchling>=1.27",
@@ -66,5 +67,5 @@ strict = true
 packages = ["thorn"]
 
 [[tool.mypy.overrides]]
-module = ["tree_sitter", "tree_sitter_latex"]
+module = ["tree_sitter", "tree_sitter_language_pack"]
 ignore_missing_imports = true

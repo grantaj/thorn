@@ -85,7 +85,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ""
-      TREE_SITTER_LATEX_REVISION: fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9
+      TREE_SITTER_LANGUAGE_PACK_VERSION: "1.14.3"
+      TREE_SITTER_LATEX_REVISION: 7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -93,12 +94,19 @@ jobs:
           python-version: "3.11.16"
           cache: pip
       - run: python -m pip install -c constraints/provider-runtime.txt -e '.[dev,treesitter]'
-      - name: Build and install pinned tree-sitter-latex grammar
+      - name: Verify packaged grammar and warning-free runtime
         run: |
-          git clone --filter=blob:none https://github.com/latex-lsp/tree-sitter-latex.git /tmp/tree-sitter-latex
-          git -C /tmp/tree-sitter-latex checkout "$TREE_SITTER_LATEX_REVISION"
-          (cd /tmp/tree-sitter-latex && npx --yes tree-sitter-cli@0.24.7 generate)
-          python -m pip install /tmp/tree-sitter-latex
+          python -W error::DeprecationWarning - <<'PY'
+          import importlib.metadata
+
+          from tree_sitter import Language, Parser
+          from tree_sitter_language_pack import get_language, get_parser
+
+          assert importlib.metadata.version("tree-sitter") == "0.26.0"
+          assert importlib.metadata.version("tree-sitter-language-pack") == "1.14.3"
+          assert isinstance(get_language("latex"), Language)
+          assert isinstance(get_parser("latex"), Parser)
+          PY
       - name: Frontend and differential conformance
         run: >-
           pytest -q

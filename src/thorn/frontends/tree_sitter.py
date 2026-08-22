@@ -83,16 +83,14 @@ class _Coordinates:
 
 def _load_parser() -> Any:
     try:
-        import tree_sitter_latex
-        from tree_sitter import Language, Parser
+        from tree_sitter_language_pack import get_parser
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "tree-sitter frontend requires tree-sitter plus the tree-sitter-latex grammar; "
-            "see docs/parser-evaluation.md for the pinned optional installation"
+            "tree-sitter frontend requires the pinned tree-sitter runtime and "
+            "tree-sitter-language-pack grammar bundle; install `thorn-math[treesitter]`"
         ) from exc
 
-    language = Language(tree_sitter_latex.language())
-    return Parser(language)
+    return get_parser("latex")
 
 
 def _walk(node: Any) -> list[Any]:

@@ -8,7 +8,7 @@ from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
 
 def _frontend() -> TreeSitterLatexFrontend:
     pytest.importorskip("tree_sitter")
-    pytest.importorskip("tree_sitter_latex")
+    pytest.importorskip("tree_sitter_language_pack")
     return TreeSitterLatexFrontend()
 
 
