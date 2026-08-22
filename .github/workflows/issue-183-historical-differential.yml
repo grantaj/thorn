@@ -1,9 +1,7 @@
 name: issue-183-historical-differential
 
 on:
-  push:
-    branches:
-      - issue-183-historical-differential
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -30,41 +28,30 @@ jobs:
           PYTHONPATH=tests python - <<'PY'
           from pathlib import Path
           from tempfile import TemporaryDirectory
-
           import tree_sitter_latex
           from tree_sitter import Language, Parser
-
           from declaration_contract_frontend import DeclarationContractFrontend
           from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
           from thorn.latex import extract_project
           from thorn.review_workflow import prepare_proof_review
 
-          def historical_frontend() -> TreeSitterLatexFrontend:
+          def historical_frontend():
               frontend = object.__new__(TreeSitterLatexFrontend)
               frontend._parser = Parser(Language(tree_sitter_latex.language()))
               return frontend
 
           a2 = Path("eval/robustness/issue_101/variant_prose_uniformity.tex").resolve()
-          project = extract_project(
-              a2,
-              frontend=historical_frontend(),
-              linguistic_frontend=DeclarationContractFrontend(),
-          )
+          project = extract_project(a2, frontend=historical_frontend(), linguistic_frontend=DeclarationContractFrontend())
           prepared = prepare_proof_review(project, project.unit("thm:uniform-decay"))
-          source_texts = [source.text for source in prepared.document.sources]
-          stable_matches = [text for text in source_texts if "will be called \\emph{stable}" in text]
-          window_matches = [text for text in source_texts if "Throughout, the observation window is" in text]
-          a2_ok = len(stable_matches) == 1 and len(window_matches) == 1
-          print(f"historical A2 semantic context: {'PASS' if a2_ok else 'FAIL'}")
+          texts = [source.text for source in prepared.document.sources]
+          a2_ok = sum("will be called \\emph{stable}" in text for text in texts) == 1 and sum("Throughout, the observation window is" in text for text in texts) == 1
+          print("historical A2 semantic context:", "PASS" if a2_ok else "FAIL")
           if not a2_ok:
-              print("historical A2 source texts:")
-              for text in source_texts:
-                  print(repr(text))
+              print("source texts:", *map(repr, texts), sep="\n")
 
           with TemporaryDirectory() as tmp:
               tex = Path(tmp) / "macro-definition.tex"
-              tex.write_text(
-                  r"""\documentclass{article}
+              tex.write_text(r'''\documentclass{article}
 \usepackage{amsthm}
 \newcommand{\meaningop}{\stackrel{\text{\tiny def}}{=}}
 \newcommand{\noteop}{\stackrel{\text{\tiny note}}{=}}
@@ -85,21 +72,11 @@ Q(A_\tau)
 \]
 \end{proof}
 \end{document}
-""",
-                  encoding="utf-8",
-              )
+''', encoding="utf-8")
               project = extract_project(tex, frontend=historical_frontend())
-              project_symbols = [
-                  symbol.name
-                  for symbol in project.symbol_table.symbols
-                  if symbol.result_identifier is None
-              ]
-              macro_ok = project_symbols == [r"A_\tau"]
-              print(
-                  "historical local definitional operator: "
-                  f"{'PASS' if macro_ok else 'FAIL'}; symbols={project_symbols!r}"
-              )
+              symbols = [s.name for s in project.symbol_table.symbols if s.result_identifier is None]
+              macro_ok = symbols == [r"A_\tau"]
+              print("historical local definitional operator:", "PASS" if macro_ok else "FAIL", symbols)
 
-          if not (a2_ok and macro_ok):
-              raise SystemExit(1)
+          assert a2_ok and macro_ok
           PY
