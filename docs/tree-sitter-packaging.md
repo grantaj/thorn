@@ -36,9 +36,9 @@ Upstream source and license:
 ### `tree-sitter-language-pack`
 
 `tree-sitter-language-pack` is the strongest conventional packaging candidate because
-it publishes platform wheels and manages precompiled grammars. The latest published
-version checked for this issue, 1.14.3, does **not** package the evaluated LaTeX source
-identity: its release source definition pins LaTeX to
+it publishes platform wheels and manages precompiled grammars. The latest version on
+the public PyPI index checked for this issue, 1.13.5, does **not** package the evaluated
+LaTeX source identity: its release source definition pins LaTeX to
 `7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957`.
 
 The project's current unreleased source definition has since moved to
@@ -49,8 +49,8 @@ deliberately evaluates and pins a newer released revision).
 
 Relevant source:
 
-- <https://pypi.org/project/tree-sitter-language-pack/1.14.3/>
-- <https://github.com/xberg-io/tree-sitter-language-pack/blob/24efeb33eb6e82243e950a2ca7395efc3e3d47e3/sources/language_definitions.json>
+- <https://pypi.org/project/tree-sitter-language-pack/1.13.5/>
+- <https://github.com/xberg-io/tree-sitter-language-pack/blob/55cb1d8b98bed6a604f53ab0c21dfbee600c7e0c/sources/language_definitions.json>
 
 `tree-sitter-language-pack` is MIT licensed.
 
