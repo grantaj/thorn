@@ -52,6 +52,25 @@ class LinguisticProjection:
     def source_span(self, start: int, end: int) -> SourceSpan:
         return self.file.span(start, end)
 
+    def source_span_eligible(self, source: SourceSpan) -> bool:
+        """Return whether normalized source-role facts permit authority at ``source``.
+
+        This is deliberately a source-role decision only. It does not interpret
+        declaration grammar or mathematical meaning. A span touching any parser-owned
+        excluded region is ineligible, and partial region coverage fails closed.
+        """
+
+        if not self.complete or source.file != self.file.path:
+            return False
+        if source.start_offset < 0 or source.end_offset > len(self.file.raw):
+            return False
+        return not any(
+            region.kind in _INELIGIBLE_KINDS
+            and region.span.start_offset < source.end_offset
+            and source.start_offset < region.span.end_offset
+            for region in self.file.regions
+        )
+
     def token_containing(
         self,
         offset: int,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from thorn.frontend import FrontendFile, FrontendMath, ParsedProject, SourceSpan
+from thorn.source_projection import LinguisticProjection, build_linguistic_projection
 from thorn.symbol_extract import (
     _CUE_PATTERNS,
     _SIMPLE_SYMBOL,
@@ -25,6 +26,11 @@ from thorn.symbols import (
     SymbolTable,
     SymbolUse,
     canonical_symbol_name,
+)
+from thorn.workspace import (
+    ProjectPositionLookup,
+    ProjectWorkspaceFacts,
+    WorkspaceResolution,
 )
 
 # Project-scope declarations deliberately reuse the ordinary symbol-extraction
@@ -49,11 +55,17 @@ _PROJECT_CONVENTION_TAIL_RE = re.compile(
 _MAP_TAIL_RE = re.compile(r"^\s+be\b", re.IGNORECASE)
 
 
-def _cue_for_math(file: FrontendFile, math: FrontendMath) -> tuple[IntroductionKind, int] | None:
-    """Return a syntactic cue while reusing the ordinary declaration grammar."""
+def _cue_for_math(
+    file: FrontendFile,
+    math: FrontendMath,
+    projection: LinguisticProjection,
+) -> tuple[IntroductionKind, int] | None:
+    """Return a cue only from normalized source-role-eligible text."""
 
+    if not projection.source_span_eligible(math.span):
+        return None
     left_start = max(0, math.span.start_offset - 96)
-    left = file.raw[left_start : math.span.start_offset]
+    left = projection.text[left_start : math.span.start_offset]
     for kind, pattern in _CUE_PATTERNS:
         match = pattern.search(left)
         if match is not None:
@@ -93,6 +105,7 @@ def _standard_candidate(
     file: FrontendFile,
     math: FrontendMath,
     kind: IntroductionKind,
+    projection: LinguisticProjection,
 ) -> tuple[int, _Candidate] | None:
     content, content_start = _math_inner(math)
     candidates = _parse_candidates(content, kind)
@@ -106,7 +119,9 @@ def _standard_candidate(
     if len(candidates) != 1:
         return None
     candidate = candidates[0]
-    tail = file.raw[math.span.end_offset : min(len(file.raw), math.span.end_offset + 96)]
+    tail = projection.text[
+        math.span.end_offset : min(len(file.raw), math.span.end_offset + 96)
+    ]
     if not _candidate_is_authoritative_project_context(
         kind=kind,
         candidate=candidate,
@@ -229,8 +244,11 @@ def _record_uses(
     regions: list[ResultRegion],
     table: SymbolTable,
     added: list[Symbol],
+    *,
+    workspace: ProjectWorkspaceFacts,
+    projections: dict[str, LinguisticProjection],
 ) -> None:
-    """Record uses for new project symbols with shared occurrence matching."""
+    """Record uses for new project symbols with occurrence-aware resolution."""
 
     if not added:
         return
@@ -242,7 +260,8 @@ def _record_uses(
 
     for region in regions:
         file = files.get(region.file)
-        if file is None:
+        projection = projections.get(region.file)
+        if file is None or projection is None:
             continue
         spans = [(region.statement_span, ScopeKind.STATEMENT)]
         if region.proof_span is not None:
@@ -252,6 +271,7 @@ def _record_uses(
                 if not (
                     span.start_offset <= math.span.start_offset
                     and math.span.end_offset <= span.end_offset
+                    and projection.source_span_eligible(math.span)
                 ):
                     continue
                 content, content_start = _math_inner(math)
@@ -277,7 +297,12 @@ def _record_uses(
                         )
                         if scope is None:
                             continue
-                        resolved = table.resolve(symbol.name, scope, source)
+                        resolved = table.resolve(
+                            symbol.name,
+                            scope,
+                            source,
+                            workspace=workspace,
+                        )
                         table.uses.append(
                             SymbolUse(
                                 name=symbol.name,
@@ -292,18 +317,41 @@ def _record_uses(
                         existing.add(key)
 
 
+def _sort_key(
+    lookup: ProjectPositionLookup,
+    source: SourceSpan,
+) -> tuple[tuple[int, ...], str, int, int]:
+    try:
+        project_key = lookup.sort_key(source.file, source.start_offset)
+    except KeyError:
+        project_key = (10**12, source.start_offset)
+    return project_key, source.file, source.start_offset, source.end_offset
+
+
 def add_project_authoritative_context(
     project: ParsedProject,
     regions: list[ResultRegion],
     table: SymbolTable,
+    *,
+    workspace: ProjectWorkspaceFacts | None,
 ) -> None:
     """Recover conservative authoritative declarations outside result regions.
 
     Declaration parsing is shared with ``symbol_extract``. This layer adds only
     project-scope policy, the explicit infix ``to mean`` bridge, and use recording
-    for symbols discovered after base extraction. Arbitrary surrounding prose is
-    never imported as mathematical context.
+    for symbols discovered after base extraction. Source-role eligibility comes from
+    the reversible normalized projection and project visibility from workspace facts.
     """
+
+    if workspace is None or workspace.resolution != WorkspaceResolution.RESOLVED:
+        return
+
+    projections = {
+        file.path: build_linguistic_projection(file)
+        for file in project.files
+    }
+    if any(not projection.complete for projection in projections.values()):
+        return
 
     regions_by_file: dict[str, list[ResultRegion]] = {}
     for region in regions:
@@ -311,21 +359,23 @@ def add_project_authoritative_context(
 
     added: list[Symbol] = []
     for file in project.files:
+        projection = projections[file.path]
         file_regions = regions_by_file.get(file.path, [])
         outside = [
             math
             for math in file.math
             if not _inside_result_region(math.span, file_regions)
+            and projection.source_span_eligible(math.span)
         ]
         for index, math in enumerate(outside):
-            cue = _cue_for_math(file, math)
+            cue = _cue_for_math(file, math, projection)
             if cue is None:
                 continue
             kind, introduction_start = cue
 
             if kind == IntroductionKind.DEFINE and index + 1 < len(outside):
                 next_math = outside[index + 1]
-                bridge = file.raw[math.span.end_offset : next_math.span.start_offset]
+                bridge = projection.text[math.span.end_offset : next_math.span.start_offset]
                 if _ALIAS_BRIDGE_RE.fullmatch(bridge) is not None:
                     parsed_alias = _alias_candidate(math, next_math)
                     if parsed_alias is not None:
@@ -343,7 +393,7 @@ def add_project_authoritative_context(
                             added.append(symbol)
                             continue
 
-            parsed = _standard_candidate(file, math, kind)
+            parsed = _standard_candidate(file, math, kind, projection)
             if parsed is None:
                 continue
             content_start, candidate = parsed
@@ -359,8 +409,16 @@ def add_project_authoritative_context(
             if symbol is not None:
                 added.append(symbol)
 
-    _record_uses(project, regions, table, added)
-    table.symbols.sort(key=lambda item: (item.source.file, item.source.start_offset))
-    table.definitions.sort(key=lambda item: (item.source.file, item.source.start_offset))
-    table.constraints.sort(key=lambda item: (item.source.file, item.source.start_offset))
-    table.uses.sort(key=lambda item: (item.source.file, item.source.start_offset, item.name))
+    _record_uses(
+        project,
+        regions,
+        table,
+        added,
+        workspace=workspace,
+        projections=projections,
+    )
+    lookup = ProjectPositionLookup(workspace)
+    table.symbols.sort(key=lambda item: _sort_key(lookup, item.source))
+    table.definitions.sort(key=lambda item: _sort_key(lookup, item.source))
+    table.constraints.sort(key=lambda item: _sort_key(lookup, item.source))
+    table.uses.sort(key=lambda item: (*_sort_key(lookup, item.source), item.name))
