@@ -49,6 +49,8 @@ class DependencyEdge(BaseModel):
     source: SourceRange
     context: ReferenceContext
     resolution: DependencyResolution
+    source_occurrence_ids: list[str] = Field(default_factory=list)
+    target_occurrence_ids: list[str] = Field(default_factory=list)
 
 
 class DependencyGraph(BaseModel):
