@@ -20,6 +20,21 @@ def _eligible_text(file: FrontendFile) -> str:
     )
 
 
+def test_tree_sitter_macro_span_does_not_absorb_structural_section_body(
+    tmp_path: Path,
+) -> None:
+    tex = tmp_path / "main.tex"
+    source = "\\begin{document}\n\\section{Heading}\nBody text.\n\\end{document}\n"
+    tex.write_text(source, encoding="utf-8")
+
+    file = _frontend().parse_project(tex).files[0]
+    section = next(macro for macro in file.macros if macro.name == "section")
+
+    assert section.raw == r"\section{Heading}"
+    assert section.span.text(source) == section.raw
+    assert "Body text." in _eligible_text(file)
+
+
 def test_tree_sitter_recovers_source_structure_and_eligible_regions(tmp_path: Path) -> None:
     tex = tmp_path / "main.tex"
     source = r"""\documentclass{article}
