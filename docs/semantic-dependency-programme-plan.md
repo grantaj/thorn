@@ -1,296 +1,122 @@
-# Semantic-dependency substrate programme plan
+# Semantic-dependency substrate programme record
 
-This document records the execution plan for issues #156-#162. It is a programme
-plan, not the architecture audit required by #157 and not the conformance contract
-required by #162. Findings from those issues may refine implementation details, but
-the sequencing and decision gates below should remain stable unless new evidence
-justifies changing them.
+This document began as the execution plan for #156-#162. The evaluation and
+consolidation work has now been carried out. It is retained as a compact programme
+record; the normative current architecture is
+[`semantic-dependency-architecture.md`](semantic-dependency-architecture.md) and the
+executable invariant boundary is
+[`semantic-dependency-contract.md`](semantic-dependency-contract.md).
 
-## Progress
+## Completed sequence
 
-| Phase | Status | Evidence or next gate |
-| --- | --- | --- |
-| Phase 0: baseline | Complete | 530 tests passed and 1 skipped, with one cache-sensitive test run separately from a clean working directory; ruff and mypy passed |
-| #157 ownership audit | Complete | Landed in PR #163 |
-| #162 conformance contract | In progress | Initial backend/capability harness and six-case matrix implemented on `issue-162-semantic-dependency-contract`; remaining matrix is recorded in `docs/semantic-dependency-contract.md` |
-| #158 Tree-sitter evaluation | Not started | Requires #157 boundary and evaluation dependency approval |
-| #159 workspace evaluation | Not started | Requires #157 boundary and external-tool approval |
-| #160 linguistic evaluation | Not started | Requires #157 boundary and #125 baseline freeze |
-| Normal-review selector decision | Blocked by characterization | #162 must characterize result-level and targeted behavior without making either normative |
-| Architecture decision gate | Blocked by evidence | Requires dispositions from #157-#160, executable #162 coverage, and the selector decision |
-| #161 consolidation | Blocked by design | Must not begin before the decision gate |
+| Tranche | Outcome |
+| --- | --- |
+| #157 / PR #163 | ownership audit and target layering |
+| #162 / PRs #164-#166 | backend-independent conformance, scope/order/provenance, explicit partiality |
+| #167 / PR #168 | truncated declaration fail-closed guard |
+| #158 / PR #173 | Tree-sitter LaTeX evaluation |
+| #159 / PR #175 | workspace/tooling evaluation and normalized occurrence boundary |
+| #160 / PR #176 | dependency-parser declaration evaluation; small hybrid recommendation |
+| #161 Slice A / PR #177 | production workspace occurrence/order facts |
+| #161 Slice B / PR #178 | normalized source regions and reversible linguistic projection |
+| #161 Slice C / PR #179 | normalized non-authoritative prose declaration candidates |
+| #161 Slice D / PR #180 | authority/scope/shadowing migration to normalized substrate |
+| #161 Slice E / PR #181 | canonical semantic dependency closure/order consolidation |
+| #161 Slice F / PR #182 | normal result-level review policy and shared selection mechanics |
+| #161 Slice G | backend/default disposition and final documentation alignment |
 
-Baseline notes for the current #157 chunk:
+## Final ownership outcome
 
-- branch: `issue-157-semantic-dependency-audit`;
-- source baseline: post-#155 `main` at `4024b55`;
-- focused frontend, linguistic, #125, Proof-IR fidelity, and closed-world rescue suite:
-  53 passed;
-- full suite excluding one local-cache-sensitive CLI test: 529 passed, 1 skipped,
-  1 deselected; the deselected test passed separately from a clean working directory;
-- the provider freeze builder passed separately after installing the repository's
-  pinned provider runtime;
-- `ruff check .` and `mypy src` passed;
-- no provider/model calls were made.
-
-The initially deselected CLI test reused an existing `.thorn/cache` entry instead of
-invoking its injected fake provider. It passed when run from a clean working directory,
-confirming local test-state contamination rather than a semantic-dependency failure.
-CI starts from a clean checkout and remains the authoritative full-suite result.
-
-Adversarial review of the first chunk identified and corrected three audit gaps:
-
-- the production `eval_review`/`review_workflow` path and its duplicated context
-  selection relative to targeted `semantic_review`;
-- lexical file/line unit ordering consumed as project order by `DependencyGraph`;
-- the four distinct NLP-related production paths, including the unconditional #125
-  prose recognizer.
-
-PR review then identified that documenting both current review selectors as behavior
-did not make both policies intentional contracts. #162 will characterize both while
-preserving shared assurance invariants, and a separate decision gate will select the
-intended normal-review policy before #161.
-
-## Objective
-
-Re-ground Thorn's semantic-dependency substrate so that mature components own generic
-LaTeX, workspace, linguistic, name-resolution, and graph mechanics where evidence
-supports doing so, while Thorn continues to own:
-
-- mathematical dependency identity and relevance;
-- mathematical authority, scope, and shadowing semantics;
-- ambiguity, partiality, and uncertainty policy;
-- exact provenance in Symbol IR and canonical Proof IR;
-- the distinction between load-bearing context and exposition;
-- bounded closed-world source reachability;
-- semantic-review and Lean assurance boundaries.
-
-No production backend should change during the evaluation phase. No provider or paid
-model calls are part of this programme.
-
-## Programme dependency graph
+The programme converged on the following separation:
 
 ```text
-#157 ownership audit --------------------------+
-#158 Tree-sitter evaluation -------------------+
-#159 workspace tooling evaluation -------------+--> architecture decision --> #161
-#160 linguistic evaluation --------------------+              gate
-#162 selector characterization --> selector decision ---------^
+LatexFrontend
+    -> normalized source facts / exact provenance
+    -> ProjectWorkspaceFacts occurrence/order facts
+    -> reversible LinguisticProjection
+    -> LinguisticFrontend
+    -> non-authoritative semantic candidates
+    -> Thorn mathematical authority / scope / shadowing
+    -> canonical semantic dependency identity + closure
+    -> Symbol IR / canonical Proof IR
+    -> reports / Lean / thorn-proof/1
 ```
 
-#158-#160 may perform bounded implementation and evaluation work in parallel once the
-current contracts are understood. Their final dispositions depend on #157. #162 begins
-early and becomes the invariant gate for #161, but it must not freeze the current
-normal-review selector wiring before the selector decision is made.
+Thorn continues to own mathematical authority, dependency identity/materiality, scope,
+visibility/shadowing, ambiguity policy, transitive semantic closure, exact provenance,
+canonical IR and assurance/review boundaries.
 
-## Phase 0: establish the baseline
+Generic parser/workspace/linguistic machinery supplies facts or candidates only.
 
-Start from the post-#155 `main` tree.
+## Evaluation dispositions
 
-1. Create a feature branch for #157.
-2. Establish the development environment with `uv`.
-3. Run the full keyless test suite, `ruff check .`, and `mypy src`.
-4. Record focused baseline results for:
-   - frontend conformance and parser A/B tests;
-   - linguistic frontend and ambiguity tests;
-   - Symbol IR and symbol-resolution tests;
-   - canonical Proof-IR and source-correspondence tests;
-   - bounded source-rescue tests;
-   - all #125 semantic-context regressions.
-5. Record the supported backend/capability matrix, including the intentionally reduced
-   guarantees of `--structural-only`.
+### Source/CST
 
-The post-#125 paid semantic-review evaluation remains deferred until the programme has
-settled the production substrate.
+Tree-sitter is the preferred source-structure backend based on #158 and subsequent
+conformance. Regex remains the explicit compatibility default because the exact pinned
+`tree-sitter-latex` grammar still requires checkout + parser generation + local build;
+the normal `treesitter` extra cannot yet establish that exact grammar runtime by itself.
+A default cutover therefore remains separate packaging work rather than being smuggled
+into #161.
 
-## Phase 1: deliver the #157 ownership audit
+pylatexenc remains an independent conformance backend.
 
-Add `docs/semantic-dependency-architecture.md` as an analytical deliverable. Do not
-perform a broad refactor in this phase.
+### Workspace
 
-The document must contain:
+`ProjectWorkspaceFacts` is the production source of expanded occurrence/order facts.
+TexLab remains an optional-backend candidate/development oracle. LaTeXML remains useful
+expansion/reference evidence. Neither external tool owns mathematical scope or authority.
 
-- a current pipeline and call-flow diagram;
-- a responsibility table naming the current code owner, duplicate implementations,
-  desired ownership class, and preserving regressions;
-- classification of each responsibility as generic source, workspace, linguistic,
-  name/scope/graph, Thorn mathematical interpretation, or Thorn assurance policy;
-- high-risk custom parsing and resolution hotspots;
-- proposed adapter boundaries for #158-#160;
-- a target layering that does not preselect an external tool;
-- positive statements of what remains Thorn-owned;
-- sequencing recommendations for the remaining programme.
+### Linguistic declarations
 
-The audit must examine at least the files named by #157. Initial hotspots already
-requiring evidence include:
+The #160 small hybrid is production candidate machinery behind `LinguisticFrontend`.
+Candidates remain ambiguous/non-authoritative until Thorn's mathematical policy promotes
+them. The old #125 phrase recognizer survives only as a frozen research benchmark.
+Structural-only mode explicitly lacks prose-authority capability.
 
-- source eligibility in `project_semantic_context.py`, the frontend adapters, and
-  symbol masking;
-- sentence discovery in `project_semantic_context.py`, `project_context_source.py`,
-  and `support_extract.py`;
-- include traversal in the frontend adapters and semantic-context document ordering;
-- phrase grammar and lexical morphology below the existing `LinguisticFrontend`;
-- visibility and shadowing across `SymbolTable`, semantic-context resolution, and
-  `SymbolResolutionIR`.
+### Review selection
 
-## Phase 2: establish the #162 semantic-dependency contract
+Normal review is result-level and unconditional for a requested result. The
+uncertainty-triggered selector is retained only for explicit `thorn-eval`
+diagnostic/evaluation use. Both projections consume the same canonical semantic state.
 
-Build the backend-independent contract before replacing production machinery.
+## Programme invariants
 
-1. Add a compact public semantic-dependency fixture matrix.
-2. Add assertion helpers over existing Thorn-owned Symbol IR, canonical Proof IR, and
-   advertised source handles.
-3. Parameterize the contract by frontend/NLP capability, not backend-native objects.
-4. Cover:
-   - named prose definitions;
-   - explicit ambient conventions and forward-only application;
-   - same-file and cross-file shadowing;
-   - transitive semantic closure;
-   - comments, verbatim/listing regions, and irrelevant exposition;
-   - ambiguous and malformed source outcomes;
-   - exact source provenance and report navigation;
-   - composition with structured theorem/result dependencies;
-   - bounded closed-world review reachability.
-5. Characterize result-level and targeted review selection separately. Preserve their
-   shared fidelity, provenance, semantic-closure, and bounded-reachability invariants,
-   but do not encode either current materiality policy as the required normal-review
-   behavior before the selector decision.
-6. Require reduced-capability configurations to advertise and test their limitation
-   explicitly instead of silently passing a weaker contract.
-7. Run structural assertions in ordinary CI and real-NLP assertions in the Local NLP
-   contract.
+The completed programme preserves these rules for future work:
 
-Do not introduce a second semantic IR. The contract observes canonical Thorn state and
-the `thorn-proof/1` projection.
+- parser/NLP native objects never become canonical mathematical state;
+- valid but unsupported source/workspace structure may remain explicitly partial;
+- malformed source may fail closed rather than being repaired heuristically;
+- repeated inclusion preserves occurrence identity;
+- candidate grammatical evidence is not mathematical authority;
+- no semantic layer rescans raw LaTeX to compensate for a backend gap;
+- no second semantic IR or parallel authority graph is introduced;
+- `thorn-proof/1` and bounded source rescue project from canonical state;
+- ordinary CI and architecture work remain keyless.
 
-Initial #162 slice:
+## Superseded machinery
 
-- added one capability-aware harness over Regex and pylatexenc structural modes plus a
-  deterministic linguistic-candidate configuration;
-- centralized Thorn-owned assertions for semantic authority, exact provenance,
-  observed result-level source reachability, bounded rescue, and explicit absence;
-- covered a held-out flag-complex predicate, forward ambient scope, negative
-  comment/verbatim/exposition controls, cross-file shadowing, transitive closure with a
-  structured lemma dependency, and ambiguity remaining non-authoritative;
-- recorded same-file/include variants, malformed partiality, report navigation,
-  targeted-selector characterization, and real Local NLP wiring as the next #162 slice.
+The consolidation removed or retired the architectural need for:
 
-Initial-slice validation: the focused contract and surrounding regression surface
-passed 52 tests with 1 intentional reduced-capability skip. The full suite passed 540
-tests with 2 skips and reproduced the documented root-cache-sensitive CLI failure; that
-test passed separately from a clean working directory, for an effective 541 passed and
-2 skipped. `ruff check .` and `mypy src` passed. No provider/model calls were made.
+- semantic-layer raw comment/verbatim masking;
+- private semantic include-order reconstruction;
+- the production five-family #125 phrase recognizer;
+- bespoke production morphology for prose term matching;
+- duplicate project-semantic closure implementations;
+- selector-private mathematical materialization;
+- ambiguity about whether normal review is trigger-gated.
 
-## Phase 3: run the empirical evaluations
+The regex frontend still contains handwritten raw-source parsing because it is the
+current compatibility backend. It is not the preferred long-term source substrate and
+must not grow into a more complete TeX interpreter while packaging work is pending.
 
-Each evaluation is a separate bounded change with fixtures, a reproducible harness,
-measurements, a written failure analysis, and an explicit disposition. None changes
-production defaults.
+## Final validation gate
 
-### #158: Tree-sitter LaTeX
+Every consolidation slice is required to preserve the keyless gates appropriate to its
+boundary: full pytest, Ruff, mypy, Local NLP, Tree-sitter/frontend conformance, semantic
+dependency contracts, and Lean handoff. Provider/model calls are outside this programme
+and are not authorized by it.
 
-- Implement an optional adapter behind `LatexFrontend`.
-- Extend frontend conformance for eligible document text, comments/verbatim regions,
-  document boundaries, include locations, malformed input, and exact provenance.
-- Compare regex, pylatexenc, and Tree-sitter behavior and runtime.
-- Verify that no Tree-sitter object crosses the adapter boundary.
-- Classify Tree-sitter as a default candidate, optional backend, conformance oracle,
-  benchmark/reference, or reject/defer.
-
-### #159: workspace/project resolution
-
-- Define the normalized project-order facts Thorn actually needs without embedding
-  mathematical authority decisions in them.
-- Build fixtures for nested, repeated, cyclic, missing, malformed, and macro-influenced
-  includes, plus cross-file labels and declaration/redefinition ordering.
-- Compare current Thorn behavior with TexLab and LaTeXML on concrete fixtures.
-- Record licensing, packaging, process, performance, provenance, and reproducibility
-  costs.
-- Assign each tool a role per responsibility: runtime substrate, optional backend,
-  development oracle, benchmark/reference, or reject/defer.
-
-### #160: prose semantic declarations
-
-- Freeze the #125 recognizer as the benchmark baseline.
-- Define Thorn-owned semantic-declaration candidate/evidence types with exact source
-  provenance and ambiguity status.
-- Compare the current recognizer, a dependency-parser recognizer through
-  `LinguisticFrontend`, and a deliberately small hybrid.
-- Use paraphrase, lexical-substitution, inline-math, cross-file, adversarial, and
-  expository controls.
-- Measure intended-candidate recall, false-authority rate, lexical dependence,
-  provenance fidelity, Local NLP stability, and Thorn-specific grammar complexity.
-- Record a disposition: replace, hybridize, retain, or defer.
-
-## Phase 4: enforce the architecture decision gate
-
-Do not begin #161 until #157-#160 have produced explicit dispositions, the relevant
-parts of #162 are executable, and the intended normal-review selector policy has been
-decided explicitly.
-
-Publish one consolidated decision record specifying:
-
-- the authoritative owner of eligible document text/source regions;
-- the authoritative owner of project order and workspace relationships;
-- the selected linguistic candidate-recognition strategy;
-- each external tool's runtime, optional, oracle, reference, or rejected role;
-- capability behavior for structural-only mode;
-- whether normal review uses result-level or targeted selection, including the intended
-  materiality and escalation semantics;
-- conformance and benchmark evidence supporting each choice;
-- superseded code expected to be removed.
-
-A negative evaluation is valid. Retaining a Thorn implementation is acceptable when
-the evidence and its bounded contract are documented.
-
-## Phase 5: implement #161 in bounded changes
-
-Split consolidation so that every intermediate tree remains reviewable and testable.
-
-1. Introduce the selected normalized source and project fact contracts.
-2. Rewire semantic declaration recognition to consume eligible prose and normalized
-   linguistic candidates.
-3. Centralize Thorn-owned mathematical authority, project visibility, shadowing,
-   ambiguity, and dependency-closure policy.
-4. Rewire Symbol IR, canonical Proof IR, advertised source handles, and
-   `thorn-proof/1` to the consolidated path.
-5. Remove superseded source masking, sentence scanning, include-order reconstruction,
-   morphology, and duplicate scope machinery.
-6. Update architecture, mathematical-IR, Proof-IR, local-NLP, and trust-boundary
-   documentation.
-
-Compatibility adapters may be temporary. A temporary second semantic store is not
-acceptable. The #162 contract must remain green after every step.
-
-## Phase 6: final validation
-
-The completed programme must pass:
-
-- the full pytest suite;
-- `ruff check .`;
-- `mypy src`;
-- frontend conformance for every supported adapter;
-- the Local NLP contract;
-- explicit structural-only capability tests;
-- the complete semantic-dependency conformance matrix;
-- exact report/source-navigation and bounded-rescue tests;
-- parser and workspace benchmarks;
-- packaging checks for adopted optional dependencies;
-- a check that no provider/model calls were made.
-
-The final architecture documentation must answer clearly what Thorn contributes beyond
-a LaTeX parser, workspace engine, NLP dependency parser, graph library, or theorem
-prover.
-
-## Delivery model and pending decisions
-
-The recommended delivery model is one reviewable PR per numbered issue, followed by
-multiple bounded PRs for #161 if consolidation cannot remain small.
-
-Two workflow decisions remain to be confirmed before the affected work begins:
-
-1. whether to use one PR per issue as recommended;
-2. whether evaluation-only dependencies and external binaries may be installed for
-   #158 and #159.
-
-Neither decision blocks starting #157 and the initial #162 contract.
+After Slice G lands, #161 can close. Any later Tree-sitter packaging/default switch is a
+separate bounded change that must re-run the same contracts rather than reopening the
+semantic-dependency architecture.

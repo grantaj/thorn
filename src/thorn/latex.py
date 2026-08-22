@@ -19,7 +19,7 @@ from thorn.frontend import (
     SourceSpan,
 )
 from thorn.frontend import ParsedProject as FrontendProject
-from thorn.frontends import RegexLatexFrontend
+from thorn.frontends import get_default_frontend
 from thorn.linguistic import LinguisticFrontend
 from thorn.linguistic_declarations import collect_project_prose_declarations
 from thorn.linguistic_support import apply_linguistic_uncertainty
@@ -38,7 +38,7 @@ _DEFAULT_THEOREM_ENVS = {
     "claim",
 }
 _REF_MACROS = {"ref", "eqref", "autoref", "cref", "Cref"}
-_DEFAULT_FRONTEND = RegexLatexFrontend()
+_DEFAULT_FRONTEND = get_default_frontend()
 
 
 def _theorem_envs(project: FrontendProject) -> set[str]:

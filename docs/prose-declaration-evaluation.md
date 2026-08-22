@@ -1,137 +1,104 @@
-# Prose declaration recognition evaluation (#160)
+# Prose declaration recognition evaluation and production disposition
 
-## Decision boundary
+This document records the #160 comparison and the resulting #161 production decision.
+The problem is grammatical/source evidence for prose declarations; mathematical
+authority, scope, relevance, dependency identity and truth remain Thorn-owned.
 
-This tranche evaluates how Thorn should obtain **grammatical/source evidence** for prose
-semantic declarations. It does not change production recognition and it does not delegate
-mathematical authority, scope, relevance, certainty, or truth to an NLP parser.
+## #160 comparison
 
-All alternatives consume the same source-preserving linguistic projection. Math/reference
-syntax is represented by typed `THORN*` placeholders and every candidate is checked back to
-an exact source occurrence. spaCy objects stop at `LinguisticFrontend`; the benchmark sees
-only Thorn-owned `LinguisticDocument`/`LinguisticToken` values.
+All evaluated strategies consumed the same reversible linguistic projection and produced
+source-addressable Thorn-owned candidates. The public corpus contains named-definition
+paraphrases, ambient conventions, inline-math placeholders, transitive declaration
+chains, exposition/history/quotation/negation controls, and excluded comment/verbatim
+source.
 
-## Corpus
+The measured keyless local-NLP result was:
 
-`research/semantic-parser-bakeoff/declaration_cases.json` contains 36 public cases and 21
-expected grammatical candidates. It covers:
+| strategy | precision | recall | false-candidate risk | lexical-challenge recall | provenance failures |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| frozen #125 phrase baseline | 0.812 | 0.619 | 3 | 0.125 | 0 |
+| broad dependency structure | 0.396 | 0.905 | 29 | 0.750 | 0 |
+| small hybrid | 0.750 | 0.857 | 6 | 0.625 | 0 |
 
-- named-definition paraphrases across unrelated adjective/noun vocabulary;
-- explicit ambient conventions, including a theorem-scope use that need not repeat the noun;
-- real LaTeX math fragments mapped reversibly to typed placeholders, including math before
-  the declared term so offset fidelity is non-trivial;
-- two transitive declaration chains, without asking the parser to decide their semantic edge;
-- exposition, history, third-party terminology, quotations, negation, theorem/proof mentions,
-  locally scoped conventions, and declaration-shaped non-mathematical descriptions;
-- comment/verbatim controls represented by source-length-preserving masked views.
+The phrase baseline was conservative but lexically brittle. Broad dependency structure
+recovered more paraphrases but proposed far too many unsafe candidates. The small hybrid
+provided the best architectural tradeoff: dependency-backed grammatical evidence with a
+small lexical/scope guard surface.
 
-The corpus labels *candidate grammatical evidence*, not mathematical authority. A false
-positive is therefore reported as **false-authority risk**: it is a candidate that would be
-unsafe to promote mechanically.
+The three held-out hybrid misses were intentionally not converted into a request for a
+larger synonym grammar. In particular, missing `deemed` is evidence that the anchor list
+must remain bounded rather than becoming a hand-maintained English thesaurus.
 
-## Strategies
+## #161 production disposition
 
-1. **Frozen #125 phrase baseline.** The benchmark imports the five production regex families
-   unchanged: `called`, `said to be`, `we say`, `by ... we mean`, and ambient-cue syntax.
-2. **Dependency structure.** Three small lexical-light structural rules over
-   `LinguisticDocument`: conditional predicate, preposed `mean`, and scoped copular subject.
-   Broad structural proposals remain explicitly marked ambiguous.
-3. **Small hybrid.** The same dependency structure plus two intentionally small lexical guard
-   families: definitional-verb lemmas and explicit ambient-scope prefixes. It also rejects
-   dependency-visible negation and obvious third-party attribution.
+Slices C and D implemented the #160 recommendation.
 
-No strategy creates authority. The benchmark does not perform scope resolution, term-use
-closure, shadowing, relevance, or truth assessment.
+Production now uses `collect_project_prose_declarations()` and
+`propose_linguistic_declarations()` behind `LinguisticFrontend`. The output is
+`ProseDeclarationInventory` / `ProseDeclarationCandidate`: exact, ambiguous,
+non-authoritative grammatical evidence. Slice D then moved prose mathematical authority
+to a separate Thorn-owned policy consuming those candidates plus normalized source and
+workspace facts.
 
-## Evidence
+The old five-family #125 phrase recognizer is **not** a production authority path. Its
+regex constants survive only in `src/thorn/_frozen_declaration_benchmark.py` so the
+research comparison remains reproducible.
 
-Measurements use the repository's pinned keyless local-NLP path (spaCy 3.8.14 with
-`en_core_web_sm` 3.8.0). The frozen phrase baseline itself needs no NLP model.
+Structural-only mode reports `ProseDeclarationCapability.REDUCED`; it does not silently
+fall back to the old phrase recognizer.
 
-| strategy | precision | recall | false-authority risk | lexical-challenge recall | provenance failures | transitive cases |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| frozen #125 phrase | 0.812 | 0.619 | 3 | 0.125 | 0 | 1/2 |
-| dependency structure | 0.396 | 0.905 | 29 | 0.750 | 0 | 1/2 |
-| small hybrid | 0.750 | 0.857 | 6 | 0.625 | 0 | 1/2 |
+## Production candidate grammar
 
-The phrase recognizer is conservative but lexically brittle: it finds 13/21 expected
-candidates and only one eighth of the deliberately held-out lexical variants. Its three
-negative-control collisions also show that matching declaration-shaped phrasing is not the
-same thing as establishing mathematical authority.
+The retained hand-written surface is deliberately small:
 
-The broad dependency recognizer finds 19/21 expected candidates, but emits 29 false candidates
-and marks all 48 proposals structurally ambiguous. Its 0.905 recall is useful as evidence that
-dependency structure generalizes across paraphrase, but its 0.396 precision makes it unsuitable
-as an authority-like recognizer or as an unguarded candidate boundary.
+1. **Named-definition lemma anchors:** `call`, `term`, `say`, `mean`.
+2. **Conditional structure:** bounded cues such as `if`, `when`, `whenever`,
+   `provided` combined with normalized dependency evidence.
+3. **Ambient-scope prefixes:** `throughout`, `in what follows`, `henceforth`,
+   `unless stated otherwise`, `unless specified otherwise`, `for the remainder`.
+4. **Safety guards:** bounded negation, passive/subject, and first-person/attribution
+   checks.
 
-The small hybrid finds 18/21 expected candidates. Relative to the phrase baseline, recall rises
-from 0.619 to 0.857 and lexical-challenge recall rises from 0.125 to 0.625. Relative to broad
-dependency structure, false-authority risk falls from 29 candidates to 6. The remaining six
-collisions are informative rather than invitations to grow grammar:
+This is candidate grammar only. It does not decide whether the subject is mathematical,
+whether the statement is authoritative, or whether it is relevant to a theorem.
 
-- `negative-useful` is first-person declaration-shaped exposition (`We say that balanced maps
-  are useful ...`);
-- `negative-display-label` and `negative-called-metaphor` are valid passive `called ... when`
-  constructions whose subjects are not mathematically authoritative dependencies;
-- `negative-quotation` quotes declaration syntax from another paper;
-- `named-math-before` and `transitive-hybrid` expose dependency-sensitive term selection and
-  therefore produce a wrong candidate while also missing the expected occurrence.
+## Exact provenance and payload boundary
 
-The three hybrid misses are `named-deemed`, `named-math-before`, and `transitive-hybrid`.
-`named-deemed` is the deliberate cost of not turning the lexical anchor family into a synonym
-list. The other two show that exact candidate identity still needs Thorn-owned provenance and
-ambiguity handling even when a parser supplies useful syntax.
+Each production candidate retains:
 
-All three strategies have zero provenance failures on the corpus. Typed placeholders before
-and after declaration terms map back to the exact source occurrence, and source-excluded
-comment/verbatim material remains excluded. Neither dependency parsing nor the hybrid improves
-the 1/2 transitive-chain score enough to justify moving semantic closure or dependency identity
-into NLP.
+- exact declared term source;
+- exact containing sentence source;
+- exact proposed defining-payload source;
+- normalized structural evidence and dependency path;
+- explicit ambiguous status.
 
-## Disposition
+The payload span is an important #167 boundary. The authority layer can determine that a
+declaration-shaped sentence lacks substantive defining content without reconstructing
+English phrase grammar. A truncated or empty payload therefore stays non-authoritative.
 
-**Recommend the small hybrid as concrete input to #161, but do not migrate production behavior
-in #160.** The evidence rejects both extremes:
+## What was deliberately removed
 
-- do not grow the #125 phrase grammar to chase paraphrase recall;
-- do not treat broad dependency-parser proposals as authoritative declaration candidates.
+The production architecture no longer relies on:
 
-A #161 consolidation should instead consider a dependency-backed candidate-evidence layer
-behind the existing `LinguisticFrontend`, with a deliberately small Thorn-owned guard surface.
-Its output must remain non-authoritative evidence carrying exact occurrence provenance and
-explicit ambiguity. Thorn continues to decide mathematical authority, relevance, scope,
-visibility/shadowing, dependency identity/closure, and truth.
+- independently growing `called`, `said to be`, `we say`, `by ... we mean`, and ambient
+  phrase regex templates;
+- bespoke singular/plural term variants as generic English morphology;
+- broad dependency proposals as authority decisions;
+- lexical lists intended to decide mathematical relevance or truth.
 
-Production #125 behavior remains unchanged by this tranche.
+The frozen #125 benchmark is research-only and must not be imported into the production
+authority path.
 
-## Hand-written grammar inventory and justification
+## Remaining ownership
 
-The evaluation supports keeping only the following bounded hand-written families as possible
-#161 inputs:
+`LinguisticFrontend` owns normalized grammatical evidence. The candidate layer owns only
+its bounded grammatical proposal policy. Thorn's mathematical layer still owns:
 
-1. **Definitional-anchor family.** A small lemma category such as `call` / `term` / `say` /
-   `mean`, used to guard dependency structure rather than encode sentence templates. The 29
-   broad-dependency collisions justify a lexical guard; the `deemed` miss is evidence against
-   expanding it into an open-ended synonym grammar.
-2. **Ambient-scope anchor family.** A small explicit family for document/section-scoping cues
-   such as `throughout`, `in what follows`, `unless stated otherwise`, `for the remainder`, and
-   `henceforth`. Generic dependency structure cannot safely distinguish these from local
-   exposition, and the eventual scope semantics remain Thorn-owned.
-3. **Negation and grammatical-attribution guards.** Structural safety checks for negation and
-   obvious third-party attribution. These are bounded grammatical checks, not mathematical
-   authority rules.
-4. **Source exclusions/projection rules.** Comments, verbatim-like regions, preamble material,
-   quotation/source context where available, and typed math/reference placeholders belong at
-   the source/projection boundary. They should remain explicit because the linguistic parser
-   must never be asked to reconstruct excluded source or provenance.
+- authority promotion;
+- substantive-payload checks;
+- project occurrence, scope, visibility and shadowing;
+- materiality and actual use;
+- semantic dependency identity and transitive closure;
+- ambiguity policy and truth-independent assurance boundaries.
 
-The following should **not** be preserved as architectural grammar families:
-
-- the four named #125 phrase-regex templates (`called`, `said to be`, `we say`, `by ... we
-  mean`) as independently growing patterns;
-- custom singular/plural term morphology as a substitute for mature linguistic lemmatization;
-- broad dependency structure as an authority decision;
-- lexical lists intended to decide whether a declaration is mathematically relevant or true.
-
-If #161 adopts a parser-backed candidate layer, exact surface text and occurrence provenance
-must still be retained even where mature linguistic lemmatization is used for matching.
+This separation is the production outcome of #160/#161, not a future migration plan.

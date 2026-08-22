@@ -3,10 +3,18 @@ from __future__ import annotations
 from thorn.frontend import LatexFrontend
 from thorn.frontends.regex import RegexLatexFrontend
 
+# Regex remains the compatibility default until the pinned tree-sitter-latex grammar
+# has a frictionless reproducible installation path. Tree-sitter is the documented
+# preferred source-structure backend; do not grow this compatibility scanner merely to
+# chase source-parser corner cases.
+DEFAULT_FRONTEND_NAME = "regex"
+
 
 def get_frontend(name: str) -> LatexFrontend:
     normalized = name.strip().lower()
-    if normalized in {"current", "regex"}:
+    if normalized == "current":
+        normalized = DEFAULT_FRONTEND_NAME
+    if normalized == "regex":
         return RegexLatexFrontend()
     if normalized == "pylatexenc":
         try:
@@ -25,4 +33,15 @@ def get_frontend(name: str) -> LatexFrontend:
     raise ValueError(f"unknown LaTeX frontend {name!r}")
 
 
-__all__ = ["RegexLatexFrontend", "get_frontend"]
+def get_default_frontend() -> LatexFrontend:
+    """Return the explicitly selected production compatibility frontend."""
+
+    return get_frontend(DEFAULT_FRONTEND_NAME)
+
+
+__all__ = [
+    "DEFAULT_FRONTEND_NAME",
+    "RegexLatexFrontend",
+    "get_default_frontend",
+    "get_frontend",
+]
