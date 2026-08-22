@@ -5,6 +5,7 @@ from thorn.evidence import InferenceStatus
 from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
     dependency_node_sort_key,
+    project_source_sort_key,
     result_project_symbol_dependency_ids,
 )
 from thorn.semantic_review import (
@@ -16,12 +17,12 @@ from thorn.semantic_review import (
 from thorn.support import Claim, SupportEdge
 
 
-def _claim_key(claim: Claim) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*span_key(claim.source), claim.identifier)
+def _claim_key(project: ExtractedProject, claim: Claim):
+    return project_source_sort_key(project, claim.source, claim.identifier)
 
 
-def _relation_key(edge: SupportEdge) -> tuple[str, int, int, int, int, int, int, str]:
-    return (*span_key(edge.source), edge.identifier)
+def _relation_key(project: ExtractedProject, edge: SupportEdge):
+    return project_source_sort_key(project, edge.source, edge.identifier)
 
 
 def _result_node(project: ExtractedProject, result_identifier: str) -> DependencyNode:
@@ -46,7 +47,7 @@ def _result_relations(
                 or edge.source_claim_identifier in claim_ids
             )
         ),
-        key=_relation_key,
+        key=lambda edge: _relation_key(project, edge),
     )
 
 
@@ -72,7 +73,10 @@ def _result_symbol_context(
     return select_symbol_context(project, symbol_ids, candidates)
 
 
-def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
+def _nearby_context(
+    project: ExtractedProject,
+    relations: list[SupportEdge],
+) -> list[ReviewSourceContext]:
     contexts: dict[
         tuple[str, tuple[str, int, int, int, int, int, int]],
         ReviewSourceContext,
@@ -84,7 +88,14 @@ def _nearby_context(relations: list[SupportEdge]) -> list[ReviewSourceContext]:
                 continue
             key = (text, span_key(evidence.source))
             contexts[key] = ReviewSourceContext(text=text, source=evidence.source)
-    return [contexts[key] for key in sorted(contexts)]
+    return sorted(
+        contexts.values(),
+        key=lambda context: project_source_sort_key(
+            project,
+            context.source,
+            context.text,
+        ),
+    )
 
 
 def build_result_review_context(
@@ -105,7 +116,7 @@ def build_result_review_context(
     project.unit(result_identifier)
     claims = sorted(
         project.proof_support_graph.claims_for_result(result_identifier),
-        key=_claim_key,
+        key=lambda claim: _claim_key(project, claim),
     )
     relations = _result_relations(project, claims)
     symbol_context = _result_symbol_context(project, result_identifier)
@@ -132,6 +143,6 @@ def build_result_review_context(
         definitions=symbol_context.definitions,
         symbol_candidates=symbol_context.candidates,
         dependencies=dependencies,
-        nearby_context=_nearby_context(relations),
+        nearby_context=_nearby_context(project, relations),
     )
     return ReviewContext(items=[item])
