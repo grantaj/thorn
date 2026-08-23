@@ -243,7 +243,7 @@ def _scope_for_use(
 def _record_project_declaration_uses(
     project: ParsedProject,
     table: SymbolTable,
-    added: list[Symbol],
+    symbols: list[Symbol],
     *,
     workspace: ProjectWorkspaceFacts,
     projections: dict[str, LinguisticProjection],
@@ -252,7 +252,7 @@ def _record_project_declaration_uses(
     """Record exact math-symbol references between explicit project declarations."""
 
     files = {file.path: file for file in project.files}
-    for owner in added:
+    for owner in symbols:
         file = files.get(owner.introduction_source.file)
         projection = projections.get(owner.introduction_source.file)
         if file is None or projection is None:
@@ -266,7 +266,7 @@ def _record_project_declaration_uses(
                 continue
             content, content_start = _math_inner(file, math)
             masked = _masked_content(content)
-            for symbol in added:
+            for symbol in symbols:
                 for start, end in _symbol_occurrences(masked, symbol.name):
                     source = _span(
                         file.path,
@@ -308,23 +308,29 @@ def _record_uses(
     workspace: ProjectWorkspaceFacts,
     projections: dict[str, LinguisticProjection],
 ) -> None:
-    """Record uses for new project symbols with occurrence-aware resolution."""
+    """Record project-symbol uses with occurrence-aware resolution."""
 
-    if not added:
-        return
     files = {file.path: file for file in project.files}
     existing = {
         (use.name, use.source.file, use.source.start_offset, use.source.end_offset)
         for use in table.uses
     }
+    project_symbols = [
+        symbol
+        for symbol in table.symbols
+        if table.scope(symbol.scope_identifier).kind == ScopeKind.PROJECT
+    ]
     _record_project_declaration_uses(
         project,
         table,
-        added,
+        project_symbols,
         workspace=workspace,
         projections=projections,
         existing=existing,
     )
+
+    if not added:
+        return
 
     for region in regions:
         file = files.get(region.file)
