@@ -21,7 +21,6 @@ from thorn.frontend import (
 from thorn.frontend import ParsedProject as FrontendProject
 from thorn.frontends import get_default_frontend
 from thorn.linguistic import LinguisticFrontend
-from thorn.linguistic_declarations import collect_project_prose_declarations
 from thorn.linguistic_statements import collect_project_linguistic_statements
 from thorn.linguistic_support import apply_linguistic_uncertainty
 from thorn.models import TheoremUnit
@@ -200,18 +199,12 @@ def extract_project(
     *,
     frontend: LatexFrontend | None = None,
     linguistic_frontend: LinguisticFrontend | None = None,
-    legacy_prose_semantic_context: bool = True,
 ) -> ExtractedProject:
     """Extract theorem/result, dependency, symbol, and proof-support IR.
 
     LaTeX syntax is supplied by a parser-neutral frontend. Optional local NLP
-    proposes structural candidates only; mathematical interpretation remains
-    Thorn-owned above both parser boundaries.
-
-    ``legacy_prose_semantic_context`` is an explicit #203 A/B seam. Disabling it
-    preserves exact source-mapped statements while bypassing both the historical
-    hand-written prose-declaration grammar and the project-level prose authority pass.
-    The seam is temporary and must disappear when the production cutover is settled.
+    supplies generic linguistic observations and source-mapped statements only;
+    mathematical interpretation remains Thorn-owned above both substrate boundaries.
     """
 
     parser = frontend or get_default_frontend()
@@ -377,15 +370,6 @@ def extract_project(
         dependencies=graph,
         units=enriched,
     )
-    prose_declarations = (
-        collect_project_prose_declarations(
-            parsed,
-            regions,
-            linguistic_frontend,
-        )
-        if legacy_prose_semantic_context
-        else None
-    )
     linguistic_statements = collect_project_linguistic_statements(
         parsed,
         regions,
@@ -400,12 +384,10 @@ def extract_project(
             parsed,
             regions,
             workspace=workspace,
-            prose_declarations=prose_declarations,
             linguistic_frontend=linguistic_frontend,
         ),
         proof_support_graph=support_graph,
         workspace=workspace,
-        prose_declarations=prose_declarations,
         linguistic_statements=linguistic_statements,
     )
 
