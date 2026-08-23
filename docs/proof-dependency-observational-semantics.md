@@ -1,175 +1,143 @@
 # Proof-dependency observational semantics
 
-Status: research contract. This document defines a proposed semantic boundary and an
-experimental programme. It does **not** by itself change production authority or delete
-existing extraction paths.
+Status: research contract. This document proposes a semantic boundary and a falsifiable
+replacement programme. It does **not** by itself change production authority or delete the
+current semantic extraction path.
 
 ## Thesis
 
-Thorn does not need a general semantics of mathematical prose. It needs exactly enough
-semantic state to determine proof dependency.
+Thorn does not need a general semantics of mathematical prose. It needs exactly the semantic
+state required to determine proof dependency.
 
-The proposed principle is:
+> **Canonical Thorn semantics should retain exactly the distinctions that can change a
+> proof-dependency observation, now or under some valid future continuation of the source.**
 
-> **Canonical Thorn semantics contains exactly the distinctions that can change a
-> proof-dependency observation, now or after some valid continuation of the source.**
+A distinction that cannot affect such an observation may still matter rhetorically,
+pedagogically, stylistically, or as review evidence. It simply does not belong in the
+canonical dependency semantics. Conversely, if a distinction can affect proof dependency but
+cannot be represented, the semantic model is incomplete.
 
-This makes dependency relevance, rather than English phrasing or a hand-written taxonomy
-of mathematical speech acts, the criterion for entering canonical semantic state.
+This gives two separate obligations:
 
-A source relation that cannot change any dependency-relevant observation may still matter
-rhetorically, pedagogically, stylistically, or as review evidence. It simply does not belong
-in Thorn's canonical dependency semantics. Conversely, if a source distinction can change a
-dependency observation but Thorn cannot represent it, the semantic state is incomplete.
+1. **dependency semantics** — retain exactly dependency-observable distinctions;
+2. **assurance decoration** — retain exact provenance/evidence for each represented semantic
+   object or relation without making source coordinates part of mathematical equality.
 
-There are therefore two deliberately separate correctness obligations:
+## 1. Contextual equivalence on source histories
 
-1. **dependency semantics**: retain exactly the distinctions observable through proof
-   dependency;
-2. **assurance decoration**: preserve exact source provenance and evidence for each retained
-   semantic object/relation without letting source coordinates create extra mathematical
-   distinctions.
+Let a **history** `h` be a valid normalized mathematical-source history after the source and
+workspace layers have established their facts. Let `Sem(h)` denote whatever dependency
+semantics Thorn assigns to that history.
 
-## 1. Formal setting
-
-Let a **history** be a valid normalized source prefix after the source and workspace
-boundaries have done their work. Let `S(h)` be the dependency-relevant semantic state after
-history `h`.
-
-Let `Q` be Thorn's finite family of dependency-relevant semantic query forms. For `q in Q`,
-let
+Let `Q` be a finite family of dependency-relevant query forms. For a query `q` and history
+`h`, write
 
 ```text
-O(q, S)
+Obs(q, h)
 ```
 
-be the observable answer to query `q` in state `S`, including explicit unresolved,
-ambiguous, partial, and source-error outcomes where those outcomes affect dependency
-reasoning.
+for the dependency-relevant answer, including unresolved/ambiguous/partial outcomes where
+they change dependency reasoning.
 
-A first, insufficient equivalence would compare only current observations:
-
-```text
-S1 ~Q S2  iff  for every q in Q, O(q, S1) = O(q, S2).
-```
-
-That is too weak. A declaration may be unused at the point where it is introduced yet
-change the dependency of a later theorem. Thorn therefore needs continuation-sensitive
-observational equivalence.
-
-Let `C` range over valid future normalized source continuations and let `delta*(S, C)` be
-the state obtained by processing continuation `C` from `S`. Define
+Current observations are not enough. A declaration can be unused when introduced but become
+a prerequisite of a later theorem. Therefore let `C` range over valid future source
+continuations and define:
 
 ```text
-S1 ==Q S2
+h1 ==Q h2
     iff
 for every valid continuation C and every q in Q,
-    O(q, delta*(S1, C)) = O(q, delta*(S2, C)).
+    Obs(q, h1 · C) = Obs(q, h2 · C).
 ```
 
-Equality includes dependency-relevant capability/failure outcomes. If one state yields a
-unique resolved prerequisite and the other yields ambiguity, they are observably different.
+This definition is intentionally on **source histories**, not on a presumed graph transition
+`delta(graph, C)`. Writing such a transition already assumes that the proposed graph state is
+sufficient to interpret every continuation, which is exactly what the research programme is
+trying to establish.
 
-This is a contextual/behavioural equivalence: two states are the same for Thorn exactly
-when no future dependency-relevant context can distinguish them. The canonical semantic
-state should be understood as the quotient induced by this equivalence, or as a practical
-representation faithful to that quotient.
-
-The target representation should be **fully abstract for proof-dependency observations**:
+If a fully abstract canonical representation `G` is found, then continuation processing on
+canonical states becomes well-defined up to `==Q`:
 
 ```text
-source histories are contextually equivalent
+h1 ==Q h2
     iff
-their canonical dependency states are observationally equivalent.
+G(h1) = G(h2)             (up to canonical graph isomorphism)
 ```
 
-The two directions give useful engineering obligations:
+The two directions are the familiar full-abstraction obligations:
 
-- **preservation / adequacy**: abstraction must not erase a distinction that some future
-  dependency context can observe;
-- **reflection / minimality**: abstraction should not retain a semantic distinction that no
-  future dependency context can observe.
+- **preservation / adequacy**: `G` must not erase a distinction that a future dependency
+  context can observe;
+- **reflection / minimality**: `G` should not retain a semantic distinction that no future
+  dependency context can observe.
 
-This does **not** imply that Thorn has finitely many states. Mathematical expressions,
-source positions, and projects make the state space unbounded. The finite object we seek is
-the **signature of dependency-relevant state changes and observations**.
+This does not imply a finite state space. Mathematical payloads and projects are unbounded.
+The finite thing sought is the **signature of dependency-relevant structure and queries**.
 
 ## 2. Dependency relevance
 
-For a proposed semantic fact or relation `r`, write `S + r` for a state that differs only by
-retaining `r`. Then `r` is dependency-relevant exactly when there exist a state, a valid
-continuation, and a dependency query that can distinguish its presence:
+A proposed semantic distinction `r` earns a place in canonical state exactly when there are
+two histories differing only in that distinction and some continuation/query that separates
+them:
 
 ```text
 RelevantQ(r)
     iff
-there exist S, C, q such that
-    O(q, delta*(S + r, C)) != O(q, delta*(S, C)).
+there exist h_with_r, h_without_r, C, q such that
+    Obs(q, h_with_r · C) != Obs(q, h_without_r · C).
 ```
-
-This is the admission test for canonical semantics.
 
 Examples:
 
-- `Define $x \star y$ to mean $x+y$.` is relevant because a later occurrence of `\star`
-  can resolve to a different canonical prerequisite.
-- `Throughout, all groups are finite.` is relevant because a later result may depend on
-  the ambient finiteness premise without repeating it.
-- `By Lemma 4, ...` is relevant when it presents Lemma 4 as support for a claim.
-- `This proof is elegant.` is not dependency-relevant unless Thorn deliberately defines a
-  dependency query that depends on that judgement. It remains source prose/review evidence,
-  not canonical dependency state.
+- `Define $x \star y$ to mean $x+y$.` is relevant because a later use of `\star` can gain or
+  lose a canonical prerequisite.
+- `Throughout, all groups are finite.` is relevant because later results may depend on the
+  ambient finiteness premise without restating it.
+- `By Lemma 4, ...` is relevant when Lemma 4 is actually presented as support for a claim.
+- `This proof is elegant.` is not dependency-relevant unless Thorn deliberately adds a
+  dependency query whose answer can depend on that judgement.
 
-This criterion handles borderline prose. `The argument is similar to the previous proof`
-has no canonical effect if it is exposition; if the manuscript actually uses the previous
-proof as support, the dependency effect is the prerequisite relation, not the lexical item
-`similar`. Uncertainty about which reading is intended remains explicit uncertainty.
+For borderline prose such as `The argument is similar to the previous proof`, the lexical
+relation is not itself canonical. If the previous proof is being used as support, the
+canonical effect is the prerequisite relation. If not, there is no dependency-semantic
+effect. Ambiguity stays explicit.
 
-## 3. Semantic observables Q
+## 3. Candidate semantic query family Q
 
-`Q` is derived from the dependency questions Thorn must answer, not from current internal
-classes or document vocabulary.
+`Q` is defined from Thorn's dependency obligations, not from current Python classes or a
+vocabulary of mathematical speech acts.
 
 ### Q1. Resolution
 
-At a source occurrence and project-occurrence context:
-
 ```text
-Resolve(occurrence) -> canonical target | unresolved | ambiguous
+Resolve(occurrence, project-context)
+    -> canonical target | unresolved | ambiguous
 ```
 
-This includes symbol/notation identity and explicit result/reference identity where those
-identities can change dependency closure.
+This covers notation/symbol/result identity only where identity can affect later dependency
+behaviour.
 
 ### Q2. Visibility
 
-At a source position/occurrence:
-
 ```text
-Visible(position) -> dependency-bearing declarations/facts in force
+Visible(position, project-context)
+    -> dependency-bearing facts/declarations in force
 ```
 
-This makes project order, lexical scope, forward visibility, shadowing, and repeated
-inclusion observable without making `scope` a surface-language semantic act.
+Project order, lexical/project scope, shadowing, and repeated inclusion are observable through
+this query without making `let`, `throughout`, or `henceforth` primitive semantic acts.
 
 ### Q3. Direct prerequisites
-
-For a dependency-bearing claim/result/declaration:
 
 ```text
 Direct(node) -> immediate canonical prerequisites
 ```
-
-A prerequisite may be a prior result, an ambient/local premise, a definition/binding, or
-another load-bearing claim. Those source categories need not be primitive graph operations.
 
 ### Q4. Transitive prerequisites
 
 ```text
 Closure(node) -> transitive canonical prerequisite set
 ```
-
-This is the fundamental proof-dependency closure observable.
 
 ### Q5. Dependency status / capability
 
@@ -178,375 +146,308 @@ Status(query or graph element)
     -> resolved | given | established | ambiguous | partial | unsupported | source-error
 ```
 
-The exact finite status lattice remains to be minimized. What matters is that a guessed
-prerequisite is not equivalent to an explicit unresolved one, and an accepted premise is
-not necessarily equivalent to an established result when that distinction changes what
-later dependency reasoning may assume.
+The exact finite status set remains subject to minimization. A status survives only if some
+future dependency observation distinguishes it. For example, an accepted premise and an
+unsupported assertion cannot be collapsed if later review/closure semantics treats them
+differently.
 
-A query should remain in `Q` only if it cannot be derived from the others without losing a
-supported dependency distinction.
+A query should be removed from `Q` when it is shown to be derivable from the others without
+losing any supported dependency distinction.
 
-## 4. Assurance observables are not semantic equality
+## 4. Provenance/evidence P is separate from semantic equality
 
-Exact provenance is mandatory for Thorn but must **not** define `==Q`.
+Exact provenance is mandatory for Thorn but must not define `==Q`. Otherwise two equivalent
+paraphrases at different source offsets would automatically become different mathematics.
 
-If raw source coordinates or surface wording were part of semantic equivalence, then two
-mathematically equivalent paraphrases at different offsets would automatically be different
-semantic states. That would make the quotient useless.
-
-Instead let `P` be a provenance/evidence map decorating semantic graph elements:
+Let
 
 ```text
-P : semantic node or relation -> exact source occurrence(s) + evidence
+P : canonical node or relation -> exact source occurrence(s) + evidence
 ```
 
-A correct implementation must satisfy both:
+be the assurance decoration.
+
+A replacement path must therefore satisfy two independent conditions:
 
 ```text
 A ==Q B
 ```
 
-for dependency semantics, and
+for dependency semantics, and an exact correspondence between `P_A` and `P_B` for the
+semantically matched graph elements.
+
+Bounded review/source-rescue reachability is similarly an acceptance projection of semantic
+state, provenance, and review policy. It must remain stable during migration, but it does not
+make raw source coordinates part of the mathematical quotient.
+
+## 5. Proposed minimal graph signature
+
+The current falsifiable hypothesis is that canonical dependency semantics needs only a set of
+dependency-bearing nodes plus a prerequisite relation:
 
 ```text
-P_A corresponds exactly to P_B
+DependencyGraph = (V, REQUIRE)
+REQUIRE subset of V x V
 ```
 
-for source authority/provenance on the graph elements that are semantically matched.
-
-Likewise bounded review/source-rescue reachability is a downstream acceptance projection of
-semantic state plus provenance and review policy. It must remain stable during migration,
-but it does not enlarge the mathematical quotient merely because two equivalent statements
-occur at different source positions.
-
-This semantic/evidence split is important: Thorn's assurance value depends on exact
-provenance, but provenance is **proof-relevant decoration of the semantic quotient**, not an
-extra mathematical relation.
-
-## 5. Proposed minimal state-change calculus
-
-### 5.1 Operational basis
-
-For an append-only mathematical manuscript, the proposed primitive semantic mutations are
-only:
+Equivalently, when constructing a graph from a complete history, the only structural
+operations needed are:
 
 ```text
-DECLARE(v, core)
+DECLARE(v)
 REQUIRE(u, v)
 ```
 
-`DECLARE` adds one future dependency target/fact to semantic state. `REQUIRE` adds a
-prerequisite relation from an owner `u` to a dependency `v`.
+`DECLARE` admits a future dependency target/fact. `REQUIRE(u, v)` says that `v` is a
+prerequisite of `u` in the mathematics as presented.
 
-At the graph level these are node addition and prerequisite-edge addition. Giving them
-semantic names avoids mistaking a generic graph container for the proposed semantics.
+These are a **representation basis**, not yet an incremental operational semantics. A future
+continuation may cause the whole history to elaborate differently (for example by ending an
+ambient convention). Full abstraction must be established before an implementation is
+entitled to assume that every continuation can be processed by monotonically applying these
+two operations to an existing graph.
 
-This basis is deliberately smaller than current surface categories (`DEFINE`, `LET`, `FOR`,
-`NAMED_PROPERTY`, `EXPLICIT_REASON`, and so on).
+### 5.1 Do not hide an ontology inside nodes
 
-### 5.2 Do not hide an ontology in `core`
+The proposal would be vacuous if a node could contain an arbitrary new semantic relation.
+The node shape must be fixed and every field justified by `Q`.
 
-The two-operation proposal would be vacuous if `core` could contain arbitrary new semantic
-relations. The allowed node core must itself be finite in shape and justified by `Q`.
-
-The provisional node core is:
+The provisional core is:
 
 ```text
 DependencyNode
-    identity / binding key     optional stable target for resolution
-    mathematical payload       structured expression/proposition or opaque exact payload
-    dependency status          finite status/capability value
-    visibility domain          derived/normalized source-workspace domain
+    binding/reference key      optional; only if future resolution can observe it
+    mathematical payload       structured expression/proposition or opaque payload
+    dependency status          only distinctions observable through Q
+    visibility description     only data required to answer Visible/Resolve
 ```
 
-The semantic edge core is intentionally only:
+The only primitive semantic edge is `REQUIRE`.
 
-```text
-DependencyRequirement
-    owner
-    prerequisite
-    dependency status          only if unresolved/ambiguous edges must be represented
-```
+Exact source spans, wording, parser evidence, confidence traces, and report handles belong in
+`P`, not the semantic node.
 
-Exact source occurrence, source text, parser evidence, confidence traces, and report handles
-belong in the separate provenance/evidence decoration `P`, not in the semantic core.
+Traditional labels such as `definition`, `assumption`, `notation`, `lemma`, `let`, or
+`explicit reason` are not admitted merely because mathematicians use those words. Such a role
+belongs in the core only if two otherwise identical histories can be separated by a future
+proof-dependency context because of that role.
 
-A traditional role such as “definition”, “assumption”, “notation”, “lemma”, or “local proof
-claim” is admitted to the core only if two otherwise identical states can be distinguished
-by a future dependency query because of that role. Otherwise the role is derivable metadata
-or a source/reporting classification.
+### 5.2 Surface forms as graph effects
 
-### 5.3 Why DECLARE is necessary
+The following table is explanatory, not an implementation dictionary:
 
-A state containing a future-resolvable declaration and a state without it can be
-distinguished by appending a continuation that refers to that declaration. Therefore a
-representation that cannot add a future dependency target is incomplete.
-
-### 5.4 Why REQUIRE is necessary
-
-Two manuscripts can make exactly the same declarations available while one proof depends on
-a prior fact and another does not. `Direct(node)` distinguishes them. Therefore availability
-alone is insufficient; prerequisite relations are independently observable.
-
-### 5.5 Why scope is not a primitive act
-
-Thorn parses a whole project and has exact project order. Visibility can be a derived
-predicate over a node's visibility domain and the normalized source/workspace occurrence.
-Entering or leaving a scope need not destructively mutate the canonical graph. Shadowing
-likewise adds a later declaration; it does not rewrite the earlier one.
-
-If a valid manuscript construction is found whose future dependency behaviour cannot be
-represented by visibility plus `DECLARE`/`REQUIRE`, that is a counterexample and must extend
-the calculus before production cutover.
-
-### 5.6 Surface forms compile to the basis
-
-| Source form | Proposed dependency effect |
+| Source | Candidate canonical effect |
 | --- | --- |
-| `Set $q = 1$.` | `DECLARE(q-binding, payload=1, visibility=...)` |
-| `Define $x \star y$ to mean $x+y$.` | `DECLARE(\star-binding, payload=x+y, visibility=...)` |
-| `Let $G$ be a finite group.` | `DECLARE(G-context, payload=finite-group constraint, visibility=...)` |
-| `Suppose $X$ is compact.` | `DECLARE(compact-X premise, status=given, visibility=...)` |
-| `Throughout, all rings are commutative.` | `DECLARE(commutative-ring premise, status=given, visibility=...)` |
-| theorem/lemma statement | `DECLARE(result claim, status=...)` |
-| local load-bearing proof claim | `DECLARE(claim, status=...)` |
-| use of `q`/`\star` in a result | `REQUIRE(result-or-claim, resolved binding)` |
-| `By Lemma 4, ...` when used as support | `REQUIRE(current claim, Lemma 4)` |
-| purely rhetorical prose | no canonical delta |
+| `Set $q = 1$.` | declare a future-resolvable `q` fact/binding |
+| `Define $x \star y$ to mean $x+y$.` | declare a future-resolvable `\star` fact/binding |
+| `Let $G$ be a finite group.` | declare the dependency-bearing local context required by later claims |
+| `Suppose $X$ is compact.` | declare a premise visible in the relevant scope |
+| `Throughout, all rings are commutative.` | declare a forward-visible ambient premise |
+| theorem/lemma statement | declare a result claim |
+| local load-bearing proof claim | declare a claim that can itself have prerequisites |
+| use of a prior definition/result/premise | add `REQUIRE(owner, prerequisite)` |
+| purely rhetorical prose | no canonical graph effect |
 
-Every row also receives exact provenance through `P`. The table is explanatory only;
-production inference must not implement it as an English phrase dictionary.
+### 5.3 Why node introduction is necessary
 
-## 6. Completeness hypothesis
+A history containing an unused but future-resolvable declaration and one without it can be
+distinguished by appending a continuation that refers to it. A representation unable to
+retain future dependency targets is therefore inadequate.
 
-The research hypothesis is:
+### 5.4 Why prerequisite edges are necessary
 
-> For Thorn's dependency-observable semantics of an append-only mathematical manuscript,
-> every canonical source effect is representable by adding a dependency-bearing node or a
-> prerequisite relation, with visibility/status carried in a fixed finite node/edge shape
-> and source authority carried separately by exact provenance decoration.
+Two histories can expose the same set of declarations while one presented proof uses a prior
+fact and another does not. `Direct(node)` separates them, so declaration availability alone
+is insufficient.
 
-This is structural completeness of the update basis, **not** a claim that Thorn can recover
-every such effect from unrestricted informal mathematics.
+## 6. Counterexample pressure on the minimal basis
 
-The recovery function may legitimately be partial:
+`{DECLARE, REQUIRE}` is a hypothesis, not a result. The counterexample search has already
+identified cases that must be treated carefully.
 
-```text
-Elaborate(source evidence, current state)
-    -> unique candidate delta
-     | ambiguous candidate deltas
-     | unresolved
-     | unsupported capability
-```
+### Later scope changes and retractions
 
-Completeness of the representation and completeness of natural-language understanding are
-separate questions. Thorn should aim strongly for the former and remain explicit about the
-limits of the latter.
+A continuation such as `From this point on we no longer assume compactness` can change the
+future visibility of an earlier premise. This is why the formal equivalence above is defined
+on `h · C` rather than by assuming monotone graph updates.
+
+The two-operation basis survives only if the *final* graph for each history can encode the
+resulting visibility using a fixed visibility description, without introducing an open-ended
+semantic relation vocabulary. If not, visibility/scope needs an additional primitive.
+
+### Alternative and joint support
+
+A plain set of prerequisite edges records which material the presented argument depends on,
+but it does not by itself distinguish Boolean support structure such as “either proof A or
+proof B suffices” from “both A and B are needed”.
+
+Current Thorn dependency/review queries concern presented prerequisite reachability rather
+than minimal alternative proof sets, so this distinction is not currently in `Q`. If Thorn
+later needs queries about alternative sufficient supports, either intermediate support nodes
+must represent that structure without new edge semantics or the graph signature must grow.
+That would be a legitimate calculus counterexample, not a reason to smuggle `OR` into an
+arbitrary metadata field.
+
+### Status changes
+
+A later proof can change how an earlier claim is regarded. The preferred representation is
+to make support itself graph structure and derive status where possible, rather than mutate a
+surface-labelled `theorem`/`assumption` tag. Any irreducible status distinction must justify
+itself through `Q`.
+
+These cases are deliberate tests of completeness rather than corner cases to patch with prose
+patterns.
 
 ## 7. Existing mathematics we can reuse
 
-This proposal is not intended as a new foundational semantics invented from scratch. Several
-established bodies of work supply the right mathematical language.
+The proposal has strong precedents and should not be presented as a new foundational
+semantics from scratch.
 
 ### Contextual equivalence and full abstraction
 
-The closest standard formulation is contextual equivalence/full abstraction from
-programming-language semantics. There, program fragments are observationally equivalent
-when no permitted context can distinguish their behaviour; a denotational representation
-is fully abstract when equality in the representation coincides with contextual
+This is the closest standard formulation. In programming-language semantics, fragments are
+contextually equivalent when no permitted context can distinguish their behaviour; a
+semantics is fully abstract when equality in the semantic model coincides with contextual
 observational equivalence.
 
-For Thorn, the context is a valid future manuscript continuation together with a supported
-proof-dependency query. This gives the exact preservation/reflection criterion above.
+For Thorn, the contexts are valid future manuscript continuations plus supported dependency
+queries. This gives exactly the preservation/reflection criterion in Section 1.
 
-### Dynamic semantics: meaning as context change
+### Dynamic semantics
 
-Dynamic semantics, especially the work of Groenendijk and Stokhof, treats the meaning of a
-sentence as its **context change potential** rather than merely a static truth condition.
-That is directly useful for Thorn: the relevant denotation of a source fragment is the
-change it can make to dependency state.
+Dynamic semantics treats discourse meaning as **context change potential**. That is a useful
+analogy for source statements that establish later-visible mathematical context. Thorn's
+abstraction is narrower: only changes that can affect proof dependency survive.
 
-The Thorn restriction is much stronger than general dynamic semantics: we intentionally
-quotient away every context distinction that cannot affect proof dependency.
+### Nerode-style future distinguishability
 
-### Nerode-style future indistinguishability
+Myhill-Nerode supplies the useful pattern that histories should be identified by what future
+continuations can distinguish. Thorn does not inherit the finite-automaton conclusion; its
+state space is generally infinite.
 
-The Myhill-Nerode construction identifies histories by whether any future continuation can
-distinguish them. Thorn uses the same shape of equivalence, but not the finite-automaton
-claim: our state space is generally infinite. The useful idea is that a minimal sufficient
-state is determined by **future observational distinguishability**, which is exactly why an
-unused definition still has to be retained.
+### Behavioural equivalence / coalgebra
 
-### Behavioural equivalence and coalgebra
-
-Transition-system and coalgebraic semantics provide a general notion of behavioural
-equivalence/bisimulation: states are equivalent when their observations and future behaviour
-cannot be distinguished. This is a natural mathematical home for `==Q` when Thorn's
-transition system is not finite.
+Coalgebraic and transition-system semantics provide general tools for identifying states by
+observable future behaviour and are a natural mathematical language if we later make the
+continuation dynamics explicit.
 
 ### Abstract interpretation
 
-Cousot and Cousot's abstract interpretation gives a complementary perspective. Informal
-mathematical discourse contains much more information than Thorn should represent. Canonical
-dependency state is an abstraction that intentionally forgets information while preserving
-its chosen dependency observables.
-
-This suggests a useful correctness target: the abstraction should be dependency-sufficient
-and as coarse as possible subject to that sufficiency. Explicit uncertainty must remain
-visible rather than being hidden by an unsound approximation.
+Informal mathematical discourse contains much more information than Thorn should preserve.
+The dependency graph can be viewed as an abstraction that intentionally forgets information
+while remaining sufficient for the dependency queries in `Q`.
 
 ### Lean elaboration
 
-Lean separates rich/extensible source syntax from a much smaller elaborated core and treats
-command elaboration as effects on an environment. Definitions add constants to that
-environment; theorems and definitions are technically close; Lean can also expose proof
-axiom dependencies.
-
-The lesson for Thorn is architectural rather than a proposal to formalize the manuscript in
-Lean: rich source forms should elaborate into a small dependency-state core. Surface command
-names should not determine that core ontology.
+Lean separates extensible source syntax from a smaller elaborated core. Command elaboration
+changes an environment, definitions add constants to it, and theorems are technically close
+to definitions. The useful lesson for Thorn is architectural: rich surface forms elaborate
+to a small core; surface command vocabulary should not determine the core ontology.
 
 ### OMDoc / MMT
 
-OMDoc and MMT already show that mathematical knowledge representation benefits from
-collapsing many document-level categories into declarations, constants, definitions,
-assertions, theory inclusions, and relations. MMT constants in particular combine a name
-with optional type, definition, notation, roles, and aliases.
-
-Thorn's proposed quotient is deliberately narrower: a distinction survives only when it can
-change dependency observations. OMDoc/MMT therefore provide useful representation precedent,
-not the final Thorn ontology.
+OMDoc/MMT provide representation precedent for collapsing many document-level forms into
+symbols/declarations plus structured mathematical objects and relations. MMT constants, for
+example, can carry names, types, definitions, notations, roles, and aliases. Thorn's proposed
+quotient is intentionally narrower: a distinction survives only if proof-dependency
+observations can see it.
 
 ## 8. Consequence for natural-language analysis
 
-The finite vocabulary must be the dependency calculus, **not an English dictionary**.
-Production code should not regain architectures of the form:
+The finite vocabulary must be the dependency semantics, **not an English dictionary**.
+Production code must not regain architectures such as:
 
 ```text
 if lemma in {define, mean, denote, call, ...}: emit DEFINITION
 ```
 
-Nor is dependency syntax alone enough: ordinary dependency parsing can expose argument
-structure while leaving the semantic difference between `define A to mean B` and an
-unrelated verb with similar syntax unresolved.
+Dependency syntax alone is also insufficient: a dependency parser can expose argument
+structure without determining whether a predicate expresses a dependency-relevant change.
 
-A promising off-the-shelf direction to evaluate is semantic entailment over candidate graph
-deltas:
+A promising off-the-shelf direction is therefore semantic entailment over candidate graph
+effects:
 
-1. Tree-sitter and `LinguisticProjection` provide exact source structure and typed math/ref
+1. Tree-sitter and `LinguisticProjection` preserve exact source structure and typed math/ref
    placeholders.
-2. `LinguisticFrontend` provides generic grammatical analysis and candidate arguments.
-3. The finite dependency calculus generates only graph effects Thorn knows how to represent.
-4. A general local semantic inference/NLI component asks whether the source entails a
-   candidate graph effect.
-5. Thorn's authority gate decides whether that evidence is sufficient to enter canonical
-   state; otherwise it remains ambiguous/unresolved.
+2. `LinguisticFrontend` supplies general grammatical analysis and candidate arguments.
+3. The finite graph signature constrains what effects may be proposed.
+4. A general local semantic-inference/NLI component tests whether the source entails a
+   proposed graph effect.
+5. Thorn's authority gate admits a uniquely supported effect or preserves
+   ambiguity/unsupported capability.
 
-This is an experimental direction, not a dependency decision. Small maintained NLI
-cross-encoders make a local/keyless feasibility experiment possible. They must be compared
-empirically with the existing spaCy-only substrate and current production behaviour before
-any runtime dependency is adopted.
+Semantic-role labelling or OpenIE remain possible evidence sources, but if they merely return
+a lexical predicate that Thorn then maps through a hand-maintained `mean -> definition`
+table, the architectural problem has only moved.
 
-Semantic-role labelling or OpenIE are also plausible evidence sources, but by themselves
-they normally return a lexical predicate and its arguments. If Thorn then maps predicates
-such as `mean` or `define` to graph effects with a hand-maintained table, the architectural
-problem has merely moved. They should therefore be evaluated only if they remove rather than
-relocate lexical semantic policy.
+`research/dependency-semantics/run_nli_effect_screen.py` is a research-only feasibility
+screen against the existing #160 adversarial corpus. It deliberately tests semantic-effect
+classification before payload extraction and adds no production model dependency.
 
-## 9. A/B equivalence and evidence contract
+## 9. A/B and ablation contract
 
-Let `A` be the current production semantic path and `B` the proposed graph-delta elaborator.
-Parity is **not** equality of internal IR objects.
+Let `A` be the current production path and `B` the replacement elaborator. Parity is not
+internal-IR equality.
 
-The semantic differential condition is:
+The semantic condition is contextual equivalence at `Q`; independently, exact evidence must
+correspond through `P` and bounded review reachability must remain correct.
 
-```text
-A ==Q B
-```
+Every differential must be classified as one of:
 
-on cases where current behaviour is accepted as correct.
+1. semantic regression;
+2. unsafe authority gain;
+3. dependency-observationally equivalent representation change;
+4. provenance/evidence regression;
+5. intentional fail-closed improvement;
+6. calculus counterexample.
 
-Separately, exact evidence/provenance and bounded review reachability must correspond under
-the semantic matching. A semantic equivalence result cannot excuse lost or fabricated
-source authority.
+The existing #162/#185 contracts already exercise no-backward-leakage, include-order
+shadowing, repeated-occurrence disagreement, workspace partiality, dependency/review closure,
+and exact provenance. The #203 `x \star y` ablation adds a useful continuation witness:
+source evidence remains, but a later use loses its canonical dependency.
 
-Every differential should be classified as one of:
+The current hand-written semantic layer may be ablated only when:
 
-1. **semantic regression**: `B` loses a dependency-relevant distinction;
-2. **unsafe authority gain**: `B` creates a dependency not warranted by source evidence;
-3. **observationally equivalent representation change**: internals differ but all semantic
-   `Q` observations agree;
-4. **provenance/evidence regression**: semantic graph matches but exact source authority does
-   not;
-5. **intentional fail-closed improvement**: `A` guessed and `B` exposes ambiguity/partiality;
-6. **calculus counterexample**: a dependency-relevant distinction cannot be represented by
-   the proposed basis.
-
-The existing #162/#185 contracts already supply important observations: no backward leakage,
-include-order shadowing, repeated-occurrence agreement/disagreement, workspace partiality,
-and canonical dependency/review reachability, together with independent exact provenance
-requirements. The #203 project-context ablation adds the useful `x \star y` continuation
-case: source evidence can remain present while a later dependency loses its canonical target.
-
-A dedicated A/B harness should compare semantic `Q` plus the independent provenance/evidence
-map rather than compare private parser classes.
-
-## 10. Ablation criterion
-
-The existing hand-written semantic layer may be removed only when all of the following hold:
-
-- the proposed calculus has survived explicit counterexample search;
-- the new inference path uses general analysis rather than expanding an English cue
-  dictionary;
-- accepted current cases are `==Q` equivalent under A/B comparison;
-- differences where current heuristics guessed are classified and intentionally fail closed;
+- the proposed graph signature has survived explicit counterexample search;
+- relation inference uses general analysis rather than an expanding cue dictionary;
+- accepted current cases are equivalent at semantic `Q`;
+- current guesses that become unresolved are explicitly classified as intentional fail-closed
+  changes;
+- exact provenance/evidence remains intact through `P`;
 - source/workspace partiality remains explicit;
-- exact occurrence provenance and bounded review reachability remain intact as independent
-  assurance obligations;
-- no provider/model API calls are required for the normal local path;
-- the superseded production mechanism is deleted rather than retained as a shadow fallback.
+- bounded review reachability remains correct;
+- the normal path needs no provider/model API calls;
+- superseded production machinery is deleted rather than retained as a shadow fallback.
 
-If the new path cannot meet those conditions, retain the old capability only as a documented
-interim limitation rather than declaring the existing parser-like mechanism architecturally
-correct.
+## 10. Experimental sequence
 
-## 11. Falsifiable next steps
-
-1. Keep a backend-independent semantic `Q` snapshot and a separate exact-provenance snapshot
-   over current canonical state.
-2. Encode the minimal `DECLARE`/`REQUIRE` calculus as an experimental, non-authoritative
-   graph-delta type with a closed attribute schema.
-3. Build synthetic/metamorphic cases that try to falsify completeness of the two-operation
-   basis, including scope endings, shadowing, aliases, ambient assumptions, local assumptions,
-   cross-file order, repeated inclusion, explicit proof support, and rhetorical controls.
-4. Reuse the #160 adversarial corpus to evaluate existing spaCy analysis plus at least one
-   maintained off-the-shelf semantic inference path. Measure false authority first, not
-   recall alone.
-5. Implement `B` beside production `A` with no production cutover.
-6. Differentially compare semantic `Q` and provenance/evidence separately, classify every
-   difference, and extend the calculus only for genuine dependency-observable
-   counterexamples.
+1. Split the executable migration oracle into semantic `Q` and exact-provenance `P`
+   projections.
+2. Try to falsify the graph signature with synthetic/metamorphic continuation cases,
+   especially scope termination, retraction, shadowing, aliases, ambient/local premises,
+   cross-file order, repeated inclusion, support structure, and rhetorical controls.
+3. Reuse the #160 adversarial corpus to evaluate at least one maintained off-the-shelf local
+   semantic-inference path without lexical cue rules. Measure false authority first.
+4. Build replacement path `B` beside current production `A`, with no production cutover.
+5. Compare `A` and `B` at semantic `Q`, then compare `P` and bounded review reachability
+   independently.
+6. Extend the graph signature only for genuine dependency-observable counterexamples.
 7. Cut over only after the evidence gate passes, then ablate the superseded parser-like
-   semantic machinery in the same tranche or immediately following deletion tranche.
+   semantic machinery.
 
 ## References
 
-- Samson Abramsky and related work on observational equivalence/full abstraction; see the
-  standard contextual-equivalence/full-abstraction literature in programming-language
-  semantics.
+- Standard contextual-equivalence/full-abstraction literature in programming-language
+  semantics; the key criterion is coincidence of contextual and denotational equivalence.
 - Jeroen Groenendijk and Martin Stokhof, *Dynamic Predicate Logic*, Linguistics and
-  Philosophy 14 (1991), and related work on dynamic semantics/context change potential.
-- Jeroen Groenendijk and Martin Stokhof, *Changing the Context: Dynamic Semantics and
-  Discourse*.
-- John Myhill (1957) and Anil Nerode (1958), the equivalence underlying the Myhill-Nerode
-  theorem; used here only as the future-distinguishability pattern.
+  Philosophy 14 (1991), and related work on dynamic semantics/context-change potential.
+- John Myhill (1957) and Anil Nerode (1958), for the future-distinguishability pattern.
 - J.J.M.M. Rutten, *Universal Coalgebra: A Theory of Systems*, Theoretical Computer Science
   249 (2000), 3-80.
 - Patrick Cousot and Radhia Cousot, *Abstract Interpretation: A Unified Lattice Model for
   Static Analysis of Programs by Construction or Approximation of Fixpoints*, POPL 1977.
-- Lean Language Reference, sections on elaboration, definitions, theorems, source-file
-  environments, and axiom dependency tracking.
-- Michael Kohlhase, *OMDoc -- An Open Markup Format for Mathematical Documents*, and the
-  OMDoc mathematical-knowledge representation specifications.
+- Lean Language Reference, sections on elaboration, definitions, theorems, and source-file
+  environments.
+- Michael Kohlhase, OMDoc work on mathematical knowledge representation.
 - Florian Rabe and Michael Kohlhase, MMT language/documentation, especially symbol
   declarations and theory structure.
