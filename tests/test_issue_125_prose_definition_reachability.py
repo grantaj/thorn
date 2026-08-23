@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from candidate_context_contract import prepare_all_prior_context
 from sentence_contract_frontend import SentenceContractFrontend
 
 from thorn.latex import extract_project
 from thorn.proof_language_review import advertised_source_addresses
+from thorn.review_workflow import prepare_proof_review
 
 
 def test_prose_defined_result_property_is_available_to_semantic_review(
@@ -37,7 +37,7 @@ def test_prose_defined_result_property_is_available_to_semantic_review(
         paper,
         linguistic_frontend=SentenceContractFrontend(),
     )
-    prepared = prepare_all_prior_context(project, "thm:main")
+    prepared = prepare_proof_review(project, project.unit("thm:main"))
     document = prepared.document
     packet = document.render_initial()
     advertised = set(advertised_source_addresses(document))
@@ -48,4 +48,5 @@ def test_prose_defined_result_property_is_available_to_semantic_review(
     assert defining_sources
     assert definition not in packet
     assert any(source.address in advertised for source in defining_sources)
+    assert any(line.startswith("CONTEXT target=") for line in document.lines)
     assert not any(symbol.name == "balanced" for symbol in project.symbol_table.symbols)
