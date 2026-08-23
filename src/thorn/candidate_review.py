@@ -56,10 +56,7 @@ def attach_advisory_context(
         return document
     addresses = ",".join(handle.address for handle in handles)
     marker = "CONTEXT_TRUNCATED" if proposal.truncated else "CONTEXT"
-    line = (
-        f"{marker} @{addresses} ranker={proposal.ranker or 'unknown'} "
-        f"shown={len(handles)}/{proposal.total_candidate_count}"
-    )
+    line = f"{marker} @{addresses} shown={len(handles)}/{proposal.total_candidate_count}"
     return document.model_copy(
         update={
             "lines": (*document.lines, line),
@@ -77,7 +74,8 @@ def prepare_candidate_proof_review(
 
     Retrieval does not modify claims, symbols, dependencies, support relations or
     their certainty. It only extends the exact, closed-world source handles that a
-    bounded review may request.
+    bounded review may request. Ranker identity remains measurement metadata rather
+    than proof-language syntax.
     """
 
     if proposal.result_identifier != unit.identifier:
