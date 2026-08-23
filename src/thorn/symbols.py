@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 
 from thorn.evidence import InferenceStatus, StructuralEvidence
 from thorn.frontend import ParsedProject, SourceSpan
-from thorn.linguistic import LinguisticFrontend
 from thorn.workspace import (
     ProjectPosition,
     ProjectPositionLookup,
@@ -278,9 +277,8 @@ def extract_symbol_table(
     regions: list[ResultRegion],
     *,
     workspace: ProjectWorkspaceFacts | None = None,
-    linguistic_frontend: LinguisticFrontend | None = None,
 ) -> SymbolTable:
-    """Build deterministic symbols plus optional ambiguity-aware candidates."""
+    """Build Thorn-owned deterministic symbol evidence."""
 
     from thorn.symbol_extract import extract_symbol_table as run_extractor
 
@@ -304,14 +302,4 @@ def extract_symbol_table(
     )
     add_project_mapping_constraints(project, table)
     enforce_structured_authority_boundary(project, table, workspace=workspace)
-
-    if linguistic_frontend is not None:
-        from thorn.linguistic_symbols import add_linguistic_symbol_candidates
-
-        add_linguistic_symbol_candidates(
-            project,
-            regions,
-            table,
-            linguistic_frontend,
-        )
     return table
