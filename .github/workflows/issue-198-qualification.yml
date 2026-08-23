@@ -1,0 +1,47 @@
+name: Issue 198 production qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/issue-198-qualification.yml"
+      - "constraints/provider-runtime.txt"
+      - "eval/robustness/issue_101/**"
+      - "eval/robustness/issue_198/**"
+      - "pyproject.toml"
+      - "scripts/prepare_issue_198_qualification.py"
+      - "src/thorn/**"
+      - "tests/test_issue_198_qualification.py"
+
+jobs:
+  keyless-production-preflight:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install frozen Thorn runtime and local English model
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
+          python -m pip install \
+            https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+      - name: Check frozen qualification contract
+        run: pytest -q tests/test_issue_198_qualification.py
+      - name: Build keyless production preflight
+        run: |
+          python scripts/prepare_issue_198_qualification.py \
+            --output /tmp/issue-198-preflight.json
+      - name: Upload keyless preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-198-preflight-${{ github.sha }}
+          path: /tmp/issue-198-preflight.json
+          if-no-files-found: error
