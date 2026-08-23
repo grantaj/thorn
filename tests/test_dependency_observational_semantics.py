@@ -70,9 +70,13 @@ def test_q_snapshot_detects_alias_semantic_loss_without_losing_formula_control(
     candidate_result = next(
         item for item in candidate.results if item.result_identifier == "thm:use"
     )
-    assert any(key.startswith(r"\star@") for key in baseline_result.project_declaration_dependencies)
+    assert any(
+        key.startswith(r"\star@")
+        for key in baseline_result.project_declaration_dependencies
+    )
     assert not any(
-        key.startswith(r"\star@") for key in candidate_result.project_declaration_dependencies
+        key.startswith(r"\star@")
+        for key in candidate_result.project_declaration_dependencies
     )
 
 
