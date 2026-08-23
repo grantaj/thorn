@@ -1,115 +1,134 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 
 from pydantic import BaseModel, Field
 
-from thorn.dependencies import ExtractedProject
-from thorn.eval_review import build_result_review_context
+from thorn.dependencies import DependencyResolution, ExtractedProject
 from thorn.frontend import SourceSpan
-from thorn.semantic_dependencies import result_project_symbol_dependency_ids
-from thorn.symbols import Symbol, SymbolUse, canonical_symbol_name
+from thorn.models import SourceRange
+from thorn.symbols import ScopeKind, Symbol, SymbolUse, canonical_symbol_name
 from thorn.workspace import ProjectPositionLookup
 
 
-class ExactSourceObservation(BaseModel):
-    """Exact source occurrence used by provenance/evidence A/B comparisons."""
+class SourceEvidenceObservation(BaseModel):
+    """Source evidence carried by the assurance projection ``P``."""
 
     file: str
-    start_offset: int
-    end_offset: int
     start_line: int
-    start_column: int
     end_line: int
-    end_column: int
+    start_offset: int | None = None
+    end_offset: int | None = None
+    start_column: int | None = None
+    end_column: int | None = None
 
     @classmethod
-    def from_span(cls, source: SourceSpan) -> ExactSourceObservation:
+    def from_span(cls, source: SourceSpan) -> SourceEvidenceObservation:
         return cls(
             file=source.file,
+            start_line=source.start_line,
+            end_line=source.end_line,
             start_offset=source.start_offset,
             end_offset=source.end_offset,
-            start_line=source.start_line,
             start_column=source.start_column,
-            end_line=source.end_line,
             end_column=source.end_column,
         )
 
-
-class SemanticDeclarationObservation(BaseModel):
-    """Dependency-observable declaration state without source coordinates."""
-
-    key: str
-    name: str
-    role: str
-    arity: int | None = None
-    scope_kind: str
-    result_identifier: str | None = None
-    definition_expressions: list[str] = Field(default_factory=list)
-    constraints: list[str] = Field(default_factory=list)
+    @classmethod
+    def from_range(cls, source: SourceRange) -> SourceEvidenceObservation:
+        return cls(
+            file=source.file,
+            start_line=source.start_line,
+            end_line=source.end_line,
+        )
 
 
-class SemanticUseResolutionObservation(BaseModel):
-    """One dependency-relevant occurrence and its canonical resolution."""
+class SemanticNodeObservation(BaseModel):
+    """One labelled dependency node in the bounded executable ``Q`` projection."""
 
     key: str
-    name: str
-    scope_kind: str
-    result_identifier: str | None = None
+    namespace: str
+    binding: str | None = None
+    payload: list[str] = Field(default_factory=list)
+    visibility_owner: str | None = None
+    shadow_rank: int | None = None
+
+
+class SemanticResolutionObservation(BaseModel):
+    """A source occurrence's dependency-relevant resolution, without coordinates."""
+
+    namespace: str
+    binding: str
+    context_key: str
     target_key: str | None = None
+    status: str
 
 
-class SemanticResultDependencyObservation(BaseModel):
-    """Observable dependency/review closure for one theorem-like result."""
+class SemanticRequirementObservation(BaseModel):
+    """One direct prerequisite relation in the bounded executable ``Q`` projection."""
 
-    result_identifier: str
-    direct_result_dependencies: list[str] = Field(default_factory=list)
-    transitive_result_dependencies: list[str] = Field(default_factory=list)
-    project_declaration_dependencies: list[str] = Field(default_factory=list)
-    review_declarations: list[str] = Field(default_factory=list)
-    review_result_dependencies: list[str] = Field(default_factory=list)
-    uncertain_support_relations: list[str] = Field(default_factory=list)
+    owner_key: str
+    prerequisite_key: str | None = None
+    unresolved_reference: str | None = None
+    status: str
 
 
 class DependencySemanticSnapshot(BaseModel):
-    """Current-source projection of proof-dependency semantic observables ``Q``.
+    """Canonicalized bounded projection of proof-dependency semantic observables ``Q``.
 
-    Exact source positions are intentionally absent. Two source histories should not become
-    different mathematics merely because equivalent material occurs at different offsets.
-    Stable local keys preserve graph identity for differential tests without embedding raw
-    provenance into semantic equality.
+    The projection excludes source coordinates, parser roles, review-selection policy,
+    and transitive closure. Keys come from dependency-observable content, not source
+    coordinates. Equality therefore ignores irrelevant relocation and independent
+    ordering.
     """
 
     workspace_resolution: str | None = None
-    declarations: list[SemanticDeclarationObservation] = Field(default_factory=list)
-    uses: list[SemanticUseResolutionObservation] = Field(default_factory=list)
-    results: list[SemanticResultDependencyObservation] = Field(default_factory=list)
+    nodes: list[SemanticNodeObservation] = Field(default_factory=list)
+    resolutions: list[SemanticResolutionObservation] = Field(default_factory=list)
+    requirements: list[SemanticRequirementObservation] = Field(default_factory=list)
 
 
-class DeclarationProvenanceObservation(BaseModel):
-    """Exact evidence decorating one semantically matched declaration."""
+class NodeProvenanceObservation(BaseModel):
+    """Exact available evidence decorating one semantically matched node."""
 
-    key: str
-    source: ExactSourceObservation
-    introduction_source: ExactSourceObservation
+    node_key: str
+    sources: list[SourceEvidenceObservation] = Field(default_factory=list)
 
 
-class UseProvenanceObservation(BaseModel):
-    """Exact evidence decorating one semantically matched source use."""
+class ResolutionProvenanceObservation(BaseModel):
+    """Exact evidence for one source-backed resolution observation."""
 
-    key: str
-    source: ExactSourceObservation
+    namespace: str
+    binding: str
+    context_key: str
+    target_key: str | None = None
+    status: str
+    source: SourceEvidenceObservation
+
+
+class RequirementProvenanceObservation(BaseModel):
+    """Source evidence for one direct prerequisite relation."""
+
+    owner_key: str
+    prerequisite_key: str | None = None
+    unresolved_reference: str | None = None
+    status: str
+    source: SourceEvidenceObservation
+    source_occurrence_ids: list[str] = Field(default_factory=list)
+    target_occurrence_ids: list[str] = Field(default_factory=list)
 
 
 class DependencyProvenanceSnapshot(BaseModel):
-    """Exact provenance/evidence projection ``P`` kept separate from semantic equality."""
+    """Assurance projection ``P`` kept separate from semantic equality."""
 
-    declarations: list[DeclarationProvenanceObservation] = Field(default_factory=list)
-    uses: list[UseProvenanceObservation] = Field(default_factory=list)
+    nodes: list[NodeProvenanceObservation] = Field(default_factory=list)
+    resolutions: list[ResolutionProvenanceObservation] = Field(default_factory=list)
+    requirements: list[RequirementProvenanceObservation] = Field(default_factory=list)
 
 
 class DependencyObservationSnapshot(BaseModel):
-    """A/B oracle split into semantic ``Q`` and exact-provenance ``P`` projections."""
+    """Migration oracle with separate semantic ``Q`` and assurance ``P`` projections."""
 
     semantic: DependencySemanticSnapshot
     provenance: DependencyProvenanceSnapshot
@@ -131,7 +150,6 @@ def _project_source_key(
     lookup: ProjectPositionLookup | None,
     source: SourceSpan,
 ) -> tuple[tuple[int, ...], str, int, int, int, int, int, int]:
-    project_key: tuple[int, ...]
     if lookup is None:
         project_key = (10**12, source.start_offset)
     else:
@@ -142,41 +160,163 @@ def _project_source_key(
     return project_key, *_source_key(source)
 
 
-def _semantic_symbol_keys(symbols: list[Symbol]) -> dict[str, str]:
-    """Assign source-coordinate-free local graph keys by canonical name and occurrence."""
+def _canonical_key(prefix: str, *parts: object) -> str:
+    encoded = json.dumps(
+        parts,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return f"{prefix}:{encoded}"
 
-    ordinals: dict[str, int] = defaultdict(int)
+
+def _normalized_text(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _result_keys(project: ExtractedProject) -> dict[str, str]:
     keys: dict[str, str] = {}
+    for unit in project.units:
+        binding = unit.label
+        payload = _normalized_text(unit.statement)
+        keys[unit.identifier] = _canonical_key("result", binding, payload)
+    return keys
+
+
+def _definition_facts(project: ExtractedProject) -> dict[str, list[str]]:
+    table = project.symbol_table
+    facts: dict[str, list[str]] = {}
+    for definition in table.definitions:
+        facts.setdefault(definition.symbol_identifier, []).append(
+            f":= {_normalized_text(definition.expression_latex)}"
+        )
+    for constraint in table.constraints:
+        facts.setdefault(constraint.symbol_identifier, []).append(
+            f"{constraint.relation} {_normalized_text(constraint.expression_latex)}"
+        )
+    for symbol in table.symbols:
+        if symbol.domain_latex:
+            facts.setdefault(symbol.identifier, []).append(
+                f"domain {_normalized_text(symbol.domain_latex)}"
+            )
+        if symbol.codomain_latex:
+            facts.setdefault(symbol.identifier, []).append(
+                f"codomain {_normalized_text(symbol.codomain_latex)}"
+            )
+    return {identifier: sorted(values) for identifier, values in facts.items()}
+
+
+def _visibility_owner(
+    project: ExtractedProject,
+    symbol: Symbol,
+    result_keys: dict[str, str],
+) -> str | None:
+    scope = project.symbol_table.scope(symbol.scope_identifier)
+    if scope.kind == ScopeKind.PROJECT:
+        return None
+    if scope.result_identifier is None:
+        return None
+    return result_keys.get(scope.result_identifier)
+
+
+def _semantic_symbol_keys(
+    project: ExtractedProject,
+    symbols: list[Symbol],
+    result_keys: dict[str, str],
+    facts: dict[str, list[str]],
+) -> tuple[dict[str, str], dict[str, int]]:
+    """Build content-addressed keys with order only where shadowing can observe it."""
+
+    current_rank: dict[tuple[str | None, str], int] = defaultdict(int)
+    previous_payload: dict[tuple[str | None, str], tuple[str, ...]] = {}
+    keys: dict[str, str] = {}
+    ranks: dict[str, int] = {}
+
     for symbol in symbols:
-        name = canonical_symbol_name(symbol.name)
-        ordinal = ordinals[name]
-        ordinals[name] += 1
-        keys[symbol.identifier] = f"{name}#{ordinal}"
-    return keys
+        binding = canonical_symbol_name(symbol.name)
+        owner = _visibility_owner(project, symbol, result_keys)
+        group = (owner, binding)
+        payload = tuple(facts.get(symbol.identifier, []))
+        if group in previous_payload and previous_payload[group] != payload:
+            current_rank[group] += 1
+        previous_payload[group] = payload
+        rank = current_rank[group]
+        keys[symbol.identifier] = _canonical_key(
+            "symbol",
+            owner,
+            binding,
+            rank,
+            payload,
+        )
+        ranks[symbol.identifier] = rank
+    return keys, ranks
 
 
-def _semantic_use_keys(uses: list[SymbolUse]) -> list[str]:
-    """Assign coordinate-free local keys to uses for provenance correspondence."""
+def _span_contains(outer: SourceSpan, inner: SourceSpan) -> bool:
+    return (
+        outer.file == inner.file
+        and outer.start_offset <= inner.start_offset
+        and inner.end_offset <= outer.end_offset
+    )
 
-    ordinals: dict[str, int] = defaultdict(int)
-    keys: list[str] = []
-    for use in uses:
-        name = canonical_symbol_name(use.name)
-        ordinal = ordinals[name]
-        ordinals[name] += 1
-        keys.append(f"{name}-use#{ordinal}")
-    return keys
+
+def _project_owner_for_use(
+    project: ExtractedProject,
+    use: SymbolUse,
+    symbols: list[Symbol],
+    symbol_keys: dict[str, str],
+) -> str:
+    candidates = [
+        symbol
+        for symbol in symbols
+        if project.symbol_table.scope(symbol.scope_identifier).kind == ScopeKind.PROJECT
+        and _span_contains(symbol.introduction_source, use.source)
+    ]
+    if not candidates:
+        return "project-context"
+    owner = min(
+        candidates,
+        key=lambda item: (
+            item.introduction_source.end_offset - item.introduction_source.start_offset
+        ),
+    )
+    return symbol_keys[owner.identifier]
+
+
+def _resolution_context(
+    project: ExtractedProject,
+    use: SymbolUse,
+    symbols: list[Symbol],
+    symbol_keys: dict[str, str],
+    result_keys: dict[str, str],
+) -> str:
+    scope = project.symbol_table.scope(use.scope_identifier)
+    if scope.result_identifier is not None:
+        return result_keys.get(
+            scope.result_identifier,
+            f"result:{scope.result_identifier}",
+        )
+    return _project_owner_for_use(project, use, symbols, symbol_keys)
+
+
+def _requirement_key(item: SemanticRequirementObservation) -> tuple[str, str, str, str]:
+    return (
+        item.owner_key,
+        item.prerequisite_key or "",
+        item.unresolved_reference or "",
+        item.status,
+    )
 
 
 def snapshot_dependency_observations(
     project: ExtractedProject,
 ) -> DependencyObservationSnapshot:
-    """Project canonical behaviour onto semantic ``Q`` and exact-evidence ``P``.
+    """Project canonical behaviour onto bounded semantic ``Q`` and evidence ``P``.
 
-    ``semantic`` intentionally omits raw source coordinates and introduction wording.
-    ``provenance`` carries exact source authority for semantically matched graph elements.
-    Continuation-sensitive equivalence is tested by applying the same future source
-    continuation to both extraction paths and comparing another semantic snapshot.
+    This is a migration witness, not a serialization of the current IR. It keeps direct
+    dependency structure, binding/resolution state, mathematical payload, and capability
+    status. Review policy, parser taxonomies, source coordinates, and derived transitive
+    closure are excluded from semantic equality.
     """
 
     table = project.symbol_table
@@ -193,94 +333,170 @@ def snapshot_dependency_observations(
         table.uses,
         key=lambda item: (*_project_source_key(lookup, item.source), item.name),
     )
-    symbol_keys = _semantic_symbol_keys(symbols)
-    use_keys = _semantic_use_keys(uses)
+    result_keys = _result_keys(project)
+    facts = _definition_facts(project)
+    symbol_keys, shadow_ranks = _semantic_symbol_keys(
+        project, symbols, result_keys, facts
+    )
 
-    definitions_by_symbol: dict[str, list[str]] = {}
-    for definition in table.definitions:
-        definitions_by_symbol.setdefault(definition.symbol_identifier, []).append(
-            definition.expression_latex
-        )
+    nodes: list[SemanticNodeObservation] = []
+    node_provenance: list[NodeProvenanceObservation] = []
 
-    constraints_by_symbol: dict[str, list[str]] = {}
-    for constraint in table.constraints:
-        constraints_by_symbol.setdefault(constraint.symbol_identifier, []).append(
-            f"{constraint.relation} {constraint.expression_latex}"
-        )
-
-    declarations = [
-        SemanticDeclarationObservation(
-            key=symbol_keys[symbol.identifier],
-            name=canonical_symbol_name(symbol.name),
-            role=symbol.role.value,
-            arity=symbol.arity,
-            scope_kind=table.scope(symbol.scope_identifier).kind.value,
-            result_identifier=symbol.result_identifier,
-            definition_expressions=sorted(definitions_by_symbol.get(symbol.identifier, [])),
-            constraints=sorted(constraints_by_symbol.get(symbol.identifier, [])),
-        )
-        for symbol in symbols
-    ]
-    declaration_provenance = [
-        DeclarationProvenanceObservation(
-            key=symbol_keys[symbol.identifier],
-            source=ExactSourceObservation.from_span(symbol.source),
-            introduction_source=ExactSourceObservation.from_span(symbol.introduction_source),
-        )
-        for symbol in symbols
-    ]
-
-    semantic_uses: list[SemanticUseResolutionObservation] = []
-    use_provenance: list[UseProvenanceObservation] = []
-    for use, key in zip(uses, use_keys, strict=True):
-        scope = table.scope(use.scope_identifier)
-        semantic_uses.append(
-            SemanticUseResolutionObservation(
-                key=key,
-                name=canonical_symbol_name(use.name),
-                scope_kind=scope.kind.value,
-                result_identifier=scope.result_identifier,
-                target_key=(
-                    symbol_keys.get(use.resolved_symbol_identifier)
-                    if use.resolved_symbol_identifier is not None
-                    else None
-                ),
-            )
-        )
-        use_provenance.append(
-            UseProvenanceObservation(
-                key=key,
-                source=ExactSourceObservation.from_span(use.source),
-            )
-        )
-
-    results: list[SemanticResultDependencyObservation] = []
     for unit in project.units:
-        review = build_result_review_context(project, unit.identifier).items[0]
-        project_targets = [
-            symbol_keys[identifier]
-            for identifier in result_project_symbol_dependency_ids(project, unit.identifier)
-        ]
-        review_declarations = sorted(
-            symbol_keys[symbol.identifier]
-            for symbol in review.symbols
-            if symbol.identifier in symbol_keys
+        key = result_keys[unit.identifier]
+        nodes.append(
+            SemanticNodeObservation(
+                key=key,
+                namespace="result",
+                binding=unit.label,
+                payload=[_normalized_text(unit.statement)],
+            )
         )
-        results.append(
-            SemanticResultDependencyObservation(
-                result_identifier=unit.identifier,
-                direct_result_dependencies=project.dependency_graph.direct_dependency_ids(
-                    unit.identifier
-                ),
-                transitive_result_dependencies=project.dependency_graph.transitive_dependency_ids(
-                    unit.identifier
-                ),
-                project_declaration_dependencies=project_targets,
-                review_declarations=review_declarations,
-                review_result_dependencies=sorted(
-                    dependency.identifier for dependency in review.dependencies
-                ),
-                uncertain_support_relations=sorted(review.trigger_relation_identifiers),
+        node_provenance.append(
+            NodeProvenanceObservation(
+                node_key=key,
+                sources=[SourceEvidenceObservation.from_range(unit.statement_range)],
+            )
+        )
+
+    for symbol in symbols:
+        key = symbol_keys[symbol.identifier]
+        nodes.append(
+            SemanticNodeObservation(
+                key=key,
+                namespace="symbol",
+                binding=canonical_symbol_name(symbol.name),
+                payload=facts.get(symbol.identifier, []),
+                visibility_owner=_visibility_owner(project, symbol, result_keys),
+                shadow_rank=shadow_ranks[symbol.identifier],
+            )
+        )
+        sources = [SourceEvidenceObservation.from_span(symbol.source)]
+        introduction = SourceEvidenceObservation.from_span(symbol.introduction_source)
+        if introduction != sources[0]:
+            sources.append(introduction)
+        node_provenance.append(
+            NodeProvenanceObservation(node_key=key, sources=sources)
+        )
+
+    resolution_by_key: dict[
+        tuple[str, str, str, str | None, str],
+        SemanticResolutionObservation,
+    ] = {}
+    resolution_provenance: list[ResolutionProvenanceObservation] = []
+
+    for use in uses:
+        binding = canonical_symbol_name(use.name)
+        context_key = _resolution_context(
+            project,
+            use,
+            symbols,
+            symbol_keys,
+            result_keys,
+        )
+        target_key = (
+            symbol_keys.get(use.resolved_symbol_identifier)
+            if use.resolved_symbol_identifier is not None
+            else None
+        )
+        status = "resolved" if target_key is not None else "unresolved"
+        semantic = SemanticResolutionObservation(
+            namespace="symbol",
+            binding=binding,
+            context_key=context_key,
+            target_key=target_key,
+            status=status,
+        )
+        resolution_by_key[
+            (semantic.namespace, binding, context_key, target_key, status)
+        ] = semantic
+        resolution_provenance.append(
+            ResolutionProvenanceObservation(
+                namespace="symbol",
+                binding=binding,
+                context_key=context_key,
+                target_key=target_key,
+                status=status,
+                source=SourceEvidenceObservation.from_span(use.source),
+            )
+        )
+
+    requirement_by_key: dict[
+        tuple[str, str, str, str],
+        SemanticRequirementObservation,
+    ] = {}
+    requirement_provenance: list[RequirementProvenanceObservation] = []
+
+    for edge in project.dependency_graph.edges:
+        owner_key = result_keys.get(edge.source_identifier)
+        if owner_key is None:
+            continue
+        target_key = (
+            result_keys.get(edge.target_identifier)
+            if edge.target_identifier is not None
+            else None
+        )
+        status = edge.resolution.value
+        requirement = SemanticRequirementObservation(
+            owner_key=owner_key,
+            prerequisite_key=target_key,
+            unresolved_reference=(
+                edge.target_label
+                if edge.resolution != DependencyResolution.RESOLVED
+                else None
+            ),
+            status=status,
+        )
+        requirement_by_key[_requirement_key(requirement)] = requirement
+        requirement_provenance.append(
+            RequirementProvenanceObservation(
+                owner_key=owner_key,
+                prerequisite_key=target_key,
+                unresolved_reference=requirement.unresolved_reference,
+                status=status,
+                source=SourceEvidenceObservation.from_range(edge.source),
+                source_occurrence_ids=edge.source_occurrence_ids,
+                target_occurrence_ids=edge.target_occurrence_ids,
+            )
+        )
+
+    project_symbols = {
+        symbol.identifier
+        for symbol in symbols
+        if table.scope(symbol.scope_identifier).kind == ScopeKind.PROJECT
+    }
+
+    for use in uses:
+        target_identifier = use.resolved_symbol_identifier
+        if target_identifier is None or target_identifier not in project_symbols:
+            continue
+        prerequisite_key = symbol_keys[target_identifier]
+        scope = table.scope(use.scope_identifier)
+        if scope.result_identifier is not None:
+            owner_key = result_keys.get(scope.result_identifier)
+        else:
+            owner_key = _project_owner_for_use(
+                project,
+                use,
+                symbols,
+                symbol_keys,
+            )
+            if owner_key == "project-context":
+                owner_key = None
+        if owner_key is None:
+            continue
+        requirement = SemanticRequirementObservation(
+            owner_key=owner_key,
+            prerequisite_key=prerequisite_key,
+            status="resolved",
+        )
+        requirement_by_key[_requirement_key(requirement)] = requirement
+        requirement_provenance.append(
+            RequirementProvenanceObservation(
+                owner_key=owner_key,
+                prerequisite_key=prerequisite_key,
+                status="resolved",
+                source=SourceEvidenceObservation.from_span(use.source),
             )
         )
 
@@ -290,12 +506,48 @@ def snapshot_dependency_observations(
     return DependencyObservationSnapshot(
         semantic=DependencySemanticSnapshot(
             workspace_resolution=workspace_resolution,
-            declarations=declarations,
-            uses=semantic_uses,
-            results=results,
+            nodes=sorted(nodes, key=lambda item: item.key),
+            resolutions=sorted(
+                resolution_by_key.values(),
+                key=lambda item: (
+                    item.namespace,
+                    item.binding,
+                    item.context_key,
+                    item.target_key or "",
+                    item.status,
+                ),
+            ),
+            requirements=sorted(
+                requirement_by_key.values(),
+                key=_requirement_key,
+            ),
         ),
         provenance=DependencyProvenanceSnapshot(
-            declarations=declaration_provenance,
-            uses=use_provenance,
+            nodes=sorted(node_provenance, key=lambda item: item.node_key),
+            resolutions=sorted(
+                resolution_provenance,
+                key=lambda item: (
+                    item.namespace,
+                    item.binding,
+                    item.context_key,
+                    item.target_key or "",
+                    item.status,
+                    item.source.file,
+                    item.source.start_line,
+                    item.source.start_offset or -1,
+                ),
+            ),
+            requirements=sorted(
+                requirement_provenance,
+                key=lambda item: (
+                    item.owner_key,
+                    item.prerequisite_key or "",
+                    item.unresolved_reference or "",
+                    item.status,
+                    item.source.file,
+                    item.source.start_line,
+                    item.source.start_offset or -1,
+                ),
+            ),
         ),
     )
