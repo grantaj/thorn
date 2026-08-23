@@ -1,0 +1,55 @@
+name: Issue 198 context retrieval spike
+
+on:
+  push:
+    branches:
+      - issue-198-context-retrieval-spike
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.16"
+          cache: pip
+      - name: Install Thorn and local retrieval candidates
+        run: |
+          python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
+          python -m pip install sentence-transformers==5.7.0
+          python -m pip install \
+            https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+      - name: Materialize unchanged frozen issue 198 inputs
+        run: |
+          git fetch origin issue-198-production-qualification
+          mkdir -p eval/robustness/issue_198
+          git show origin/issue-198-production-qualification:eval/robustness/issue_198/qualification_manifest.json \
+            > /tmp/issue-198-frozen-manifest.json
+          git show origin/issue-198-production-qualification:eval/robustness/issue_198/heldout_diagonal_regular_clean.tex \
+            > eval/robustness/issue_198/heldout_diagonal_regular_clean.tex
+      - name: Measure off-the-shelf context retrieval
+        run: |
+          python scripts/measure_issue_198_context_retrieval.py \
+            --manifest /tmp/issue-198-frozen-manifest.json \
+            --output /tmp/issue-198-context-retrieval.json
+          cat /tmp/issue-198-context-retrieval.json
+      - name: Upload measurement evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-198-context-retrieval-${{ github.sha }}
+          path: |
+            /tmp/issue-198-frozen-manifest.json
+            /tmp/issue-198-context-retrieval.json
+          if-no-files-found: warn
