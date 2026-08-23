@@ -206,10 +206,29 @@ def _dependency_snapshot(
     )
 
 
-def prepare_proof_review(project: ExtractedProject, unit: TheoremUnit) -> PreparedProofReview:
-    """Build canonical Proof IR and `thorn-proof/1` for one result, keylessly."""
+def prepare_proof_review(
+    project: ExtractedProject,
+    unit: TheoremUnit,
+    *,
+    include_advisory_context: bool = True,
+) -> PreparedProofReview:
+    """Build canonical Proof IR and `thorn-proof/1` for one result, keylessly.
+
+    Normal production review also advertises every exact prior linguistic statement
+    permitted by workspace order. This source-only context cannot alter canonical
+    mathematical state. Ranked/truncated retrieval experiments can disable this layer
+    and attach their own advisory proposal without changing authority semantics.
+    """
 
     state, document = _build_review_state(project, unit)
+    if include_advisory_context:
+        from thorn.candidate_review import attach_complete_advisory_context
+        from thorn.context_retrieval import build_result_context_pools
+
+        document = attach_complete_advisory_context(
+            document,
+            build_result_context_pools(project, unit.identifier),
+        )
     provenance = ReviewCacheProvenance(
         result_identifier=unit.identifier,
         target_content_fingerprint=_target_content_fingerprint(unit),
