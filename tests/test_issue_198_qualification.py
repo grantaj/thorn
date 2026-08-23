@@ -35,8 +35,8 @@ def test_issue_198_freeze_matches_production_contract() -> None:
         == production["tree_sitter_language_pack"]
         == "1.14.3"
     )
-    assert TREE_SITTER_LANGUAGE_PACK_RELEASE == production["tree_sitter_language_pack_release"]
-    assert TREE_SITTER_LATEX_REVISION == production["tree_sitter_latex_revision"]
+    assert production["tree_sitter_language_pack_release"] == TREE_SITTER_LANGUAGE_PACK_RELEASE
+    assert production["tree_sitter_latex_revision"] == TREE_SITTER_LATEX_REVISION
     assert FORMAT_VERSION == review["representation"] == "thorn-proof/1"
     assert PROTOCOL_VERSION == review["protocol"] == "thorn-proof-review/2"
     assert PROMPT_VERSION == review["prompt"] == "proof_language_reviewer_v2"
