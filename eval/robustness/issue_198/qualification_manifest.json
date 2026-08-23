@@ -1,0 +1,65 @@
+{
+  "format": "thorn-issue-198-qualification/1",
+  "issue": 198,
+  "production_revision": "dca454190eeb7fe5a8ebda93e71b6dea2be90820",
+  "production_identity": {
+    "default_frontend": "tree-sitter",
+    "tree_sitter_runtime": "0.26.0",
+    "tree_sitter_language_pack": "1.14.3",
+    "tree_sitter_language_pack_release": "df3bcc39862da6972032d7537d49b782a50a25bb",
+    "tree_sitter_latex_revision": "7e0ecdc02926c7b9b2e0c76003d4fe7b0944f957",
+    "spacy": "3.8.14",
+    "spacy_model": "en_core_web_sm",
+    "spacy_model_version": "3.8.0"
+  },
+  "review_identity": {
+    "representation": "thorn-proof/1",
+    "protocol": "thorn-proof-review/2",
+    "prompt": "proof_language_reviewer_v2",
+    "prospective_model": "gpt-5.6"
+  },
+  "cases": [
+    {
+      "id": "A2-prose-uniformity-defect",
+      "source": "eval/robustness/issue_101/variant_prose_uniformity.tex",
+      "source_sha256": "8621964954aadd7d85c6b6310d782be5073360e5f1a7ffb30a95e393d3795eff",
+      "target": "thm:uniform-decay",
+      "expected_scientific_class": "correct_defect",
+      "required_reachable_sources": [
+        "will be called \\emph{stable}",
+        "Throughout, the observation window is"
+      ],
+      "required_absent_from_initial": [
+        "following uniform requirement holds",
+        "Throughout, the observation window is"
+      ],
+      "irrelevant_source_needles": []
+    },
+    {
+      "id": "heldout-diagonal-regular-clean",
+      "source": "eval/robustness/issue_198/heldout_diagonal_regular_clean.tex",
+      "source_sha256": "7e106f27376abffb0b111d25c22d480e460023671f494d99ad8fa1fc8252a697",
+      "target": "thm:main",
+      "expected_scientific_class": "correct_clean",
+      "required_reachable_sources": [
+        "two diagonals have equal length"
+      ],
+      "required_absent_from_initial": [
+        "two diagonals have equal length"
+      ],
+      "irrelevant_source_needles": []
+    },
+    {
+      "id": "C0-matched-clean-control",
+      "source": "eval/robustness/issue_101/clean_control.tex",
+      "source_sha256": "d5beef31dad9fe8478a2d819f498ce7bfafaab23f2f4dfa9d017e43eb160429f",
+      "target": "thm:uniform-decay",
+      "expected_scientific_class": "correct_clean",
+      "required_reachable_sources": [],
+      "required_absent_from_initial": [],
+      "irrelevant_source_needles": [
+        "The next elementary observation records the decay seen at any fixed"
+      ]
+    }
+  ]
+}
