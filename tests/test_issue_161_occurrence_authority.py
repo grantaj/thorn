@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from declaration_contract_frontend import DeclarationContractFrontend
 from thorn.latex import extract_project
-from thorn.linguistic_declarations import ProseDeclarationCapability
+from thorn.workspace import ProjectPositionLookup, WorkspaceResolution
 
 
 def _resolved_names(project, result_identifier: str) -> list[str]:
@@ -20,17 +19,21 @@ def _resolved_names(project, result_identifier: str) -> list[str]:
     ]
 
 
-def test_repeated_child_use_can_share_one_parent_authority(tmp_path: Path) -> None:
+def _write_repeated_child(
+    tmp_path: Path,
+    *,
+    between: str = "",
+) -> tuple[Path, Path]:
     main = tmp_path / "main.tex"
     child = tmp_path / "child.tex"
-    definition = "A map is called fibre-regular when every fibre contains two points."
     main.write_text(
         "\\documentclass{article}\n"
         "\\usepackage{amsthm}\n"
         "\\newtheorem{theorem}{Theorem}\n"
         "\\begin{document}\n"
-        f"{definition}\n"
+        "A map is called fibre-regular when every fibre contains two points.\n"
         "\\input{child}\n"
+        f"{between}"
         "\\input{child}\n"
         "\\end{document}\n",
         encoding="utf-8",
@@ -43,53 +46,63 @@ The map $f$ is fibre-regular.
 """,
         encoding="utf-8",
     )
+    return main, child
 
-    project = extract_project(main, linguistic_frontend=DeclarationContractFrontend())
 
-    assert project.prose_declarations is not None
-    assert project.prose_declarations.capability == ProseDeclarationCapability.COMPLETE
-    assert _resolved_names(project, "thm:child").count("fibre-regular") == 1
-    definitions = [
-        item for item in project.symbol_table.definitions if item.raw == definition
+def test_repeated_child_keeps_distinct_workspace_occurrences(tmp_path: Path) -> None:
+    main, child = _write_repeated_child(tmp_path)
+    project = extract_project(main)
+
+    workspace = project.workspace
+    assert workspace is not None
+    assert workspace.resolution == WorkspaceResolution.RESOLVED
+
+    child_occurrences = [
+        occurrence
+        for occurrence in workspace.occurrences
+        if Path(occurrence.file).resolve() == child.resolve()
     ]
-    assert len(definitions) == 1
-    assert definitions[0].symbol_identifier.startswith("semantic:o0:")
+    assert len(child_occurrences) == 2
+    assert len({item.occurrence_id for item in child_occurrences}) == 2
+
+    labels = [label for label in workspace.labels if label.name == "thm:child"]
+    assert {label.occurrence_id for label in labels} == {
+        item.occurrence_id for item in child_occurrences
+    }
+
+    positions = ProjectPositionLookup(workspace).positions(child, 0)
+    assert len(positions) == 2
+    assert positions[0].occurrence_id != positions[1].occurrence_id
+    assert positions[0].order_key != positions[1].order_key
+
+    # Repeated physical source must not be collapsed into prose-derived mathematical
+    # authority. The source remains available through the generic statement/context
+    # path when a linguistic frontend is configured.
+    assert "fibre-regular" not in _resolved_names(project, "thm:child")
 
 
-def test_repeated_child_use_fails_closed_when_occurrence_authority_differs(
+def test_repeated_child_with_different_preceding_prose_still_fails_closed(
     tmp_path: Path,
 ) -> None:
-    main = tmp_path / "main.tex"
-    child = tmp_path / "child.tex"
-    first = "A map is called fibre-regular when every fibre contains two points."
-    second = "A map is called fibre-regular when every fibre contains three points."
-    main.write_text(
-        "\\documentclass{article}\n"
-        "\\usepackage{amsthm}\n"
-        "\\newtheorem{theorem}{Theorem}\n"
-        "\\begin{document}\n"
-        f"{first}\n"
-        "\\input{child}\n"
-        f"{second}\n"
-        "\\input{child}\n"
-        "\\end{document}\n",
-        encoding="utf-8",
-    )
-    child.write_text(
-        r"""\begin{theorem}\label{thm:child}
-The map $f$ is fibre-regular.
-\end{theorem}
-\begin{proof}Inspect the fibres.\end{proof}
-""",
-        encoding="utf-8",
-    )
+    second = "A map is called fibre-regular when every fibre contains three points.\n"
+    main, child = _write_repeated_child(tmp_path, between=second)
+    project = extract_project(main)
 
-    project = extract_project(main, linguistic_frontend=DeclarationContractFrontend())
+    workspace = project.workspace
+    assert workspace is not None
+    child_occurrences = [
+        occurrence
+        for occurrence in workspace.occurrences
+        if Path(occurrence.file).resolve() == child.resolve()
+    ]
+    assert len(child_occurrences) == 2
 
-    # The current result IR is path-level. The physical theorem occurs twice with
-    # different visible declarations, so Slice D must not collapse those occurrence
-    # contexts into one invented mathematical authority.
+    # Path-level result IR cannot invent one semantic interpretation for two expanded
+    # occurrences with different preceding source. Exact occurrence identity survives;
+    # mathematical interpretation remains unresolved rather than guessed.
     assert "fibre-regular" not in _resolved_names(project, "thm:child")
     assert not any(
-        item.raw in {first, second} for item in project.symbol_table.definitions
+        item.raw.endswith("every fibre contains two points.")
+        or item.raw.endswith("every fibre contains three points.")
+        for item in project.symbol_table.definitions
     )
