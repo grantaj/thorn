@@ -1,10 +1,10 @@
 # Semantic-dependency architecture
 
-This document is the post-#161 architecture record for Thorn's semantic-dependency substrate. Historical evaluation details remain in the parser, workspace, prose-declaration, and conformance documents; this file describes the production ownership boundaries.
+This document records Thorn's current semantic-dependency ownership boundary after the source/workspace consolidation and the #203 ablation programme. Historical evaluation details remain in the issue-specific research material; this file describes production architecture.
 
 ## Core rule
 
-Generic source, workspace, and linguistic machinery may supply normalized facts or candidates. Thorn alone decides mathematical authority, scope, visibility, shadowing, dependency identity, materiality, ambiguity policy, transitive review closure, and canonical mathematical IR.
+Generic source, workspace, and linguistic tooling may supply normalized observations. Thorn owns the mathematical decisions built on those observations: authority, scope, visibility, shadowing, dependency identity, materiality, ambiguity policy, transitive review closure, exact provenance, and canonical mathematical IR.
 
 A lower layer may fail or report partiality. Thorn must not repair that uncertainty by inventing source structure, occurrence uniqueness, proof evidence, or mathematical authority.
 
@@ -14,7 +14,7 @@ A lower layer may fail or report partiality. Thorn must not repair that uncertai
 LaTeX source
     |
     v
-LatexFrontend
+Tree-sitter LatexFrontend
     |  normalized macros, environments, math, source regions,
     |  diagnostics, exact SourceSpan
     v
@@ -24,162 +24,126 @@ ParsedProject
     |      occurrence identity, include sites, expanded order,
     |      labels/references, resolved/partial/source-error state
     |
-    +--> ResultRegion / theorem-source facts
+    +--> ResultRegion / theorem and proof source facts
+    |
+    +--> Symbol IR + bounded support evidence
     |
     `--> reversible LinguisticProjection
              |
-             +--> proof claims + bounded support evidence
-             |      eligible source only
-             |      exact provenance + explicit uncertainty
-             |
              v
-        LinguisticFrontend
-             |
-             +--> grammatical support evidence
-             |
-             `--> ProseDeclarationInventory
-                  non-authoritative declaration candidates
-             |
+        optional LinguisticFrontend
+             |  source-mapped grammatical observations only
              v
-        Thorn mathematical authority policy
+        LinguisticStatementInventory
              |
-        visibility / shadowing over ProjectPosition
-             |
-        semantic dependency identity + canonical closure
-             v
-        Symbol IR / canonical Proof IR
-             |
-        +----+----------------------+----------------+
-        |                           |                |
-        v                           v                v
-      reports                    Lean          thorn-proof/1
-                                                   |
-                                           bounded source rescue
+             +--> advisory retrieval
+             `--> bounded support uncertainty
+
+Thorn mathematical authority / scope / visibility / shadowing
+    |
+    v
+semantic dependency identity + canonical closure
+    |
+    v
+canonical Proof IR
+    |
+    +--> reports
+    +--> Lean
+    `--> thorn-proof/1 + bounded source rescue
 ```
 
-`latex.extract_project()` is the source-to-IR composition root. Backend-native Tree-sitter nodes, pylatexenc nodes, spaCy documents/tokens, TexLab LSP values, and LaTeXML XML never cross their adapters into canonical mathematical state.
+`latex.extract_project()` is the source-to-IR composition root. Backend-native Tree-sitter nodes, spaCy documents/tokens, TexLab values, and LaTeXML XML never cross their adapters into canonical mathematical state.
 
-## Source structure: `LatexFrontend`
+## Source structure
 
-`LatexFrontend` owns parser-neutral source facts only. `FrontendFile` exposes exact raw source, normalized macros/environments/math, `FrontendRegion` source roles, region completeness, and diagnostics. `DOCUMENT_TEXT` means syntactically eligible prose; it does not mean mathematical declaration, proof authority, or truth.
+`LatexFrontend` owns parser-neutral source facts only. `FrontendFile` exposes exact raw source, normalized macros/environments/math, source roles, region completeness, and diagnostics. `DOCUMENT_TEXT` means syntactically eligible prose; it does not mean mathematical declaration, proof authority, or truth.
 
-Semantic code consumes those facts through `source_projection.LinguisticProjection`. It no longer rescans raw TeX to rediscover comments, preamble/body boundaries, verbatim-like regions, or mathematical placeholders.
+Tree-sitter is the production default. The exact grammar/runtime identities are package-controlled and covered by the frontend conformance and clean-install gates. The regex and pylatexenc frontends remain independent compatibility/conformance backends; new LaTeX corner cases are not a reason to grow a second production parser in semantic code.
 
-### Backend/default disposition
+Semantic consumers use `source_projection.LinguisticProjection` when they need a reversible text view. It preserves exact source offsets and typed math/reference placeholders and excludes comments, preamble/non-document material, verbatim-like content, and other ineligible regions. Incomplete source-role coverage fails closed.
 
-The actual runtime default is explicit and single-sourced in `thorn.frontends`:
+## Workspace/project facts
 
-```text
-DEFAULT_FRONTEND_NAME = "regex"
-```
+`ProjectWorkspaceFacts` is the normalized source of expanded project occurrence and order. It exposes distinct `SourceOccurrence` identity, include-site provenance, deterministic expanded order, and explicit resolution state. `ProjectPositionLookup` is the shared ordering/visibility substrate.
 
-Tree-sitter is the preferred source-structure substrate on the empirical evidence from #158 and the completed #162 contracts. That preference is an architecture disposition, not a second runtime setting. It is not the production default yet because the pinned `tree-sitter-latex` grammar still lacks a frictionless reproducible normal installation path. #183 owns that packaging/default-cutover gate.
+Repeated inclusion remains occurrence-sensitive even when physical paths are equal. Missing children, cycles, malformed source, and unsupported or dynamic project structure stay explicit rather than being guessed. Path-level authority or dependency identity may collapse repeated occurrences only when the occurrence-level evidence establishes the same single answer.
 
-Regex remains the compatibility default until that gate is satisfied. New LaTeX corner cases must not be used as a reason to grow the regex compatibility scanner. `pylatexenc` remains an independent parser/conformance backend.
+TexLab and LaTeXML retain their roles as independent development evidence/oracles. Neither decides mathematical scope or authority.
 
-## One reversible source-to-linguistic boundary
+## Mathematical authority
 
-`build_linguistic_projection()` is the single production source-to-linguistic boundary. It consumes normalized source regions and produces an offset-preserving view with typed math/reference tokens and exact reverse provenance.
+Thorn no longer has a generic prose-to-mathematics promotion pipeline. The former production prose-declaration interpretation machinery was removed in #204-#207, and generic linguistic symbol interpretation was removed in #210. Local NLP therefore cannot create a mathematical symbol, definition, dependency, scope rule, or canonical proof fact merely because a dependency parser finds declaration-shaped English.
 
-The boundary serves both declaration and proof-support semantics:
+Project-scope mathematical authority is intentionally narrower and remains Thorn-owned.
 
-- parser-owned comments, preamble, non-document, verbatim, listing, minted and opaque regions are ineligible;
-- partial region coverage fails closed;
-- consumers can request contiguous eligible segments without recreating exclusion grammar;
-- NLP-safe span projections derive from the same object and preserve exact source handles.
+### Formula-derived project declarations
 
-For proof-support extraction, excluded source is a hard claim boundary rather than whitespace that an eligible raw `Claim` may span across. Therefore excluded bytes cannot become claims, support edges, canonical Proof-IR nodes, or bounded source-rescue material.
+`symbol_extract.py` recognizes explicit mathematical definitions such as `q := 1` or `q \coloneqq 1` from normalized math/source facts. These do not depend on English cues or Local NLP.
 
-The former `semantic_projection.py` path is retired; production semantics no longer has a second source-to-NLP representation.
+### Bounded explicit project conventions
 
-## Workspace/project facts: `ProjectWorkspaceFacts`
+`project_context.py` retains a small authority policy for author-level declarations that cannot be recovered from formula shape alone. Its current accepted forms are deliberately bounded:
 
-`build_project_workspace_facts()` is the normalized source of expanded project occurrence/order facts. It exposes distinct `SourceOccurrence` identity, `IncludeSite` provenance, deterministic expanded order, and explicit resolution state. `ProjectPositionLookup` is the shared ordering/position consumer used by result ordering and semantic authority/scope.
+- `Set` or `Define` with an explicit mathematical definition operator;
+- `Let` with an explicit definition operator, or an explicit typed-map declaration with the bounded `be` form;
+- `For` mathematical constraints only when followed by an explicit project-convention tail such as `in what follows`, `throughout`, `henceforth`, or `from now on`;
+- explicit infix definitions of the form `Define $x \star y$ to mean $x+y$`.
 
-Repeated inclusion is occurrence-sensitive even when physical file paths are equal. Missing children, cycles, malformed source, and unsupported/dynamic project structure remain explicit rather than guessed.
+This layer is not a general English parser. It reuses Thorn's mathematical symbol grammar, requires complete eligible source projection and a resolved workspace, excludes result-local material, and records occurrence-aware project positions, exact provenance, uses, shadowing, and dependency identities.
 
-Structured result references consume occurrence-level workspace multiplicity before path-level dependency identity is allowed to collapse. One physical theorem or reference site is not evidence of project uniqueness. Repeated or partial occurrence state fails closed unless all relevant occurrences establish the same single target.
+#185 established that this policy participates in real cross-file semantics: project declarations resolve later uses, respect include order, shadow correctly, fail closed under repeated-occurrence disagreement, and preserve exact review provenance.
 
-TexLab and LaTeXML retain their #159 roles as independent development evidence/oracles; neither decides mathematical scope or authority.
+#203 then ablated the less-obvious infix `to mean` bridge in isolation. In that experiment, workspace facts, exact source-mapped linguistic statements, and an explicit `q := 1` control were unchanged. What disappeared was the canonical `\star` project definition and its later resolved use. That is a material mathematical-identity loss, so the bridge and the surrounding bounded `project_context.py` authority responsibility are retained. The evidence argues against replacing this layer with broader generic NLP just as strongly as it argues against deleting it.
 
-## Declaration candidates and Thorn-owned authority
+## Local NLP boundary
 
-`LinguisticFrontend` supplies normalized grammatical facts. The production declaration-candidate layer in `linguistic_declarations.py` implements the deliberately small #160 hybrid over Thorn-owned `LinguisticDocument`/`LinguisticToken` values. Its output is a `ProseDeclarationInventory` containing ambiguous, non-authoritative candidates with exact term/sentence/payload provenance and explicit `complete`, `reduced`, or `partial` capability.
+Local NLP provides source-mapped grammatical observations, not mathematical authority. `collect_project_linguistic_statements()` records exact statements, scope and normalized segmentation. Advisory retrieval may rank those already-source-mapped statements for review, but ranking does not promote them into definitions, symbols, dependencies or proof facts.
 
-No `LinguisticFrontend` means reduced prose-declaration capability. Structural-only mode does not silently restore the retired #125 phrase recognizer.
+The local frontend may also contribute bounded grammatical evidence when Thorn classifies already-identified proof-support structure. Such evidence remains explicit uncertainty. Parser-native vocabulary must not shape canonical Proof IR or Lean output, and uncertainty cannot be laundered into confidence by later rendering.
 
-`project_semantic_context.py` is mathematical policy rather than a source or English parser. Authority promotion requires trustworthy source/workspace evidence, a complete candidate inventory, substantive defining content under #167, Thorn-owned visibility/shadowing at the exact project occurrence, and actual mathematical use/relevance.
+With no linguistic frontend, structured LaTeX/result, workspace, symbol and dependency semantics continue to work. Source-mapped linguistic statements and linguistic uncertainty are simply unavailable; there is no fallback handwritten English parser.
 
-Structured declaration recognition is likewise not authority by itself. The #185 boundary applies normalized source eligibility and occurrence-aware workspace visibility before structured Symbol-IR authority survives.
+## Proof support and dependency closure
 
-Candidate-shaped grammar is never sufficient by itself. Ambiguity remains explicit.
+Proof-support IR is an evidence layer, not canonical proof truth. It consumes only source-role-eligible spans and may record explicit application/reference cues, `by definition`, bounded named-property structure, explicit `since` reasons, conclusion cues, and conservative trailing binders. Generic asserted support that cannot be identified remains unresolved.
 
-## Proof claims and support evidence
-
-Proof-support IR is a frontend evidence layer, not canonical proof semantics. It consumes only source-role-eligible spans from `LinguisticProjection`. Local NLP receives typed span placeholders derived from that same projection and supplies parser-neutral grammatical evidence only.
-
-Thorn deliberately retains a bounded support grammar for visible evidence semantics, including explicit application/reference cues, `by definition`, a small historical named-property family, explicit `since` reason structure, conclusion cues, and conservative trailing binders. These rules do not parse TeX structure and do not establish mathematical validity. Generic asserted support that cannot be identified remains `UNRESOLVED`; cue-only NLP-supported relations remain ambiguous/unresolved where semantics are not established.
-
-The ownership split is strict:
-
-- source eligibility/segmentation/projection -> `LatexFrontend` + `LinguisticProjection`;
-- grammatical facts -> `LinguisticFrontend`;
-- bounded visible support semantics -> Thorn support evidence policy;
-- mathematical implication/truth -> canonical semantic review / Lean where supported.
-
-## Dependency identity and closure
-
-Structured result dependencies and prose/symbol semantic dependencies remain distinct canonical edge families but compose before review. Project declaration identities come from migrated authority state; declaration-to-declaration and result-to-declaration uses do not rediscover relationships from nearby source text.
-
-There is one canonical project-symbol dependency closure implementation. Result and review ordering use workspace occurrence/order facts rather than private file walks or lexical path sorting.
-
-The theorem/result IR remains path-level where safe. Repeated occurrence state may collapse only when occurrence-level evidence establishes the same answer; disagreement or unavailable workspace facts fail closed rather than choosing an arbitrary physical-file answer.
-
-## Review selection
-
-Normal Thorn review is result-level. A requested result has one canonical bounded result-level view whether or not deterministic extraction marked any support relation ambiguous or unresolved.
-
-The uncertainty-focused selector remains only for explicit diagnostic/evaluation callers (`thorn-eval --targeted-preflight` and `--review-context targeted`). `ReviewTargetKind.RESULT` and `ReviewTargetKind.SUPPORT_RELATION` make that policy distinction explicit. Both views share canonical Symbol-IR materialization and semantic closure; the targeted view is not a second authority graph.
-
-Provider adapters receive already-selected Thorn-owned requests. They do not traverse the project or decide review selection.
+Structured result dependencies, project-symbol dependencies and bounded support evidence compose before review. Dependency identity, occurrence-aware visibility and transitive closure are Thorn-owned canonical state; downstream review code does not rediscover them from nearby prose.
 
 ## Canonical downstream state
 
-Symbol IR and canonical Proof IR remain the downstream semantic authority. Reports, source navigation, Lean projection, and `thorn-proof/1` derive from canonical state and exact provenance.
+Symbol IR and canonical Proof IR are the downstream semantic authority. Reports, source navigation, Lean projection and `thorn-proof/1` derive from canonical state and exact provenance.
 
-`thorn-proof/1` remains a bounded projection. Source rescue can request only exact handles Thorn advertised and does not become a whole-paper fallback or late source parser. Because proof-support source eligibility is enforced before canonical selection, excluded source cannot be advertised as rescue content.
+`thorn-proof/1` is a bounded projection. Source rescue can request only exact handles Thorn advertised; it is not a whole-paper fallback or a late source parser.
 
 ## Partiality and failure policy
 
 Thorn distinguishes:
 
 - **valid and supported structure**: normalize and use it;
-- **valid but unsupported/dynamic structure**: retain explicit partiality/unresolved capability;
+- **valid but unsupported/dynamic structure**: retain explicit partiality or unresolved capability;
 - **malformed source**: fail closed with source-facing diagnostics;
-- **ambiguous linguistic evidence**: retain a non-authoritative candidate;
-- **incomplete declaration payload**: retain evidence where useful but do not promote authority;
+- **ambiguous linguistic evidence**: retain it only as non-authoritative evidence;
 - **incomplete source-role coverage**: do not manufacture proof/declaration evidence from unknown bytes;
-- **uncertain occurrence uniqueness**: do not collapse to path-level authority/dependency identity.
+- **uncertain occurrence uniqueness**: do not collapse to path-level authority or dependency identity.
 
-The normal response to a new LaTeX or English corner case is therefore not “add a regex inside semantic review.” The owner is determined by the boundary that lacks the fact.
+The normal response to a new LaTeX or English corner case is therefore not to add a regex inside semantic review. The owner is determined by the boundary that lacks the fact.
 
-## Retained hand-written grammar and raw-source responsibilities
+## Retained handwritten responsibilities
 
-The architecture intentionally retains a small amount of handwritten logic. Every retained case has a bounded owner and justification:
+The remaining handwritten logic has a bounded owner and evidence-backed purpose:
 
 | Responsibility | Location | Why retained |
 | --- | --- | --- |
-| Compatibility LaTeX scanner for macros, environments, comments, math and static includes | `frontends/regex.py` | Current compatibility backend while #183 packaging is unresolved. It must not grow to chase parser corner cases. |
-| Source-region composition for non-Tree-sitter backends | `frontend_regions.py` | Normalizes already-extracted frontend spans into one backend-neutral eligibility contract. |
-| Small Tree-sitter environment-name fallback and `verbatim*` classification | `frontends/tree_sitter.py` | Operates only on CST-owned spans/nodes when the pinned grammar omits a convenient classification. |
-| Reversible source eligibility and typed span projection | `source_projection.py` | One shared adapter from normalized source facts to exact linguistic views; it does not infer mathematical meaning. |
-| Bounded declaration anchors (`call`, `term`, `say`, `mean`) | `linguistic_declarations.py` | #160 showed broad dependency proposals had unacceptable false-candidate risk; the lexical guard bounds proposals without deciding authority. |
-| Bounded ambient prefixes and negation/attribution guards | `linguistic_declarations.py` | Explicit document-scope grammar is not safely inferred from generic dependency structure alone. |
-| Bounded proof-support cue grammar | `support_extract.py` | Records explicit author-presented support evidence over already-eligible source; ambiguous/general support remains unresolved and truth is not inferred. |
-| Result/theorem environment names and reference macro family | `latex.py` | Thorn must identify its own mathematical result units and explicit result references from normalized frontend facts. |
-| Frozen #125 phrase regex benchmark | `_frozen_declaration_benchmark.py` | Research-only reproduction of #160 evidence; not production authority. |
+| Tree-sitter source normalization and small CST classification fallbacks | `frontends/tree_sitter.py` | Adapts the packaged grammar into Thorn's parser-neutral source contract; does not infer mathematics. |
+| Compatibility/conformance source backends | `frontends/regex.py`, `frontends/pylatexenc.py` | Independent comparison and reduced-backend coverage; not a second semantic parser. |
+| Reversible source eligibility and typed projection | `source_projection.py` | One exact bridge from normalized source facts to linguistic views; no mathematical interpretation. |
+| Explicit project mathematical conventions | `project_context.py` | #185 and #203 show real scope, identity, shadowing, provenance and definition responsibilities that disappear under ablation. |
+| Formula-derived symbol extraction | `symbol_extract.py` | Thorn-owned mathematical syntax/authority over normalized math facts. |
+| Bounded proof-support cue policy | support extraction | Records explicit author-presented support evidence; ambiguous/general support remains unresolved and truth is not inferred. |
+| Result/theorem units and explicit reference families | source/result extraction | Thorn must identify its own mathematical result units and explicit references from normalized frontend facts. |
+| Frozen historical prose recognizer | `_frozen_declaration_benchmark.py` | Research-only reproduction of earlier evidence; not production authority. |
 
-The retired five-family #125 phrase recognizer, bespoke generic singular/plural morphology, raw semantic comment/verbatim masking, duplicate semantic projection, private semantic include traversal, and selector-private closure are not production architecture.
+The retired production prose-declaration interpreter, generic linguistic symbol interpreter, duplicate semantic projection, private semantic include traversal, and selector-private closure are not production architecture.
 
 ## Ownership test for future changes
 
@@ -188,11 +152,11 @@ A new robustness failure should have one obvious owner:
 - source/CST structure and source roles -> `LatexFrontend` / source backend;
 - reversible semantic text projection -> `source_projection.LinguisticProjection`;
 - expanded workspace occurrence/order -> `ProjectWorkspaceFacts`;
-- grammatical variation -> `LinguisticFrontend` / candidate layer;
-- visible proof-support evidence policy -> bounded support extractor;
-- mathematical authority, scope, visibility, materiality -> Thorn semantic policy;
-- dependency identity/closure/provenance -> canonical Thorn semantic state;
-- normal vs diagnostic review breadth -> review projection policy;
+- grammatical variation -> `LinguisticFrontend` observations only;
+- explicit project mathematical convention -> bounded `project_context.py` authority;
+- visible proof-support evidence -> bounded support extractor;
+- mathematical authority, scope, visibility and materiality -> Thorn semantic policy;
+- dependency identity, closure and provenance -> canonical Thorn semantic state;
 - formal validity inside the supported subset -> Lean handoff.
 
 If a proposed fix crosses those boundaries by rescanning raw TeX or rebuilding generic English grammar in a semantic/review layer, it should be rejected or moved to the correct substrate.
