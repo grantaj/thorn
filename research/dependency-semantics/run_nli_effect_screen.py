@@ -14,6 +14,7 @@ from huggingface_hub import snapshot_download
 from sentence_transformers import CrossEncoder
 
 MODEL_ID = "cross-encoder/nli-deberta-v3-xsmall"
+MODEL_REVISION = "a150876415327c80daeff35ca6f68f5ed8cf5c24"
 EFFECT_HYPOTHESES = {
     "declare": (
         "The author establishes a mathematical fact, assumption, definition, notation, "
@@ -195,7 +196,13 @@ def _metrics(records: list[dict[str, Any]], threshold: float) -> dict[str, Any]:
     }
 
 
-def run(base_path: Path, heldout_path: Path, *, model_id: str, revision: str | None) -> dict[str, Any]:
+def run(
+    base_path: Path,
+    heldout_path: Path,
+    *,
+    model_id: str,
+    revision: str | None,
+) -> dict[str, Any]:
     started = time.perf_counter()
     snapshot_path = Path(snapshot_download(repo_id=model_id, revision=revision))
     resolved_revision = snapshot_path.name
@@ -306,7 +313,7 @@ def main() -> None:
         default=Path("research/dependency-semantics/effect_cases.json"),
     )
     parser.add_argument("--model", default=MODEL_ID)
-    parser.add_argument("--revision")
+    parser.add_argument("--revision", default=MODEL_REVISION)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
