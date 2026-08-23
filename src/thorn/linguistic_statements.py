@@ -6,7 +6,11 @@ from pydantic import BaseModel, Field
 
 from thorn.frontend import FrontendFile, ParsedProject, SourceSpan
 from thorn.linguistic import LinguisticDocument, LinguisticFrontend, LinguisticToken
-from thorn.source_projection import ProjectionTokenKind, build_linguistic_projection
+from thorn.source_projection import (
+    LinguisticProjection,
+    ProjectionTokenKind,
+    build_linguistic_projection,
+)
 from thorn.symbols import ResultRegion
 
 _CONTENT_POS = {"ADJ", "NOUN", "PROPN"}
@@ -45,7 +49,7 @@ def _mask(characters: list[str], source: SourceSpan) -> None:
             characters[index] = " "
 
 
-def _segmentation_view(file: FrontendFile) -> tuple[str, object] | None:
+def _segmentation_view(file: FrontendFile) -> tuple[str, LinguisticProjection] | None:
     """Return a syntax-clean, offset-preserving view used only for NLP segmentation."""
 
     projection = build_linguistic_projection(file)
@@ -78,7 +82,10 @@ def _overlaps(left: SourceSpan, right: SourceSpan) -> bool:
     )
 
 
-def _scope_for(source: SourceSpan, regions: list[ResultRegion]) -> tuple[StatementScopeKind, str | None]:
+def _scope_for(
+    source: SourceSpan,
+    regions: list[ResultRegion],
+) -> tuple[StatementScopeKind, str | None]:
     for region in regions:
         if region.file != source.file:
             continue
@@ -89,16 +96,20 @@ def _scope_for(source: SourceSpan, regions: list[ResultRegion]) -> tuple[Stateme
     return StatementScopeKind.PROJECT, None
 
 
-def _content_terms(tokens: list[LinguisticToken], projection: object) -> tuple[str, ...]:
+def _content_terms(
+    tokens: list[LinguisticToken],
+    projection: LinguisticProjection,
+) -> tuple[str, ...]:
     terms: dict[str, None] = {}
     for token in tokens:
         if token.pos not in _CONTENT_POS:
             continue
         if token.text == _MATH_MARKER:
             continue
-        # ``LinguisticProjection`` is deliberately accessed through its normalized
-        # token lookup rather than by inspecting LaTeX syntax here.
-        containing = projection.token_containing(token.start, kind=ProjectionTokenKind.MATH)
+        containing = projection.token_containing(
+            token.start,
+            kind=ProjectionTokenKind.MATH,
+        )
         if containing is not None:
             continue
         lemma = token.lemma.strip().casefold()
@@ -110,7 +121,7 @@ def _content_terms(tokens: list[LinguisticToken], projection: object) -> tuple[s
 def _source_span_for_sentence(
     file: FrontendFile,
     tokens: list[LinguisticToken],
-    projection: object,
+    projection: LinguisticProjection,
 ) -> SourceSpan:
     start = min(token.start for token in tokens)
     end = max(token.end for token in tokens)
