@@ -10,7 +10,6 @@ on:
       - ".github/workflows/issue-203-candidate-ablation.yml"
       - "eval/robustness/issue_203/**"
       - "scripts/measure_issue_203_candidate.py"
-      - "scripts/measure_issue_203_prose_ablation.py"
       - "src/thorn/candidate_review.py"
       - "src/thorn/context_retrieval.py"
       - "src/thorn/latex.py"
@@ -40,30 +39,15 @@ jobs:
         run: |
           git fetch origin issue-198-production-qualification
           mkdir -p eval/robustness/issue_198
-          git show origin/issue-198-production-qualification:scripts/prepare_issue_198_qualification.py \
-            > scripts/prepare_issue_198_qualification.py
           git show origin/issue-198-production-qualification:eval/robustness/issue_198/qualification_manifest.json \
             > /tmp/issue-198-frozen-manifest.json
           git show origin/issue-198-production-qualification:eval/robustness/issue_198/heldout_diagonal_regular_clean.tex \
             > eval/robustness/issue_198/heldout_diagonal_regular_clean.tex
-          python - <<'PY'
-          import copy
-          import json
-          import subprocess
-          from pathlib import Path
-
-          frozen_path = Path('/tmp/issue-198-frozen-manifest.json')
-          rebound_path = Path('/tmp/issue-198-legacy-control-manifest.json')
-          frozen = json.loads(frozen_path.read_text(encoding='utf-8'))
-          rebound = copy.deepcopy(frozen)
-          rebound['production_revision'] = subprocess.check_output(
-              ['git', 'rev-parse', 'HEAD'], text=True
-          ).strip()
-          assert rebound['cases'] == frozen['cases']
-          assert rebound['production_identity'] == frozen['production_identity']
-          assert rebound['review_identity'] == frozen['review_identity']
-          rebound_path.write_text(json.dumps(rebound, indent=2) + '\n', encoding='utf-8')
-          PY
+      - name: Assert legacy prose interpretation is absent from production
+        run: |
+          test ! -e src/thorn/linguistic_declarations.py
+          test ! -e src/thorn/project_semantic_context.py
+          test ! -e scripts/measure_issue_203_prose_ablation.py
       - name: Install keyless runtime and local retrieval candidates
         run: |
           python -m pip install --upgrade pip
@@ -71,27 +55,19 @@ jobs:
           python -m pip install sentence-transformers==5.7.0
           python -m pip install \
             https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
-      - name: Record unchanged issue 198 legacy control
-        continue-on-error: true
+      - name: Verify production candidate on frozen evidence
         run: |
-          python scripts/prepare_issue_198_qualification.py \
-            --manifest /tmp/issue-198-legacy-control-manifest.json \
-            --output /tmp/issue-198-legacy-control.json
-      - name: Measure prose semantic-context ablation on frozen evidence
-        run: |
-          python scripts/measure_issue_203_prose_ablation.py \
+          python scripts/measure_issue_203_candidate.py \
             --manifest /tmp/issue-198-frozen-manifest.json \
             --manifest eval/robustness/issue_203/generalisation_manifest.json \
-            --output /tmp/issue-203-prose-ablation-evidence.json
-      - name: Upload differential evidence
+            --output /tmp/issue-203-candidate-evidence.json
+      - name: Upload production candidate evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: issue-203-prose-ablation-evidence-${{ github.sha }}
+          name: issue-203-production-candidate-evidence-${{ github.sha }}
           path: |
             /tmp/issue-198-frozen-manifest.json
-            /tmp/issue-198-legacy-control-manifest.json
-            /tmp/issue-198-legacy-control.json
-            /tmp/issue-203-prose-ablation-evidence.json
+            /tmp/issue-203-candidate-evidence.json
             eval/robustness/issue_203/generalisation_manifest.json
           if-no-files-found: warn
