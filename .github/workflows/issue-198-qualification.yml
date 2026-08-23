@@ -32,9 +32,13 @@ jobs:
           python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
           python -m pip install \
             https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
-      - name: Check frozen qualification contract
+      - name: Check frozen qualification contract before spike
         run: pytest -q tests/test_issue_198_qualification.py
-      - name: Build keyless production preflight
+      - name: Apply speculative projection mutation
+        run: python scripts/apply_issue_198_projection_spike.py
+      - name: Run deterministic regression suite against spike
+        run: pytest -q
+      - name: Build frozen issue 198 preflight against spike
         run: |
           python scripts/prepare_issue_198_qualification.py \
             --output /tmp/issue-198-preflight.json
