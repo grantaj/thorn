@@ -12,12 +12,13 @@ from measure_issue_203_candidate import (
     DEFAULT_BOUND,
     ROOT,
     _CrossEncoderRanker,
-    _EmbeddingRanker,
     _document_sources,
+    _EmbeddingRanker,
     _needle_measurements,
     _relative,
     _sha256,
 )
+
 from thorn.candidate_review import prepare_candidate_proof_review
 from thorn.context_retrieval import ContextRanker, build_result_context_pools, rank_context_pool
 from thorn.frontends import get_frontend
