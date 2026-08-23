@@ -7,6 +7,7 @@ from thorn.eval_review import build_result_review_context
 from thorn.frontend import SourceSpan
 from thorn.semantic_dependencies import result_project_symbol_dependency_ids
 from thorn.symbols import Symbol, canonical_symbol_name
+from thorn.workspace import ProjectPositionLookup
 
 
 class ExactSourceObservation(BaseModel):
@@ -97,6 +98,20 @@ def _source_key(source: SourceSpan) -> tuple[str, int, int, int, int, int, int]:
     )
 
 
+def _project_source_key(
+    lookup: ProjectPositionLookup | None,
+    source: SourceSpan,
+) -> tuple[tuple[int, ...], str, int, int, int, int, int, int]:
+    if lookup is None:
+        project_key = (10**12, source.start_offset)
+    else:
+        try:
+            project_key = lookup.sort_key(source.file, source.start_offset)
+        except KeyError:
+            project_key = (10**12, source.start_offset)
+    return project_key, *_source_key(source)
+
+
 def _symbol_key(symbol: Symbol) -> str:
     source = symbol.source
     return (
@@ -113,10 +128,11 @@ def snapshot_dependency_observations(
     The snapshot intentionally omits surface introduction kinds and support-relation
     taxonomies. Those distinctions should be preserved by a replacement only if a
     dependency query demonstrates that they are observable. Exact provenance, resolution,
-    scope, closure, uncertainty and bounded review reachability are retained.
+    project order, scope, closure, uncertainty and bounded review reachability are retained.
     """
 
     table = project.symbol_table
+    lookup = ProjectPositionLookup(project.workspace) if project.workspace is not None else None
     symbol_keys = {symbol.identifier: _symbol_key(symbol) for symbol in table.symbols}
 
     definitions_by_symbol: dict[str, list[str]] = {}
@@ -144,11 +160,17 @@ def snapshot_dependency_observations(
             definition_expressions=sorted(definitions_by_symbol.get(symbol.identifier, [])),
             constraints=sorted(constraints_by_symbol.get(symbol.identifier, [])),
         )
-        for symbol in sorted(table.symbols, key=lambda item: _source_key(item.source))
+        for symbol in sorted(
+            table.symbols,
+            key=lambda item: _project_source_key(lookup, item.source),
+        )
     ]
 
     uses = []
-    for use in sorted(table.uses, key=lambda item: (*_source_key(item.source), item.name)):
+    for use in sorted(
+        table.uses,
+        key=lambda item: (*_project_source_key(lookup, item.source), item.name),
+    ):
         scope = table.scope(use.scope_identifier)
         uses.append(
             UseResolutionObservation(
