@@ -11,7 +11,6 @@ import thorn.project_context as project_context
 from thorn.latex import extract_project
 from thorn.spacy_linguistic import SpacyLinguisticFrontend
 
-
 _SOURCE = r"""\documentclass{article}
 \usepackage{amsthm}
 \newtheorem{theorem}{Theorem}
