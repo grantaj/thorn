@@ -150,6 +150,7 @@ def _project_source_key(
     lookup: ProjectPositionLookup | None,
     source: SourceSpan,
 ) -> tuple[tuple[int, ...], str, int, int, int, int, int, int]:
+    project_key: tuple[int, ...]
     if lookup is None:
         project_key = (10**12, source.start_offset)
     else:
