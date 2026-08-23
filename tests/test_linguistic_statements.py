@@ -153,3 +153,102 @@ def test_display_math_sentence_does_not_absorb_following_paragraph(tmp_path: Pat
         statement.text.startswith("The next elementary observation records the decay")
         for statement in inventory.statements
     )
+
+
+def test_factorial_at_end_of_math_is_not_a_hard_sentence_boundary(tmp_path: Path) -> None:
+    source = tmp_path / "factorial.tex"
+    source.write_text(
+        r"""\documentclass{article}
+\begin{document}
+There are $n!$ permutations. Another sentence follows.
+\end{document}
+""",
+        encoding="utf-8",
+    )
+    project = extract_project(
+        source,
+        frontend=TreeSitterLatexFrontend(),
+        linguistic_frontend=_local_spacy_or_skip(),
+    )
+    inventory = project.linguistic_statements
+    assert inventory is not None and inventory.complete
+
+    texts = [statement.text for statement in inventory.statements]
+    assert r"There are $n!$ permutations." in texts
+    assert "Another sentence follows." in texts
+
+
+def test_multiple_sentences_inside_generic_macro_remain_distinct(tmp_path: Path) -> None:
+    source = tmp_path / "wrapped.tex"
+    source.write_text(
+        r"""\documentclass{article}
+\begin{document}
+\emph{First sentence. Second sentence.}
+\end{document}
+""",
+        encoding="utf-8",
+    )
+    project = extract_project(
+        source,
+        frontend=TreeSitterLatexFrontend(),
+        linguistic_frontend=_local_spacy_or_skip(),
+    )
+    inventory = project.linguistic_statements
+    assert inventory is not None and inventory.complete
+
+    wrapped = [
+        statement
+        for statement in inventory.statements
+        if statement.text in {"First sentence.", "Second sentence."}
+    ]
+    assert [statement.text for statement in wrapped] == [
+        "First sentence.",
+        "Second sentence.",
+    ]
+    assert len({statement.identifier for statement in wrapped}) == 2
+    assert len({(statement.source.start_offset, statement.source.end_offset) for statement in wrapped}) == 2
+
+
+def test_result_and_proof_extents_are_hard_linguistic_boundaries(tmp_path: Path) -> None:
+    source = tmp_path / "scopes.tex"
+    source.write_text(
+        r"""\documentclass{article}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+\begin{theorem}\label{thm:main}
+A conclusion holds
+\end{theorem}
+\begin{proof}
+A proof begins here
+\end{proof}
+\end{document}
+""",
+        encoding="utf-8",
+    )
+    project = extract_project(
+        source,
+        frontend=TreeSitterLatexFrontend(),
+        linguistic_frontend=_local_spacy_or_skip(),
+    )
+    inventory = project.linguistic_statements
+    assert inventory is not None and inventory.complete
+
+    result = [
+        statement
+        for statement in inventory.statements
+        if statement.result_identifier == "thm:main"
+    ]
+    assert any(
+        statement.scope_kind == StatementScopeKind.RESULT_STATEMENT
+        and "A conclusion holds" in statement.text
+        for statement in result
+    )
+    assert any(
+        statement.scope_kind == StatementScopeKind.RESULT_PROOF
+        and "A proof begins here" in statement.text
+        for statement in result
+    )
+    assert not any(
+        "A conclusion holds" in statement.text and "A proof begins here" in statement.text
+        for statement in inventory.statements
+    )
