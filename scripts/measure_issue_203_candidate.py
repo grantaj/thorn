@@ -99,13 +99,21 @@ def _relative(path: str) -> str:
         return str(value)
 
 
-def _source_key(source: Any, text: str) -> tuple[str, int, int, str]:
-    return (_relative(source.file), source.start_offset, source.end_offset, text)
+def _source_key(source: Any) -> tuple[str, int, int, str, str]:
+    span = source.source_span
+    assert span is not None
+    return (
+        _relative(span.file),
+        span.start_offset,
+        span.end_offset,
+        source.text,
+        source.ir_identifier,
+    )
 
 
-def _document_sources(document: Any) -> set[tuple[str, int, int, str]]:
+def _document_sources(document: Any) -> set[tuple[str, int, int, str, str]]:
     return {
-        _source_key(source.source_span, source.text)
+        _source_key(source)
         for source in document.sources
         if source.source_span is not None
     }
@@ -183,7 +191,11 @@ def _case(
             )
 
     unit = project.unit(target)
-    legacy = prepare_proof_review(project, unit)
+    legacy = prepare_proof_review(
+        project,
+        unit,
+        include_advisory_context=False,
+    )
     measurements: list[dict[str, Any]] = []
     for ranker in rankers:
         proposals = [rank_context_pool(pool, ranker) for pool in pools]
@@ -211,6 +223,27 @@ def _case(
                 errors.append(
                     f"{case['id']}: advertised source handles missing from closed-world "
                     f"inventory: {unknown_advertised}"
+                )
+
+            expected_advisory_ids = {
+                (
+                    f"advisory-context:{item.candidate.occurrence_id}:"
+                    f"{item.candidate.statement_identifier}"
+                )
+                for item in bounded.candidates
+            }
+            observed_advisory_ids = {
+                source.ir_identifier
+                for source in candidate.document.sources
+                if source.ir_identifier.startswith("advisory-context:")
+            }
+            missing_advisory_ids = sorted(
+                expected_advisory_ids.difference(observed_advisory_ids)
+            )
+            if missing_advisory_ids:
+                errors.append(
+                    f"{case['id']}: advisory occurrence identity lost for {ranker.name}: "
+                    f"{missing_advisory_ids}"
                 )
 
             legacy_sources = _document_sources(legacy.document)
