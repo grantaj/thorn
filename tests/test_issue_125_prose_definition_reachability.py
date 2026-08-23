@@ -4,6 +4,7 @@ from pathlib import Path
 
 from candidate_context_contract import prepare_all_prior_context
 from sentence_contract_frontend import SentenceContractFrontend
+
 from thorn.latex import extract_project
 from thorn.proof_language_review import advertised_source_addresses
 
