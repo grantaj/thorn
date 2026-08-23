@@ -49,7 +49,7 @@ def test_advisory_context_is_bounded_closed_world_source_not_math_authority() ->
         status=ContextProposalStatus.COMPLETE,
         result_identifier="thm:main",
         target_occurrence_id="target-occ",
-        ranker="test-ranker",
+        ranker="test-ranker@revision",
         query="target statement",
         candidates=(_candidate(1), _candidate(2)),
         total_candidate_count=5,
@@ -58,9 +58,8 @@ def test_advisory_context_is_bounded_closed_world_source_not_math_authority() ->
 
     enriched = attach_advisory_context(document, proposal)
 
-    assert enriched.lines[-1] == (
-        "CONTEXT_TRUNCATED @CCTX1,CCTX2 ranker=test-ranker shown=2/5"
-    )
+    assert enriched.lines[-1] == "CONTEXT_TRUNCATED @CCTX1,CCTX2 shown=2/5"
+    assert "test-ranker" not in enriched.render_initial()
     assert advertised_source_addresses(enriched) == ("CCTX1", "CCTX2")
     assert "exact source" not in enriched.render_initial()
     assert enriched.sources[0].ir_identifier.startswith("advisory-context:occ-1:")
