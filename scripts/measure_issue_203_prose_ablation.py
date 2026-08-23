@@ -131,7 +131,8 @@ def _case(
     )
     if not generic_evidence_equal:
         errors.append(
-            f"{case['id']}: declaration-grammar ablation changed generic source/NLP/workspace evidence"
+            f"{case['id']}: declaration-grammar ablation changed generic "
+            "source/NLP/workspace evidence"
         )
     if candidate_project.prose_declarations is not None:
         errors.append(
@@ -143,7 +144,8 @@ def _case(
     ) == _dependency_graph_snapshot(candidate_project)
     if not dependency_graph_equal:
         errors.append(
-            f"{case['id']}: declaration-grammar ablation changed structural theorem dependency graph"
+            f"{case['id']}: declaration-grammar ablation changed structural theorem "
+            "dependency graph"
         )
 
     pools = build_result_context_pools(candidate_project, target)
@@ -210,8 +212,8 @@ def _case(
             lost_sources = sorted(legacy_sources - candidate_sources)
             if lost_sources:
                 errors.append(
-                    f"{case['id']}: source/provenance loss after declaration-grammar ablation under "
-                    f"{ranker.name}: {lost_sources}"
+                    f"{case['id']}: source/provenance loss after declaration-grammar "
+                    f"ablation under {ranker.name}: {lost_sources}"
                 )
 
             state_equal = (
