@@ -1,9 +1,9 @@
 # Local linguistic analysis
 
-Thorn's local NLP layer recovers **plausible grammatical evidence**. It does not decide
-mathematical meaning, authority, scope, relevance, dependency identity, or truth.
+Thorn's local NLP layer recovers **source-mapped grammatical observations**. It does not
+decide mathematical meaning, authority, scope, relevance, dependency identity, or truth.
 
-After #161 the normal source-to-linguistic path is:
+The post-#207 production path is:
 
 ```text
 LatexFrontend / FrontendRegion facts
@@ -15,7 +15,9 @@ reversible LinguisticProjection
 LinguisticFrontend
         |  Thorn-owned LinguisticDocument / LinguisticToken
         v
-normalized support/symbol/declaration candidates
+source-mapped statements + bounded support uncertainty
+        |
+        +--> advisory context / review retrieval
         |
         v
 Thorn mathematical authority and elaboration policy
@@ -64,131 +66,70 @@ capability mode, not a silent substitute for the normal path.
 excluded before linguistic parsing. Math and reference syntax is represented with typed,
 offset-preserving placeholders.
 
-Every downstream linguistic candidate can therefore map its term, sentence, evidence,
-and relevant payload back to exact original `SourceSpan` provenance. The linguistic
-parser is never asked to rediscover LaTeX comments, math delimiters, or source offsets.
-If the frontend cannot establish complete trustworthy source regions, the projection is
-partial and declaration authority fails closed.
+Linguistic observations map back to exact original `SourceSpan` provenance. The
+linguistic parser is never asked to rediscover LaTeX comments, math delimiters, or source
+offsets. If the frontend cannot establish complete trustworthy source regions, the
+projection is partial and downstream use fails closed.
 
-## Production prose-declaration candidate boundary
+## Source-mapped statements and advisory context
 
-#160 compared the frozen phrase recognizer, broad dependency proposals and a deliberately
-small hybrid. #161 Slice C productionized the useful part of that hybrid behind
-`LinguisticFrontend`; Slice D moved mathematical authority onto its normalized output.
+`collect_project_linguistic_statements()` is the production prose substrate. It records
+exact source statements, their scope and normalized linguistic segmentation without
+promoting their content to mathematical authority.
 
-`collect_project_prose_declarations()` produces a `ProseDeclarationInventory` whose
-capability is one of:
+Those statements may be ranked into bounded advisory context for review. The ranking
+layer can decide which already-source-mapped statements are useful to show, but it does
+not turn them into definitions, symbols, dependencies, or proof facts. #204-#207 tested
+and removed the older production prose-declaration interpretation path while preserving
+this source-addressable substrate.
 
-- `complete`: candidate evidence is available over complete reversible source facts;
-- `reduced`: no `LinguisticFrontend` is configured, so prose declaration candidates are
-  unavailable;
-- `partial`: source/projection evidence is incomplete and cannot safely support
-  declaration authority.
+## No generic linguistic symbol interpretation
 
-Each `ProseDeclarationCandidate` is explicitly non-authoritative and carries:
+Local NLP is not a symbol extractor. In particular, declaration-shaped prose such as
+"Fix $x\in X$" remains exact reviewable source, but a dependency parse does not create a
+`SymbolIntroductionCandidate` or otherwise modify deterministic `SymbolTable` state.
+Issue #203 removed that generic interpretation after a bounded ablation showed that the
+source evidence survives independently.
 
-- role (`definition` or `ambient`);
-- exact declared-term source;
-- exact source sentence;
-- exact proposed defining-payload source;
-- normalized structural evidence and dependency-path evidence;
-- `InferenceStatus.AMBIGUOUS`.
+Explicit mathematical declarations, scope, visibility, shadowing, symbol resolution and
+project occurrence semantics remain Thorn-owned. They are derived from the normalized
+source/workspace facts and the deliberately bounded mathematical authority layer, not
+from generic English morphology.
 
-The exact payload span is important. It lets Thorn apply the #167 substantive-definition
-rule without rebuilding English grammar in the authority layer: declaration-shaped
-syntax with no substantive defining complement remains evidence only.
+## Support uncertainty
 
-## Bounded hand-written grammar
-
-The production candidate layer deliberately keeps a small guard surface rather than a
-phrase-template grammar.
-
-Named-definition proposals use normalized dependency structure plus the bounded lemma
-family:
-
-```text
-call, term, say, mean
-```
-
-Conditional forms use a bounded structural cue family such as:
-
-```text
-if, when, whenever, provided
-```
-
-Ambient-scope proposals use explicit prefixes:
-
-```text
-throughout
-in what follows
-henceforth
-unless stated otherwise
-unless specified otherwise
-for the remainder
-```
-
-The layer also applies bounded grammatical safety guards for negation, passive/subject
-shape and obvious first-person/attribution structure.
-
-These anchors exist because #160 showed that broad dependency structure had much higher
-candidate recall but unacceptable false-candidate risk. They **do not** encode
-mathematical relevance or authority. The deliberate `deemed` miss in the #160 corpus is
-evidence against expanding this into an open-ended synonym list.
-
-The retired five-family #125 phrase templates and bespoke singular/plural term morphology
-are not production authority machinery. Their frozen regex constants survive only in
-`_frozen_declaration_benchmark.py` so the #160 research comparison remains reproducible.
-
-## Authority is a separate Thorn decision
-
-A grammatical proposal is not a definition merely because spaCy or the bounded hybrid
-recognized its shape.
-
-The authority layer separately requires trustworthy source/workspace facts, complete
-candidate capability, substantive defining content, valid visibility/shadowing at the
-specific project occurrence, and actual mathematical use/relevance. Ambiguous evidence
-stays ambiguous until Thorn-owned policy has sufficient independent facts to promote a
-canonical declaration.
-
-No NLP layer decides:
-
-- whether a statement is mathematically authoritative;
-- whether it is load-bearing;
-- its project scope or shadowing behavior;
-- transitive dependency closure;
-- whether a theorem is true.
-
-## Structural-only capability
-
-With no linguistic frontend, `ProseDeclarationInventory` is `REDUCED`. Structured
-LaTeX/result semantics continue to work, but prose declaration authority is unavailable.
-There is no fallback to the old unconditional phrase recognizer.
-
-Tests that require prose authority therefore advertise/use an NLP-capable contract
-configuration. This is intentional capability honesty: a lighter mode must not pretend
-to have recovered grammatical evidence it never computed.
-
-## Other linguistic evidence
-
-The local frontend also supports non-authoritative support and symbol candidates. It can
-help Thorn notice plausible variable introductions, qualifiers, grammatical attachments,
-or references. Those candidates carry exact provenance and uncertainty and do not become
-confident mathematical support merely because a dependency parse exists.
+The local frontend may still contribute bounded grammatical evidence when Thorn is
+classifying already-identified proof-support structure. Such evidence remains explicit
+uncertainty; it does not invent support edges or promote unsupported prose into
+mathematical authority.
 
 When stronger independent evidence justifies a mathematical operation, canonical Proof
 IR records the mathematical operation—not a spaCy dependency path. Parser-native
 vocabulary must not shape canonical Proof IR or Lean output.
 
-## Uncertainty contract
+## Authority is a separate Thorn decision
 
-Linguistic evidence may be `confident`, `ambiguous`, or `unresolved` according to the
-specific downstream contract. Ambiguous and unresolved candidates retain exact original
-source, nearby wording and normalized structural evidence. They are not correctness
-defects by themselves.
+No NLP layer decides:
 
-This is also a no-confidence-laundering rule: an uncertain linguistic proposal does not
-become more certain merely because a later layer renders it in compact IR, a review
+- whether a statement is mathematically authoritative;
+- whether it introduces a mathematical symbol;
+- whether it is load-bearing;
+- its project scope or shadowing behavior;
+- transitive dependency closure;
+- whether a theorem is true.
+
+This is also a no-confidence-laundering rule: an uncertain linguistic observation does
+not become more certain merely because a later layer renders it in compact IR, a review
 request, or a formal-looking syntax.
+
+## Structural-only capability
+
+With no linguistic frontend, structured LaTeX/result, workspace, symbol and dependency
+semantics continue to work. Source-mapped linguistic statements and linguistic
+uncertainty are unavailable. There is no fallback handwritten English parser.
+
+Tests that require Local NLP therefore configure it explicitly. A lighter mode must not
+pretend to have recovered grammatical observations it never computed.
 
 ## Relationship to model review
 
@@ -214,12 +155,13 @@ checks Thorn-owned behavior, including:
 
 - reversible typed source projection;
 - no parser-native object leakage;
-- exact declaration-candidate term/source/payload provenance;
-- candidate ambiguity remaining non-authoritative;
+- exact source-mapped statement provenance;
+- linguistic observations remaining non-authoritative;
 - normal CLI linguistic execution;
 - structural-only reduced capability;
 - keyless targeted-preflight compatibility;
 - downstream Proof IR independence from parser-native vocabulary.
 
-Raw dependency-template counts remain research diagnostics rather than production
-invariants. Real-paper regression remains private; the public corpus is synthetic.
+Historical declaration-recognizer comparisons remain research evidence rather than
+production invariants. Real-paper regression remains private; the public corpus is
+synthetic.
