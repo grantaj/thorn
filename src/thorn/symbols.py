@@ -301,7 +301,6 @@ def extract_symbol_table(
 
     # Explicit mathematical project declarations remain Thorn-owned authority.
     from thorn.project_context import add_project_authoritative_context
-    from thorn.project_context_source import preserve_project_authoritative_source
 
     add_project_authoritative_context(
         project,
@@ -309,7 +308,6 @@ def extract_symbol_table(
         table,
         workspace=workspace,
     )
-    preserve_project_authoritative_source(project, table)
     enforce_structured_authority_boundary(project, table, workspace=workspace)
 
     if linguistic_frontend is not None:
