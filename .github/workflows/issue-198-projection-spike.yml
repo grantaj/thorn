@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - issue-198-semantic-projection-spike
+  pull_request:
+    branches:
+      - issue-198-production-qualification
+    paths:
+      - ".github/workflows/issue-198-projection-spike.yml"
+      - "scripts/apply_issue_198_projection_spike.py"
 
 permissions:
   contents: read
