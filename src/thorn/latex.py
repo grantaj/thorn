@@ -200,12 +200,18 @@ def extract_project(
     *,
     frontend: LatexFrontend | None = None,
     linguistic_frontend: LinguisticFrontend | None = None,
+    legacy_prose_semantic_context: bool = True,
 ) -> ExtractedProject:
     """Extract theorem/result, dependency, symbol, and proof-support IR.
 
     LaTeX syntax is supplied by a parser-neutral frontend. Optional local NLP
     proposes structural candidates only; mathematical interpretation remains
     Thorn-owned above both parser boundaries.
+
+    ``legacy_prose_semantic_context`` is an explicit #203 A/B seam. Disabling it
+    preserves the normalized prose-candidate and statement evidence while preventing
+    the historical project-level prose authority pass from mutating canonical symbols.
+    The seam is temporary and must disappear when the production cutover is settled.
     """
 
     parser = frontend or get_default_frontend()
@@ -390,7 +396,9 @@ def extract_project(
             parsed,
             regions,
             workspace=workspace,
-            prose_declarations=prose_declarations,
+            prose_declarations=(
+                prose_declarations if legacy_prose_semantic_context else None
+            ),
             linguistic_frontend=linguistic_frontend,
         ),
         proof_support_graph=support_graph,
