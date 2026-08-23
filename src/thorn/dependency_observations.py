@@ -102,6 +102,7 @@ def _project_source_key(
     lookup: ProjectPositionLookup | None,
     source: SourceSpan,
 ) -> tuple[tuple[int, ...], str, int, int, int, int, int, int]:
+    project_key: tuple[int, ...]
     if lookup is None:
         project_key = (10**12, source.start_offset)
     else:
@@ -132,7 +133,11 @@ def snapshot_dependency_observations(
     """
 
     table = project.symbol_table
-    lookup = ProjectPositionLookup(project.workspace) if project.workspace is not None else None
+    lookup = (
+        ProjectPositionLookup(project.workspace)
+        if project.workspace is not None
+        else None
+    )
     symbol_keys = {symbol.identifier: _symbol_key(symbol) for symbol in table.symbols}
 
     definitions_by_symbol: dict[str, list[str]] = {}
