@@ -209,8 +209,8 @@ def extract_project(
     Thorn-owned above both parser boundaries.
 
     ``legacy_prose_semantic_context`` is an explicit #203 A/B seam. Disabling it
-    preserves the normalized prose-candidate and statement evidence while preventing
-    the historical project-level prose authority pass from mutating canonical symbols.
+    preserves exact source-mapped statements while bypassing both the historical
+    hand-written prose-declaration grammar and the project-level prose authority pass.
     The seam is temporary and must disappear when the production cutover is settled.
     """
 
@@ -377,10 +377,14 @@ def extract_project(
         dependencies=graph,
         units=enriched,
     )
-    prose_declarations = collect_project_prose_declarations(
-        parsed,
-        regions,
-        linguistic_frontend,
+    prose_declarations = (
+        collect_project_prose_declarations(
+            parsed,
+            regions,
+            linguistic_frontend,
+        )
+        if legacy_prose_semantic_context
+        else None
     )
     linguistic_statements = collect_project_linguistic_statements(
         parsed,
@@ -396,9 +400,7 @@ def extract_project(
             parsed,
             regions,
             workspace=workspace,
-            prose_declarations=(
-                prose_declarations if legacy_prose_semantic_context else None
-            ),
+            prose_declarations=prose_declarations,
             linguistic_frontend=linguistic_frontend,
         ),
         proof_support_graph=support_graph,
