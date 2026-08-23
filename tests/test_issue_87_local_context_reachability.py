@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from candidate_context_contract import prepare_all_prior_context
 from sentence_contract_frontend import SentenceContractFrontend
+
 from thorn.eval_review import build_result_review_context
 from thorn.formula_ir import ExprLoweringStatus
 from thorn.latex import extract_project
