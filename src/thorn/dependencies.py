@@ -5,6 +5,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from thorn.linguistic_declarations import ProseDeclarationInventory
+from thorn.linguistic_statements import LinguisticStatementInventory
 from thorn.models import SourceRange, TheoremUnit
 from thorn.support import ProofSupportGraph
 from thorn.symbols import SymbolTable
@@ -203,6 +204,7 @@ class ExtractedProject(BaseModel):
     proof_support_graph: ProofSupportGraph = Field(default_factory=ProofSupportGraph)
     workspace: ProjectWorkspaceFacts | None = Field(default=None, exclude=True)
     prose_declarations: ProseDeclarationInventory | None = Field(default=None, exclude=True)
+    linguistic_statements: LinguisticStatementInventory | None = Field(default=None, exclude=True)
 
     def unit(self, identifier: str) -> TheoremUnit:
         for unit in self.units:
