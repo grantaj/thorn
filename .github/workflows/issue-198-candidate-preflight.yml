@@ -1,0 +1,85 @@
+name: Issue 198 candidate production preflight
+
+on:
+  push:
+    branches:
+      - issue-198-structural-nlp-production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-phase-1:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+      CANDIDATE_PRODUCTION_REVISION: d106bf28422e1a76f4b88db90cb342c3772e734d
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Materialize frozen issue 198 qualification harness
+        run: |
+          git fetch origin issue-198-production-qualification
+          mkdir -p eval/robustness/issue_198
+          git show origin/issue-198-production-qualification:scripts/prepare_issue_198_qualification.py \
+            > scripts/prepare_issue_198_qualification.py
+          git show origin/issue-198-production-qualification:eval/robustness/issue_198/qualification_manifest.json \
+            > /tmp/issue-198-frozen-manifest.json
+          git show origin/issue-198-production-qualification:eval/robustness/issue_198/heldout_diagonal_regular_clean.tex \
+            > eval/robustness/issue_198/heldout_diagonal_regular_clean.tex
+      - name: Bind frozen manifest to candidate production source tree
+        run: |
+          python - <<'PY'
+          import copy
+          import json
+          import os
+          from pathlib import Path
+
+          frozen_path = Path('/tmp/issue-198-frozen-manifest.json')
+          candidate_path = Path('/tmp/issue-198-candidate-manifest.json')
+          frozen = json.loads(frozen_path.read_text(encoding='utf-8'))
+          candidate = copy.deepcopy(frozen)
+          candidate['production_revision'] = os.environ['CANDIDATE_PRODUCTION_REVISION']
+
+          expected = copy.deepcopy(frozen)
+          expected['production_revision'] = candidate['production_revision']
+          assert candidate == expected
+          assert candidate['cases'] == frozen['cases']
+          assert candidate['production_identity'] == frozen['production_identity']
+          assert candidate['review_identity'] == frozen['review_identity']
+          candidate_path.write_text(
+              json.dumps(candidate, indent=2, ensure_ascii=False) + '\n',
+              encoding='utf-8',
+          )
+          print('Frozen cases and qualification identities unchanged; production revision only rebound.')
+          PY
+          test "$(git rev-parse "$CANDIDATE_PRODUCTION_REVISION:src/thorn")" = \
+               "$(git rev-parse HEAD:src/thorn)"
+          sha256sum /tmp/issue-198-frozen-manifest.json /tmp/issue-198-candidate-manifest.json
+      - name: Install frozen Thorn runtime and local English model
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
+          python -m pip install \
+            https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+      - name: Run frozen issue 198 Phase 1
+        run: |
+          python scripts/prepare_issue_198_qualification.py \
+            --manifest /tmp/issue-198-candidate-manifest.json \
+            --output /tmp/issue-198-candidate-preflight.json
+      - name: Upload frozen preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-198-candidate-preflight-${{ github.sha }}
+          path: |
+            /tmp/issue-198-frozen-manifest.json
+            /tmp/issue-198-candidate-manifest.json
+            /tmp/issue-198-candidate-preflight.json
+          if-no-files-found: warn
