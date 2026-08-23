@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from thorn.dependencies import DependencyNode, ExtractedProject
 from thorn.evidence import InferenceStatus
+from thorn.linguistic_statements import StatementScopeKind
 from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
     ProjectSourceSortKey,
@@ -16,6 +17,7 @@ from thorn.semantic_review import (
     SemanticReviewItem,
 )
 from thorn.support import Claim, SupportEdge
+from thorn.workspace import ProjectPositionLookup, WorkspaceResolution
 
 
 def _claim_key(project: ExtractedProject, claim: Claim) -> ProjectSourceSortKey:
@@ -99,6 +101,125 @@ def _nearby_context(
     )
 
 
+def _source_overlap(left: object, right: object) -> bool:
+    return (
+        left.file == right.file
+        and left.start_offset < right.end_offset
+        and right.start_offset < left.end_offset
+    )
+
+
+def _statement_context(
+    project: ExtractedProject,
+    result_identifier: str,
+) -> list[ReviewSourceContext]:
+    """Select prior statements by generic linguistic relevance, not declaration grammar."""
+
+    inventory = project.linguistic_statements
+    workspace = project.workspace
+    if (
+        inventory is None
+        or not inventory.complete
+        or workspace is None
+        or workspace.resolution != WorkspaceResolution.RESOLVED
+    ):
+        return []
+
+    target_statements = [
+        statement
+        for statement in inventory.statements
+        if statement.result_identifier == result_identifier
+        and statement.scope_kind
+        in {StatementScopeKind.RESULT_STATEMENT, StatementScopeKind.RESULT_PROOF}
+    ]
+    if not target_statements:
+        return []
+
+    seed_terms = {
+        term
+        for statement in target_statements
+        for term in statement.content_terms
+    }
+    if not seed_terms:
+        return []
+
+    lookup = ProjectPositionLookup(workspace)
+    target_positions = [
+        position
+        for statement in target_statements
+        for position in lookup.positions(statement.source.file, statement.source.start_offset)
+    ]
+    if not target_positions:
+        return []
+
+    selected: list[ReviewSourceContext] = []
+    for statement in inventory.statements:
+        if statement.scope_kind != StatementScopeKind.PROJECT:
+            continue
+        if not seed_terms.intersection(statement.content_terms):
+            continue
+        candidate_positions = lookup.positions(
+            statement.source.file,
+            statement.source.end_offset,
+        )
+        if not candidate_positions:
+            continue
+        # A path-level result may represent repeated project occurrences. Make a
+        # prior statement reachable only when every target occurrence has a prior
+        # occurrence of that exact source statement; disagreement fails closed.
+        if not all(
+            any(candidate < target for candidate in candidate_positions)
+            for target in target_positions
+        ):
+            continue
+        selected.append(
+            ReviewSourceContext(text=statement.text, source=statement.source)
+        )
+
+    return sorted(
+        selected,
+        key=lambda context: project_source_sort_key(
+            project,
+            context.source,
+            context.text,
+        ),
+    )
+
+
+def _without_overlapping_prose_classification(
+    project: ExtractedProject,
+    context: SelectedSymbolContext,
+    statements: list[ReviewSourceContext],
+) -> SelectedSymbolContext:
+    """Prefer exact generic statement source over overlapping prose-role guesses.
+
+    The old declaration classifier remains available to other production consumers
+    during this bounded tranche. It is deliberately removed from this review view
+    only where the new source-mapped statement path independently selected the same
+    source, so #198 can test review reachability without depending on phrase lists.
+    """
+
+    inventory = project.prose_declarations
+    if inventory is None or not statements:
+        return context
+    classified = [candidate.source for candidate in inventory.candidates]
+
+    def replaced(source: object) -> bool:
+        return any(_source_overlap(source, prose) for prose in classified) and any(
+            _source_overlap(source, statement.source) for statement in statements
+        )
+
+    return SelectedSymbolContext(
+        hypotheses=[item for item in context.hypotheses if not replaced(item.source)],
+        local_constraints=[
+            item for item in context.local_constraints if not replaced(item.source)
+        ],
+        symbols=context.symbols,
+        definitions=[item for item in context.definitions if not replaced(item.source)],
+        candidates=context.candidates,
+    )
+
+
 def build_result_review_context(
     project: ExtractedProject,
     result_identifier: str,
@@ -120,7 +241,12 @@ def build_result_review_context(
         key=lambda claim: _claim_key(project, claim),
     )
     relations = _result_relations(project, claims)
-    symbol_context = _result_symbol_context(project, result_identifier)
+    statement_context = _statement_context(project, result_identifier)
+    symbol_context = _without_overlapping_prose_classification(
+        project,
+        _result_symbol_context(project, result_identifier),
+        statement_context,
+    )
     uncertain_relation_ids = sorted(
         edge.identifier
         for edge in relations
@@ -131,6 +257,10 @@ def build_result_review_context(
         key=lambda node: dependency_node_sort_key(project, node),
     )
 
+    nearby_context = {
+        (context.text, span_key(context.source)): context
+        for context in [*_nearby_context(project, relations), *statement_context]
+    }
     item = SemanticReviewItem(
         identifier=f"semantic-review-eval:{result_identifier}",
         target_kind=ReviewTargetKind.RESULT,
@@ -144,6 +274,13 @@ def build_result_review_context(
         definitions=symbol_context.definitions,
         symbol_candidates=symbol_context.candidates,
         dependencies=dependencies,
-        nearby_context=_nearby_context(project, relations),
+        nearby_context=sorted(
+            nearby_context.values(),
+            key=lambda context: project_source_sort_key(
+                project,
+                context.source,
+                context.text,
+            ),
+        ),
     )
     return ReviewContext(items=[item])
