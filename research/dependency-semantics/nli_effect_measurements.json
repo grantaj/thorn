@@ -1,0 +1,195 @@
+{
+  "authority": "non-authoritative candidate effects only",
+  "cached_offline_replay_exact": true,
+  "cached_offline_runtime": {
+    "inference_seconds": 3.203,
+    "max_rss_kib": 1276512,
+    "pair_count": 256,
+    "total_seconds_including_model_load": 3.955
+  },
+  "cases": 64,
+  "dictionary_free": true,
+  "experiment": "issue-213-nli-graph-effect-screen",
+  "format_version": 1,
+  "grounding_measurement": {
+    "interpretation": "the cross-encoder emits sentence-pair effect scores only; reversible typed placeholders preserve source anchors but do not identify bind/payload/require roles, so no candidate is eligible for production authority",
+    "model_argument_spans_returned": 0,
+    "positive_cases_with_exact_semantic_argument_grounding": 0,
+    "positive_effect_cases": 34,
+    "semantic_argument_grounding_rate": 0.0,
+    "source_projection_segment_cases": 5,
+    "source_sentence_provenance": "exact source/projection text retained for every case"
+  },
+  "heldout_cases": 28,
+  "issue_160_baselines": [
+    {
+      "false_authority_risk": 3,
+      "lexical_challenge_recall": 0.125,
+      "precision": 0.812,
+      "provenance_failures": 0,
+      "recall": 0.619,
+      "strategy": "baseline",
+      "transitive_cases_satisfied": "1/2"
+    },
+    {
+      "false_authority_risk": 29,
+      "lexical_challenge_recall": 0.75,
+      "precision": 0.396,
+      "provenance_failures": 0,
+      "recall": 0.905,
+      "strategy": "dependency",
+      "transitive_cases_satisfied": "1/2"
+    },
+    {
+      "false_authority_risk": 6,
+      "lexical_challenge_recall": 0.625,
+      "precision": 0.75,
+      "provenance_failures": 0,
+      "recall": 0.857,
+      "strategy": "hybrid",
+      "transitive_cases_satisfied": "1/2"
+    }
+  ],
+  "issue_160_cases": 36,
+  "measurement_head_sha": "1716725fbaee32c484e3e26b7ef74d971ea20233",
+  "model": "cross-encoder/nli-deberta-v3-xsmall",
+  "model_snapshot_bytes_as_tested": 2268597330,
+  "model_snapshot_note": "snapshot_download fetched the complete published model repository, including auxiliary exports; this is the measured research path, not a minimized deployment footprint",
+  "package_versions": {
+    "huggingface-hub": "1.28.0",
+    "sentence-transformers": "5.7.0",
+    "torch": "2.13.0",
+    "transformers": "5.15.1"
+  },
+  "resolved_model_revision": "a150876415327c80daeff35ca6f68f5ed8cf5c24",
+  "runtime": {
+    "inference_seconds": 3.263,
+    "max_rss_kib": 1695460,
+    "pair_count": 256,
+    "total_seconds_including_model_load": 19.139
+  },
+  "threshold_metrics": [
+    {
+      "by_effect": {
+        "declare": {"fn": 24, "fp": 0, "tp": 0},
+        "require": {"fn": 5, "fp": 2, "tp": 2},
+        "status": {"fn": 2, "fp": 6, "tp": 0},
+        "visibility": {"fn": 9, "fp": 16, "tp": 1}
+      },
+      "exact_effect_set_accuracy": 0.375,
+      "false_authority_ids": ["declare-fix", "declare-write", "named-called", "named-deemed", "named-math-before", "named-said-to-be", "named-shall-called", "named-termed", "negative-motivation", "negative-negated", "negative-quotation", "negative-ref-stronger-direct", "negative-scope-counterexample", "negative-theorem-says", "negative-useful", "require-alternative", "require-applying", "require-joint", "status-established"],
+      "false_negative_effects": 40,
+      "false_positive_effects": 24,
+      "lexical_challenge_exact_accuracy": 0.05,
+      "missed_ids": ["ambient-follows", "ambient-henceforth", "ambient-remainder", "ambient-throughout", "ambient-unless", "declare-assume", "declare-fix", "declare-suppose", "declare-temporary", "declare-write", "named-by-mean", "named-called", "named-deemed", "named-exactly-when", "named-math-before", "named-math-payload", "named-mean-math", "named-said-to-be", "named-shall-called", "named-termed", "named-we-call", "named-we-say", "require-applying", "require-by-ref", "require-follows-from", "require-joint", "require-using", "status-established", "status-unproved", "transitive-called", "transitive-hybrid", "visibility-retract"],
+      "negative_case_false_authority_rate": 0.233,
+      "precision_graph_effects": 0.111,
+      "recall_graph_effects": 0.07,
+      "threshold": 0.5,
+      "unresolved_lookalike_unsafe_rate": 0.0,
+      "unsafe_negative_cases": 7
+    },
+    {
+      "by_effect": {
+        "declare": {"fn": 24, "fp": 0, "tp": 0},
+        "require": {"fn": 5, "fp": 1, "tp": 2},
+        "status": {"fn": 2, "fp": 2, "tp": 0},
+        "visibility": {"fn": 9, "fp": 12, "tp": 1}
+      },
+      "exact_effect_set_accuracy": 0.406,
+      "false_authority_ids": ["named-math-before", "named-said-to-be", "named-shall-called", "named-termed", "negative-motivation", "negative-negated", "negative-quotation", "negative-ref-stronger-direct", "negative-useful", "require-alternative", "require-applying", "require-joint"],
+      "false_negative_effects": 40,
+      "false_positive_effects": 15,
+      "lexical_challenge_exact_accuracy": 0.05,
+      "missed_ids": ["ambient-follows", "ambient-henceforth", "ambient-remainder", "ambient-throughout", "ambient-unless", "declare-assume", "declare-fix", "declare-suppose", "declare-temporary", "declare-write", "named-by-mean", "named-called", "named-deemed", "named-exactly-when", "named-math-before", "named-math-payload", "named-mean-math", "named-said-to-be", "named-shall-called", "named-termed", "named-we-call", "named-we-say", "require-applying", "require-by-ref", "require-follows-from", "require-joint", "require-using", "status-established", "status-unproved", "transitive-called", "transitive-hybrid", "visibility-retract"],
+      "negative_case_false_authority_rate": 0.167,
+      "precision_graph_effects": 0.167,
+      "recall_graph_effects": 0.07,
+      "threshold": 0.6,
+      "unresolved_lookalike_unsafe_rate": 0.0,
+      "unsafe_negative_cases": 5
+    },
+    {
+      "by_effect": {
+        "declare": {"fn": 24, "fp": 0, "tp": 0},
+        "require": {"fn": 7, "fp": 1, "tp": 0},
+        "status": {"fn": 2, "fp": 2, "tp": 0},
+        "visibility": {"fn": 9, "fp": 7, "tp": 1}
+      },
+      "exact_effect_set_accuracy": 0.406,
+      "false_authority_ids": ["named-math-before", "named-said-to-be", "negative-negated", "negative-quotation", "negative-ref-stronger-direct", "negative-useful", "require-applying", "require-joint"],
+      "false_negative_effects": 42,
+      "false_positive_effects": 10,
+      "lexical_challenge_exact_accuracy": 0.0,
+      "missed_ids": ["ambient-follows", "ambient-henceforth", "ambient-remainder", "ambient-throughout", "ambient-unless", "declare-assume", "declare-fix", "declare-suppose", "declare-temporary", "declare-write", "named-by-mean", "named-called", "named-deemed", "named-exactly-when", "named-math-before", "named-math-payload", "named-mean-math", "named-said-to-be", "named-shall-called", "named-termed", "named-we-call", "named-we-say", "require-alternative", "require-applying", "require-by-ref", "require-consequence", "require-follows-from", "require-joint", "require-using", "status-established", "status-unproved", "transitive-called", "transitive-hybrid", "visibility-retract"],
+      "negative_case_false_authority_rate": 0.133,
+      "precision_graph_effects": 0.091,
+      "recall_graph_effects": 0.023,
+      "threshold": 0.7,
+      "unresolved_lookalike_unsafe_rate": 0.0,
+      "unsafe_negative_cases": 4
+    },
+    {
+      "by_effect": {
+        "declare": {"fn": 24, "fp": 0, "tp": 0},
+        "require": {"fn": 7, "fp": 1, "tp": 0},
+        "status": {"fn": 2, "fp": 1, "tp": 0},
+        "visibility": {"fn": 10, "fp": 2, "tp": 0}
+      },
+      "exact_effect_set_accuracy": 0.438,
+      "false_authority_ids": ["named-said-to-be", "negative-ref-stronger-direct", "negative-useful"],
+      "false_negative_effects": 43,
+      "false_positive_effects": 4,
+      "lexical_challenge_exact_accuracy": 0.0,
+      "missed_ids": ["ambient-follows", "ambient-henceforth", "ambient-remainder", "ambient-throughout", "ambient-unless", "declare-assume", "declare-fix", "declare-suppose", "declare-temporary", "declare-write", "named-by-mean", "named-called", "named-deemed", "named-exactly-when", "named-math-before", "named-math-payload", "named-mean-math", "named-said-to-be", "named-shall-called", "named-termed", "named-we-call", "named-we-say", "require-alternative", "require-applying", "require-by-ref", "require-consequence", "require-follows-from", "require-joint", "require-using", "status-established", "status-unproved", "transitive-called", "transitive-hybrid", "visibility-retract"],
+      "negative_case_false_authority_rate": 0.067,
+      "precision_graph_effects": 0.0,
+      "recall_graph_effects": 0.0,
+      "threshold": 0.8,
+      "unresolved_lookalike_unsafe_rate": 0.0,
+      "unsafe_negative_cases": 2
+    },
+    {
+      "by_effect": {
+        "declare": {"fn": 24, "fp": 0, "tp": 0},
+        "require": {"fn": 7, "fp": 1, "tp": 0},
+        "status": {"fn": 2, "fp": 0, "tp": 0},
+        "visibility": {"fn": 10, "fp": 0, "tp": 0}
+      },
+      "exact_effect_set_accuracy": 0.453,
+      "false_authority_ids": ["negative-ref-stronger-direct"],
+      "false_negative_effects": 43,
+      "false_positive_effects": 1,
+      "lexical_challenge_exact_accuracy": 0.0,
+      "missed_ids": ["ambient-follows", "ambient-henceforth", "ambient-remainder", "ambient-throughout", "ambient-unless", "declare-assume", "declare-fix", "declare-suppose", "declare-temporary", "declare-write", "named-by-mean", "named-called", "named-deemed", "named-exactly-when", "named-math-before", "named-math-payload", "named-mean-math", "named-said-to-be", "named-shall-called", "named-termed", "named-we-call", "named-we-say", "require-alternative", "require-applying", "require-by-ref", "require-consequence", "require-follows-from", "require-joint", "require-using", "status-established", "status-unproved", "transitive-called", "transitive-hybrid", "visibility-retract"],
+      "negative_case_false_authority_rate": 0.033,
+      "precision_graph_effects": 0.0,
+      "recall_graph_effects": 0.0,
+      "threshold": 0.9,
+      "unresolved_lookalike_unsafe_rate": 0.0,
+      "unsafe_negative_cases": 1
+    },
+    {
+      "by_effect": {
+        "declare": {"fn": 24, "fp": 0, "tp": 0},
+        "require": {"fn": 7, "fp": 0, "tp": 0},
+        "status": {"fn": 2, "fp": 0, "tp": 0},
+        "visibility": {"fn": 10, "fp": 0, "tp": 0}
+      },
+      "exact_effect_set_accuracy": 0.469,
+      "false_authority_ids": [],
+      "false_negative_effects": 43,
+      "false_positive_effects": 0,
+      "lexical_challenge_exact_accuracy": 0.0,
+      "missed_ids": ["ambient-follows", "ambient-henceforth", "ambient-remainder", "ambient-throughout", "ambient-unless", "declare-assume", "declare-fix", "declare-suppose", "declare-temporary", "declare-write", "named-by-mean", "named-called", "named-deemed", "named-exactly-when", "named-math-before", "named-math-payload", "named-mean-math", "named-said-to-be", "named-shall-called", "named-termed", "named-we-call", "named-we-say", "require-alternative", "require-applying", "require-by-ref", "require-consequence", "require-follows-from", "require-joint", "require-using", "status-established", "status-unproved", "transitive-called", "transitive-hybrid", "visibility-retract"],
+      "negative_case_false_authority_rate": 0.0,
+      "precision_graph_effects": 1.0,
+      "recall_graph_effects": 0.0,
+      "threshold": 0.95,
+      "unresolved_lookalike_unsafe_rate": 0.0,
+      "unsafe_negative_cases": 0
+    }
+  ],
+  "workflow_artifact_id": 9492917178,
+  "workflow_run_id": 32638280667
+}

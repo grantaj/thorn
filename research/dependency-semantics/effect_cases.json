@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "description": "#213 held-out graph-effect cases supplementing the #160 declaration corpus. Effects are labels from the #212 dependency graph signature, not English speech-act categories.",
+  "cases": [
+    {"id":"require-by-ref","text":"By THORNREF1, THORNMATH1 follows.","expected_effects":["require"],"lexical_challenge":false,"expected_refs":["THORNREF1"]},
+    {"id":"require-follows-from","text":"THORNMATH1 follows from THORNREF1.","expected_effects":["require"],"lexical_challenge":true,"expected_refs":["THORNREF1"]},
+    {"id":"require-using","text":"Using THORNREF1, we obtain THORNMATH1.","expected_effects":["require"],"lexical_challenge":true,"expected_refs":["THORNREF1"]},
+    {"id":"require-applying","text":"Applying THORNREF1 to THORNMATH1 yields THORNMATH2.","expected_effects":["require"],"lexical_challenge":true,"expected_refs":["THORNREF1"]},
+    {"id":"require-consequence","text":"The claim is an immediate consequence of THORNREF1.","expected_effects":["require"],"lexical_challenge":true,"expected_refs":["THORNREF1"]},
+    {"id":"require-joint","text":"THORNREF1 and THORNREF2 together imply THORNMATH1.","expected_effects":["require"],"lexical_challenge":true,"expected_refs":["THORNREF1","THORNREF2"],"calculus_pressure":"joint_support"},
+    {"id":"require-alternative","text":"Either THORNREF1 or THORNREF2 suffices to prove THORNMATH1.","expected_effects":["require"],"lexical_challenge":true,"expected_refs":["THORNREF1","THORNREF2"],"calculus_pressure":"alternative_support"},
+
+    {"id":"negative-ref-mentioned","text":"THORNREF1 is discussed again in the next section.","expected_effects":[]},
+    {"id":"negative-ref-not-used","text":"We do not use THORNREF1 in this proof.","expected_effects":[]},
+    {"id":"negative-ref-example","text":"For example, THORNREF1 would imply THORNMATH1 under a stronger hypothesis.","expected_effects":[],"should_remain_unresolved":true},
+    {"id":"negative-ref-attribution","text":"The authors of another paper use THORNREF1 to obtain this bound.","expected_effects":[]},
+    {"id":"negative-ref-history","text":"Historically, THORNREF1 was used in this argument.","expected_effects":[]},
+    {"id":"negative-ref-quotation","text":"The quotation says ‘By THORNREF1, the claim follows.’","expected_effects":[]},
+    {"id":"negative-ref-stronger-direct","text":"Although THORNREF1 is stronger, we prove THORNMATH1 directly.","expected_effects":[]},
+    {"id":"negative-ref-similar","text":"The proof is similar to the proof of THORNREF1.","expected_effects":[],"should_remain_unresolved":true},
+
+    {"id":"declare-assume","text":"Assume THORNMATH1 for the remainder of this proof.","expected_effects":["declare","visibility"],"lexical_challenge":false},
+    {"id":"declare-suppose","text":"Suppose THORNMATH1 throughout this section.","expected_effects":["declare","visibility"],"lexical_challenge":true},
+    {"id":"declare-fix","text":"Fix an integer THORNMATH1 for what follows.","expected_effects":["declare","visibility"],"lexical_challenge":true},
+    {"id":"declare-write","text":"Write THORNMATH1 for the kernel of THORNMATH2.","expected_effects":["declare"],"lexical_challenge":true},
+    {"id":"declare-temporary","text":"For this paragraph only, let THORNMATH1 denote the image of THORNMATH2.","expected_effects":["declare","visibility"],"lexical_challenge":true,"calculus_pressure":"scope_termination"},
+    {"id":"negative-declare-negated","text":"We do not assume THORNMATH1.","expected_effects":[]},
+    {"id":"negative-declare-example","text":"For illustration, suppose THORNMATH1; this is not an assumption of the theorem.","expected_effects":[],"should_remain_unresolved":true},
+    {"id":"negative-declare-quotation","text":"The historical note quotes ‘Assume THORNMATH1 throughout.’","expected_effects":[]},
+
+    {"id":"visibility-retract","text":"From this point onward, the standing assumption THORNMATH1 is no longer in force.","expected_effects":["visibility"],"lexical_challenge":true,"calculus_pressure":"retraction"},
+    {"id":"status-unproved","text":"THORNREF1 remains unproved and is used only as an assumption.","expected_effects":["status"],"lexical_challenge":true},
+    {"id":"status-established","text":"THORNREF1 is now established by the preceding argument.","expected_effects":["status"],"lexical_challenge":true},
+    {"id":"status-rhetorical","text":"It is unfortunate that THORNREF1 is difficult to prove.","expected_effects":[]},
+    {"id":"status-attribution","text":"Another author regards THORNREF1 as unproved.","expected_effects":[]}
+  ]
+}
