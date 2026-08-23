@@ -25,9 +25,9 @@ from thorn.spacy_linguistic import SpacyLinguisticFrontend
 
 ROOT = Path(__file__).resolve().parents[1]
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_REVISION = "1110a862c3f3983bd6aa1edbae7107c6e16a253a"
+EMBEDDING_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
-RERANKER_REVISION = "c5f2ebd9b7d1258168409637a3e6b1ac3d780d26"
+RERANKER_REVISION = "c5f2b386de279a97c53a702dd5189d1c407160dc"
 DEFAULT_BOUND = 8
 
 
@@ -111,7 +111,11 @@ def _document_sources(document: Any) -> set[tuple[str, int, int, str]]:
     }
 
 
-def _needle_measurements(ranking: Any, bounded: Any, needles: list[str]) -> list[dict[str, Any]]:
+def _needle_measurements(
+    ranking: Any,
+    bounded: Any,
+    needles: list[str],
+) -> list[dict[str, Any]]:
     bounded_ids = {item.candidate.identifier for item in bounded.candidates}
     result: list[dict[str, Any]] = []
     for needle in needles:
@@ -143,7 +147,11 @@ def _needle_measurements(ranking: Any, bounded: Any, needles: list[str]) -> list
     return result
 
 
-def _case(case: dict[str, Any], rankers: list[ContextRanker], bound: int) -> tuple[dict[str, Any], list[str]]:
+def _case(
+    case: dict[str, Any],
+    rankers: list[ContextRanker],
+    bound: int,
+) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
     source = ROOT / case["source"]
     project = extract_project(
@@ -153,15 +161,26 @@ def _case(case: dict[str, Any], rankers: list[ContextRanker], bound: int) -> tup
     )
     target = case["target"]
     pools = build_result_context_pools(project, target)
-    required = list(case.get("required_source_needles", case.get("required_reachable_sources", [])))
+    required = list(
+        case.get(
+            "required_source_needles",
+            case.get("required_reachable_sources", []),
+        )
+    )
     irrelevant = list(case.get("irrelevant_source_needles", []))
 
     inventory = project.linguistic_statements
     if inventory is None or not inventory.complete:
         errors.append(f"{case['id']}: statement inventory unavailable or partial")
     for needle in required:
-        if not any(needle in candidate.text for pool in pools for candidate in pool.candidates):
-            errors.append(f"{case['id']}: required source absent from eligible pool: {needle!r}")
+        if not any(
+            needle in candidate.text
+            for pool in pools
+            for candidate in pool.candidates
+        ):
+            errors.append(
+                f"{case['id']}: required source absent from eligible pool: {needle!r}"
+            )
 
     unit = project.unit(target)
     legacy = prepare_proof_review(project, unit)
@@ -172,10 +191,14 @@ def _case(case: dict[str, Any], rankers: list[ContextRanker], bound: int) -> tup
         for proposal in proposals:
             bounded = proposal.bounded(bound)
             candidate = prepare_candidate_proof_review(project, unit, bounded)
-            state_equal = candidate.state.model_dump(mode="json") == legacy.state.model_dump(mode="json")
+            state_equal = (
+                candidate.state.model_dump(mode="json")
+                == legacy.state.model_dump(mode="json")
+            )
             if not state_equal:
                 errors.append(
-                    f"{case['id']}: advisory retrieval changed canonical mathematical state for {ranker.name}"
+                    f"{case['id']}: advisory retrieval changed canonical mathematical "
+                    f"state for {ranker.name}"
                 )
 
             advertised = advertised_source_addresses(candidate.document)
@@ -186,7 +209,8 @@ def _case(case: dict[str, Any], rankers: list[ContextRanker], bound: int) -> tup
             ]
             if unknown_advertised:
                 errors.append(
-                    f"{case['id']}: advertised source handles missing from closed-world inventory: {unknown_advertised}"
+                    f"{case['id']}: advertised source handles missing from closed-world "
+                    f"inventory: {unknown_advertised}"
                 )
 
             legacy_sources = _document_sources(legacy.document)
@@ -200,7 +224,11 @@ def _case(case: dict[str, Any], rankers: list[ContextRanker], bound: int) -> tup
                     "bound": bound,
                     "truncated": bounded.truncated,
                     "required": _needle_measurements(proposal, bounded, required),
-                    "irrelevant_controls": _needle_measurements(proposal, bounded, irrelevant),
+                    "irrelevant_controls": _needle_measurements(
+                        proposal,
+                        bounded,
+                        irrelevant,
+                    ),
                     "top": [
                         {
                             "rank": item.rank,
@@ -216,10 +244,18 @@ def _case(case: dict[str, Any], rankers: list[ContextRanker], bound: int) -> tup
                         for item in bounded.candidates
                     ],
                     "differential": {
-                        "canonical_mathematical_state": "agreement" if state_equal else "definite-disagreement",
-                        "legacy_only_source": sorted(legacy_sources - candidate_sources),
-                        "candidate_only_advisory_source": sorted(candidate_sources - legacy_sources),
-                        "source_provenance_loss": bool(legacy_sources - candidate_sources),
+                        "canonical_mathematical_state": (
+                            "agreement" if state_equal else "definite-disagreement"
+                        ),
+                        "legacy_only_source": sorted(
+                            legacy_sources - candidate_sources
+                        ),
+                        "candidate_only_advisory_source": sorted(
+                            candidate_sources - legacy_sources
+                        ),
+                        "source_provenance_loss": bool(
+                            legacy_sources - candidate_sources
+                        ),
                     },
                 }
             )
@@ -232,7 +268,9 @@ def _case(case: dict[str, Any], rankers: list[ContextRanker], bound: int) -> tup
             "source": case["source"],
             "source_sha256": _sha256(source),
             "target": target,
-            "statement_inventory_complete": bool(inventory is not None and inventory.complete),
+            "statement_inventory_complete": bool(
+                inventory is not None and inventory.complete
+            ),
             "statement_count": len(inventory.statements) if inventory is not None else 0,
             "target_occurrence_count": len(pools),
             "measurements": measurements,
@@ -270,7 +308,9 @@ def main() -> int:
                     "source": case.get("source"),
                     "error": f"{type(exc).__name__}: {exc}",
                 }
-                case_errors = [f"{case.get('id', 'unknown')}: {type(exc).__name__}: {exc}"]
+                case_errors = [
+                    f"{case.get('id', 'unknown')}: {type(exc).__name__}: {exc}"
+                ]
             cases.append(evidence)
             errors.extend(case_errors)
 
@@ -288,7 +328,10 @@ def main() -> int:
         "errors": errors,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if not errors else 2
 
