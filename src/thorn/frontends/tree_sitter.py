@@ -15,6 +15,8 @@ from thorn.frontend import (
     FrontendMath,
     FrontendRegion,
     FrontendRegionKind,
+    FrontendSyntax,
+    FrontendSyntaxKind,
     ParsedProject,
     SourceSpan,
 )
@@ -38,6 +40,7 @@ _NATIVE_OPAQUE_TYPES = {
 _COMMENT_TYPES = {"line_comment", "block_comment"}
 _GROUP_PREFIXES = ("curly_group", "brack_group")
 _MATH_TYPES = {"inline_formula", "displayed_equation", "math_environment"}
+_SENTENCE_PUNCTUATION = {".", "!", "?"}
 
 
 class _Coordinates:
@@ -158,7 +161,7 @@ def _command_macro(
         if child.type.startswith(_GROUP_PREFIXES):
             arguments.append(_group_argument(path, source_bytes, coordinates, child))
 
-    # Structural nodes such as sections may own following document content.  A
+    # Structural nodes such as sections may own following document content. A
     # FrontendMacro represents only the command invocation, so derive its span
     # from the parser-owned command and direct argument nodes rather than the
     # enclosing structural node.
@@ -237,6 +240,23 @@ def _environment(
     )
 
 
+def _terminal_punctuation(
+    path: Path,
+    source_bytes: bytes,
+    coordinates: _Coordinates,
+    node: Any,
+) -> SourceSpan | None:
+    """Return parser-owned sentence punctuation at the end of a math subtree."""
+
+    for child in reversed(_walk(node)):
+        if child.children:
+            continue
+        raw = coordinates.byte_slice(source_bytes, child)
+        if raw in _SENTENCE_PUNCTUATION:
+            return coordinates.span(path, int(child.start_byte), int(child.end_byte))
+    return None
+
+
 def _math(path: Path, source_bytes: bytes, coordinates: _Coordinates, node: Any) -> FrontendMath:
     raw = coordinates.byte_slice(source_bytes, node)
     if raw.startswith("$$"):
@@ -256,7 +276,66 @@ def _math(path: Path, source_bytes: bytes, coordinates: _Coordinates, node: Any)
         delimiter=delimiter,
         raw=raw,
         span=coordinates.span(path, int(node.start_byte), int(node.end_byte)),
+        terminal_punctuation=_terminal_punctuation(
+            path,
+            source_bytes,
+            coordinates,
+            node,
+        ),
     )
+
+
+def _syntax_facts(
+    path: Path,
+    source_bytes: bytes,
+    coordinates: _Coordinates,
+    nodes: list[Any],
+) -> list[FrontendSyntax]:
+    """Expose control syntax by CST role, never by command-name catalogue."""
+
+    spans: dict[tuple[int, int], FrontendSyntax] = {}
+
+    def add(span: SourceSpan) -> None:
+        if span.end_offset <= span.start_offset:
+            return
+        spans[(span.start_offset, span.end_offset)] = FrontendSyntax(
+            kind=FrontendSyntaxKind.CONTROL,
+            span=span,
+        )
+
+    for node in nodes:
+        command = _field(node, "command")
+        if command is None:
+            continue
+        macro = _command_macro(path, source_bytes, coordinates, node)
+        if macro is None:
+            continue
+
+        if node.type != "generic_command":
+            # Specialized grammar nodes identify structural/control commands. Use
+            # only the parser-owned invocation span: section-like parents may own
+            # following prose beyond the command itself.
+            add(macro.span)
+            continue
+
+        # For a generic inline command, mask the control word and group delimiters
+        # but leave argument content available to sentence segmentation. This is a
+        # syntactic operation only: exact source remains the semantic authority.
+        add(coordinates.span(path, int(command.start_byte), int(command.end_byte)))
+        for child in node.children:
+            if not child.type.startswith(_GROUP_PREFIXES):
+                continue
+            children = list(child.children)
+            if not children:
+                continue
+            opening = children[0]
+            closing = children[-1]
+            if not bool(getattr(opening, "is_named", False)):
+                add(coordinates.span(path, int(opening.start_byte), int(opening.end_byte)))
+            if not bool(getattr(closing, "is_named", False)):
+                add(coordinates.span(path, int(closing.start_byte), int(closing.end_byte)))
+
+    return [spans[key] for key in sorted(spans)]
 
 
 def _diagnostic_for_error(path: Path, coordinates: _Coordinates, node: Any) -> FrontendDiagnostic:
@@ -494,13 +573,15 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
             math=math,
             regions=_regions(path, text, coordinates, nodes, macros, environments, math),
             regions_complete=True,
+            syntax=_syntax_facts(path, source_bytes, coordinates, nodes),
+            syntax_complete=True,
         ),
         diagnostics,
     )
 
 
 class TreeSitterLatexFrontend:
-    """Experimental source-preserving frontend backed by tree-sitter-latex.
+    """Source-preserving frontend backed by tree-sitter-latex.
 
     Tree-sitter objects are consumed only inside this adapter. Downstream Thorn
     receives the same parser-neutral models as every other frontend.
