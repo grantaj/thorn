@@ -111,7 +111,7 @@ def test_notation_collision_keeps_separate_set_map_authority_and_prose() -> None
     map_source = next(
         item for item in document.sources if item.ir_identifier == mapping.identifier
     )
-    assert map_source.text.strip() == r"Let $f:C\to\mathbb R$"
+    assert map_source.text.strip() == r"let $f:C\to\mathbb R$"
     assert _is_represented_or_advertised(semantic, document, map_source.address)
 
     _, prepared = _advisory(path, "thm:notation-collision")
