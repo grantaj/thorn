@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from thorn.dependencies import DependencyNode, ExtractedProject
 from thorn.evidence import InferenceStatus
+from thorn.frontend import SourceSpan
 from thorn.linguistic_statements import StatementScopeKind
 from thorn.review_selection import SelectedSymbolContext, select_symbol_context, span_key
 from thorn.semantic_dependencies import (
@@ -101,7 +102,7 @@ def _nearby_context(
     )
 
 
-def _source_overlap(left: object, right: object) -> bool:
+def _source_overlap(left: SourceSpan, right: SourceSpan) -> bool:
     return (
         left.file == right.file
         and left.start_offset < right.end_offset
@@ -204,7 +205,7 @@ def _without_overlapping_prose_classification(
         return context
     classified = [candidate.source for candidate in inventory.candidates]
 
-    def replaced(source: object) -> bool:
+    def replaced(source: SourceSpan) -> bool:
         return any(_source_overlap(source, prose) for prose in classified) and any(
             _source_overlap(source, statement.source) for statement in statements
         )
