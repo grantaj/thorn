@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - issue-198-context-retrieval-spike
+  pull_request:
+    branches:
+      - issue-198-structural-nlp-production
   workflow_dispatch:
 
 permissions:
