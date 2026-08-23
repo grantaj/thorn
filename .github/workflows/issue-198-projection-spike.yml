@@ -10,6 +10,7 @@ on:
     paths:
       - ".github/workflows/issue-198-projection-spike.yml"
       - "scripts/apply_issue_198_projection_spike.py"
+      - "scripts/evaluate_issue_198_nlp_statement_sources.py"
 
 permissions:
   contents: read
@@ -33,18 +34,18 @@ jobs:
           python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
           python -m pip install \
             https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+      - name: Check frozen qualification contract before spike
+        run: pytest -q tests/test_issue_198_qualification.py
       - name: Apply speculative projection mutation
         run: python scripts/apply_issue_198_projection_spike.py
-      - name: Run deterministic regression suite
-        run: pytest -q
-      - name: Build frozen issue 198 preflight against mutated working tree
+      - name: Evaluate dictionary-free NLP statement sources
         run: |
-          python scripts/prepare_issue_198_qualification.py \
-            --output /tmp/issue-198-projection-spike.json
+          python scripts/evaluate_issue_198_nlp_statement_sources.py \
+            --output /tmp/issue-198-nlp-statement-source-spike.json
       - name: Upload spike evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: issue-198-projection-spike-${{ github.sha }}
-          path: /tmp/issue-198-projection-spike.json
-          if-no-files-found: warn
+          name: issue-198-nlp-statement-source-spike-${{ github.sha }}
+          path: /tmp/issue-198-nlp-statement-source-spike.json
+          if-no-files-found: error
