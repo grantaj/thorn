@@ -208,7 +208,8 @@ def collect_project_linguistic_statements(
                 complete=False,
                 frontend=frontend.name,
                 partial_reason=(
-                    f"parser-owned syntax facts unavailable for linguistic segmentation: {file.path}"
+                    "parser-owned syntax facts unavailable for linguistic "
+                    f"segmentation: {file.path}"
                 ),
             )
         statements.extend(converted)
