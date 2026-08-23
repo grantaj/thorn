@@ -17,9 +17,27 @@ def attach_advisory_context(
     if proposal.status != ContextProposalStatus.COMPLETE or not proposal.candidates:
         return document
 
+    existing = {
+        (
+            source.source_span.file,
+            source.source_span.start_offset,
+            source.source_span.end_offset,
+            source.text,
+        )
+        for source in document.sources
+        if source.source_span is not None
+    }
     handles: list[ProofLanguageSourceHandle] = []
     for item in proposal.candidates:
         candidate = item.candidate
+        key = (
+            candidate.source.file,
+            candidate.source.start_offset,
+            candidate.source.end_offset,
+            candidate.text,
+        )
+        if key in existing:
+            continue
         address = f"CCTX{len(handles) + 1}"
         handles.append(
             ProofLanguageSourceHandle(
@@ -32,7 +50,10 @@ def attach_advisory_context(
                 source_span=candidate.source,
             )
         )
+        existing.add(key)
 
+    if not handles:
+        return document
     addresses = ",".join(handle.address for handle in handles)
     marker = "CONTEXT_TRUNCATED" if proposal.truncated else "CONTEXT"
     line = (
