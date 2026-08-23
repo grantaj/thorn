@@ -22,6 +22,7 @@ from thorn.frontend import ParsedProject as FrontendProject
 from thorn.frontends import get_default_frontend
 from thorn.linguistic import LinguisticFrontend
 from thorn.linguistic_declarations import collect_project_prose_declarations
+from thorn.linguistic_statements import collect_project_linguistic_statements
 from thorn.linguistic_support import apply_linguistic_uncertainty
 from thorn.models import TheoremUnit
 from thorn.project_partiality import normalize_project_structure
@@ -375,6 +376,11 @@ def extract_project(
         regions,
         linguistic_frontend,
     )
+    linguistic_statements = collect_project_linguistic_statements(
+        parsed,
+        regions,
+        linguistic_frontend,
+    )
 
     return ExtractedProject(
         main_file=parsed.main_file,
@@ -390,6 +396,7 @@ def extract_project(
         proof_support_graph=support_graph,
         workspace=workspace,
         prose_declarations=prose_declarations,
+        linguistic_statements=linguistic_statements,
     )
 
 
