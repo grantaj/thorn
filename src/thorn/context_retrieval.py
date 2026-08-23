@@ -42,7 +42,11 @@ class ContextRanker(Protocol):
 
     name: str
 
-    def rank(self, query: str, candidates: tuple[ContextCandidate, ...]) -> tuple[ContextRank, ...]: ...
+    def rank(
+        self,
+        query: str,
+        candidates: tuple[ContextCandidate, ...],
+    ) -> tuple[ContextRank, ...]: ...
 
 
 class RankedContextCandidate(BaseModel):
@@ -298,7 +302,8 @@ def rank_context_pool(
         missing = sorted(expected.difference(observed))
         unknown = sorted(set(observed).difference(expected))
         raise ValueError(
-            f"context ranker must order the complete candidate pool; missing={missing}, unknown={unknown}"
+            "context ranker must order the complete candidate pool; "
+            f"missing={missing}, unknown={unknown}"
         )
 
     candidates = {candidate.identifier: candidate for candidate in pool.candidates}
