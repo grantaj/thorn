@@ -12,10 +12,10 @@ from test_semantic_dependency_contract import (
     _write_project,
 )
 
+from thorn.context_retrieval import build_result_context_pools
 from thorn.evidence import InferenceStatus
 from thorn.frontends import RegexLatexFrontend
 from thorn.linguistic import LinguisticDocument, LinguisticFrontend, LinguisticToken
-from thorn.linguistic_declarations import ProseDeclarationCapability
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
 
@@ -72,15 +72,15 @@ Fix $x\in X$ for the argument.
     assert all(evidence.target == candidate.source for evidence in candidate.evidence)
     assert all(evidence.dependency_path for evidence in candidate.evidence)
 
-    prose = run.project.prose_declarations
-    assert prose is not None
-    assert prose.capability == ProseDeclarationCapability.COMPLETE
-    assert prose.frontend == frontend.name
-
-    # Generic linguistic symbol candidates remain non-authoritative. Slice D only
-    # changes the separate Thorn policy for complete prose declaration candidates.
+    # Generic linguistic symbol candidates are observations, never mathematical
+    # authority merely because a mature NLP backend proposed them.
     assert all(symbol.name != "x" for symbol in run.project.symbol_table.symbols)
     run.assert_not_authoritative("x")
+
+    statements = run.project.linguistic_statements
+    assert statements is not None
+    assert statements.complete
+    assert statements.frontend == frontend.name
 
     payload = candidate.model_dump(mode="json")
     assert isinstance(payload, dict)
@@ -109,8 +109,9 @@ def test_fixture_and_real_spacy_share_the_candidate_contract(tmp_path: Path) -> 
     _assert_candidate_contract(tmp_path / "spacy", spacy_configuration, spacy_frontend)
 
 
-def test_real_spacy_prose_proposal_is_exact_then_thorn_promotes_it(tmp_path: Path) -> None:
+def test_real_spacy_prose_is_exact_retrievable_source_not_authority(tmp_path: Path) -> None:
     frontend = _spacy_frontend_or_skip()
+    sentence = "We call a map admissible if it is continuous."
     run = _write_project(
         tmp_path,
         ContractConfiguration(
@@ -120,46 +121,38 @@ def test_real_spacy_prose_proposal_is_exact_then_thorn_promotes_it(tmp_path: Pat
             capabilities=frozenset(
                 {
                     ContractCapability.PROJECT_SEMANTICS,
-                    ContractCapability.PROSE_AUTHORITY,
                     ContractCapability.LINGUISTIC_CANDIDATES,
                 }
             ),
         ),
-        r"""
-We call a map admissible if it is continuous.
-\begin{theorem}\label{thm:main}
+        rf"""
+{sentence}
+\begin{{theorem}}\label{{thm:main}}
 The map $f$ is admissible.
-\end{theorem}
+\end{{theorem}}
 """,
     )
 
-    prose = run.project.prose_declarations
-    assert prose is not None
-    assert prose.capability == ProseDeclarationCapability.COMPLETE
-    candidate = next(item for item in prose.candidates if item.term == "admissible")
+    statements = run.project.linguistic_statements
+    assert statements is not None and statements.complete
+    exact = next(statement for statement in statements.statements if statement.text == sentence)
     raw = run.main_file.read_text(encoding="utf-8")
-    assert candidate.status == InferenceStatus.AMBIGUOUS
-    assert candidate.term_source.text(raw) == "admissible"
-    assert candidate.source.text(raw) == "We call a map admissible if it is continuous."
-    assert candidate.payload_source is not None
-    assert candidate.payload_source.text(raw).strip() == "it is continuous."
-    assert candidate.evidence
-    assert candidate.evidence[0].frontend == frontend.name
-    assert candidate.evidence[0].target == candidate.term_source
+    assert exact.source.text(raw) == sentence
 
-    # The linguistic backend still proposes only ambiguous grammatical evidence.
-    # Thorn separately adjudicates substantive payload, project order, visibility,
-    # shadowing, and result use before emitting canonical mathematical authority.
-    symbol = run.assert_authoritative(
-        "thm:main",
-        "admissible",
-        "We call a map admissible if it is continuous.",
+    pools = build_result_context_pools(run.project, "thm:main")
+    assert pools
+    assert any(
+        candidate.text == sentence
+        for pool in pools
+        for candidate in pool.candidates
     )
-    assert symbol.introduction_source == candidate.source
+
+    # Retrieval eligibility is not authority. The old declaration grammar used to
+    # promote this sentence; production now preserves it as exact advisory evidence.
+    run.assert_not_authoritative("admissible")
 
 
 def test_structural_only_configuration_explicitly_omits_linguistic_capability() -> None:
     structural_configuration = LINGUISTIC_CONFIGURATIONS[0]
     assert ContractCapability.PROJECT_SEMANTICS in structural_configuration.capabilities
-    assert ContractCapability.PROSE_AUTHORITY not in structural_configuration.capabilities
     assert ContractCapability.LINGUISTIC_CANDIDATES not in structural_configuration.capabilities
