@@ -3,10 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from thorn.evidence import InferenceStatus
 from thorn.latex import extract_project
 from thorn.linguistic import LinguisticDocument, LinguisticToken
-from thorn.symbols import SymbolCandidateKind
 
 _PLACEHOLDER_RE = re.compile(r"THORN[A-Z]+\d+")
 
@@ -45,7 +43,7 @@ class StaticDependencyFrontend:
         return LinguisticDocument(text=text, tokens=tokens)
 
 
-def test_linguistic_introductions_remain_candidates_not_declared_symbols(
+def test_linguistic_symbol_ablation_preserves_source_without_candidates(
     tmp_path: Path,
 ) -> None:
     tex = tmp_path / "introductions.tex"
@@ -65,20 +63,18 @@ Fix $x\in X$ for the argument. Put $c:=a+b$ for later use.
     )
 
     core = extract_project(tex)
-    assert core.symbol_table.candidates == []
-    assert all(symbol.name not in {"x", "c"} for symbol in core.symbol_table.symbols)
-
     project = extract_project(tex, linguistic_frontend=StaticDependencyFrontend())
-    candidates = {candidate.name: candidate for candidate in project.symbol_table.candidates}
 
-    assert set(candidates) == {"x", "c"}
-    assert candidates["x"].kind == SymbolCandidateKind.INTRODUCTION
-    assert candidates["c"].kind == SymbolCandidateKind.DEFINITION
-    assert candidates["c"].definition_operator == ":="
-    assert candidates["c"].expression_latex == "a+b"
-    assert candidates["x"].status == InferenceStatus.AMBIGUOUS
-    assert candidates["c"].status == InferenceStatus.AMBIGUOUS
-    assert candidates["x"].source.text(tex.read_text(encoding="utf-8")) == "x"
-    assert "Fix" in candidates["x"].raw_context
-    assert candidates["x"].evidence[0].dependency_path == ["PROPN:obl", "VERB:ROOT"]
+    # Generic NLP must not invent additional symbol semantics. The deterministic
+    # symbol table is identical whether or not a linguistic frontend is present.
+    assert project.symbol_table == core.symbol_table
+    assert project.symbol_table.candidates == []
     assert all(symbol.name not in {"x", "c"} for symbol in project.symbol_table.symbols)
+
+    # The ablation removes interpretation, not evidence: exact source-mapped
+    # statements remain available independently to advisory context/review.
+    inventory = project.linguistic_statements
+    assert inventory is not None
+    assert inventory.complete
+    assert any(r"$x\in X$" in statement.text for statement in inventory.statements)
+    assert any(r"$c:=a+b$" in statement.text for statement in inventory.statements)
