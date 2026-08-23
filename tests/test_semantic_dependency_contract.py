@@ -192,40 +192,25 @@ Use Lemma~\ref{lem:dup} and Lemma~\ref{lem:missing}.
     assert all(edge.target_identifier is None for edge in unresolved)
 
 
-_PLACEHOLDER_RE = re.compile(r"THORN[A-Z]+\d+")
-
-
 class _StaticDependencyFrontend:
     name = "contract-static-dependencies"
 
     def parse(self, text: str) -> LinguisticDocument:
+        matches = list(re.finditer(r"\S+", text))
         tokens = [
             LinguisticToken(
-                index=0,
-                text="observed",
-                lemma="observe",
-                pos="VERB",
-                dependency="ROOT",
+                index=index,
+                text=match.group(0),
+                lemma=match.group(0),
+                pos="VERB" if index == 0 else "X",
+                dependency="ROOT" if index == 0 else "dep",
                 head_index=0,
                 sentence_index=0,
-                start=0,
-                end=0,
+                start=match.start(),
+                end=match.end(),
             )
+            for index, match in enumerate(matches)
         ]
-        for match in _PLACEHOLDER_RE.finditer(text):
-            tokens.append(
-                LinguisticToken(
-                    index=len(tokens),
-                    text=match.group(0),
-                    lemma=match.group(0),
-                    pos="PROPN",
-                    dependency="obl",
-                    head_index=0,
-                    sentence_index=0,
-                    start=match.start(),
-                    end=match.end(),
-                )
-            )
         return LinguisticDocument(text=text, tokens=tokens)
 
 
