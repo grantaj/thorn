@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from thorn import project_context
+import thorn.project_context as project_context
 from thorn.latex import extract_project
 from thorn.spacy_linguistic import SpacyLinguisticFrontend
 
@@ -102,9 +102,9 @@ def measure() -> dict[str, Any]:
     assert baseline.workspace.model_dump(mode="json") == candidate.workspace.model_dump(mode="json")
     assert baseline.linguistic_statements is not None
     assert candidate.linguistic_statements is not None
-    assert baseline.linguistic_statements.model_dump(mode="json") == candidate.linguistic_statements.model_dump(
-        mode="json"
-    )
+    baseline_statements = baseline.linguistic_statements.model_dump(mode="json")
+    candidate_statements = candidate.linguistic_statements.model_dump(mode="json")
+    assert baseline_statements == candidate_statements
     assert any(
         r"Define $x \star y$ to mean $x+y$." in statement.text
         for statement in candidate.linguistic_statements.statements
