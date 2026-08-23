@@ -206,7 +206,11 @@ def test_multiple_sentences_inside_generic_macro_remain_distinct(tmp_path: Path)
         "Second sentence.",
     ]
     assert len({statement.identifier for statement in wrapped}) == 2
-    assert len({(statement.source.start_offset, statement.source.end_offset) for statement in wrapped}) == 2
+    source_spans = {
+        (statement.source.start_offset, statement.source.end_offset)
+        for statement in wrapped
+    }
+    assert len(source_spans) == 2
 
 
 def test_result_and_proof_extents_are_hard_linguistic_boundaries(tmp_path: Path) -> None:
