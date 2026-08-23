@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 from test_semantic_dependency_contract import (
-    LINGUISTIC_CONFIGURATIONS,
+    LINGUISTIC_CONFIGURATION,
+    STRUCTURAL_CONFIGURATIONS,
     ContractCapability,
     ContractConfiguration,
     _write_project,
 )
 
 from thorn.context_retrieval import build_result_context_pools
-from thorn.evidence import InferenceStatus
 from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
 from thorn.linguistic import LinguisticDocument, LinguisticFrontend, LinguisticToken
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
@@ -47,14 +47,13 @@ def _production_source_configuration(
     )
 
 
-def _assert_candidate_contract(
+def _assert_linguistic_source_contract(
     tmp_path: Path,
     configuration: ContractConfiguration,
     frontend: LinguisticFrontend,
 ) -> None:
-    """Run the same Thorn-owned candidate assertions for fixture and real NLP."""
+    """Require source preservation without generic mathematical interpretation."""
 
-    configuration.require(ContractCapability.LINGUISTIC_CANDIDATES)
     tmp_path.mkdir(parents=True, exist_ok=True)
     _assert_normalized_frontend_boundary(frontend)
     run = _write_project(
@@ -70,17 +69,7 @@ Fix $x\in X$ for the argument.
 """,
     )
 
-    candidate = next(item for item in run.project.symbol_table.candidates if item.name == "x")
-    assert candidate.status == InferenceStatus.AMBIGUOUS
-    assert candidate.source.text(run.main_file.read_text(encoding="utf-8")) == "x"
-    assert candidate.evidence
-    assert all(evidence.frontend == frontend.name for evidence in candidate.evidence)
-    assert all(evidence.source == candidate.math_source for evidence in candidate.evidence)
-    assert all(evidence.target == candidate.source for evidence in candidate.evidence)
-    assert all(evidence.dependency_path for evidence in candidate.evidence)
-
-    # Generic linguistic symbol candidates are observations, never mathematical
-    # authority merely because a mature NLP backend proposed them.
+    assert run.project.symbol_table.candidates == []
     assert all(symbol.name != "x" for symbol in run.project.symbol_table.symbols)
     run.assert_not_authoritative("x")
 
@@ -88,32 +77,31 @@ Fix $x\in X$ for the argument.
     assert statements is not None
     assert statements.complete
     assert statements.frontend == frontend.name
+    assert any(r"$x\in X$" in statement.text for statement in statements.statements)
 
-    payload = candidate.model_dump(mode="json")
+    payload = statements.model_dump(mode="json")
     assert isinstance(payload, dict)
     assert "spacy.tokens" not in repr(payload)
     assert "prose_declarations" not in run.project.model_dump(mode="json")
 
 
-def test_fixture_and_real_spacy_share_the_candidate_contract(tmp_path: Path) -> None:
-    fixture_configuration = LINGUISTIC_CONFIGURATIONS[1]
-    assert fixture_configuration.linguistic_factory is not None
-    fixture_frontend = fixture_configuration.linguistic_factory()
-    _assert_candidate_contract(tmp_path / "fixture", fixture_configuration, fixture_frontend)
+def test_fixture_and_real_spacy_share_source_only_symbol_contract(tmp_path: Path) -> None:
+    assert LINGUISTIC_CONFIGURATION.linguistic_factory is not None
+    fixture_frontend = LINGUISTIC_CONFIGURATION.linguistic_factory()
+    _assert_linguistic_source_contract(
+        tmp_path / "fixture",
+        LINGUISTIC_CONFIGURATION,
+        fixture_frontend,
+    )
 
     spacy_frontend = _spacy_frontend_or_skip()
     spacy_configuration = ContractConfiguration(
         name="local-spacy",
         frontend_factory=TreeSitterLatexFrontend,
         linguistic_factory=lambda: spacy_frontend,
-        capabilities=frozenset(
-            {
-                ContractCapability.PROJECT_SEMANTICS,
-                ContractCapability.LINGUISTIC_CANDIDATES,
-            }
-        ),
+        capabilities=frozenset({ContractCapability.PROJECT_SEMANTICS}),
     )
-    _assert_candidate_contract(tmp_path / "spacy", spacy_configuration, spacy_frontend)
+    _assert_linguistic_source_contract(tmp_path / "spacy", spacy_configuration, spacy_frontend)
 
 
 def test_real_spacy_prose_is_exact_retrievable_source_not_authority(tmp_path: Path) -> None:
@@ -125,12 +113,7 @@ def test_real_spacy_prose_is_exact_retrievable_source_not_authority(tmp_path: Pa
             name="tree-sitter-local-spacy",
             frontend_factory=TreeSitterLatexFrontend,
             linguistic_factory=lambda: frontend,
-            capabilities=frozenset(
-                {
-                    ContractCapability.PROJECT_SEMANTICS,
-                    ContractCapability.LINGUISTIC_CANDIDATES,
-                }
-            ),
+            capabilities=frozenset({ContractCapability.PROJECT_SEMANTICS}),
         ),
         rf"""
 {sentence}
@@ -155,7 +138,7 @@ The map $f$ is admissible.
     run.assert_not_authoritative("admissible")
 
 
-def test_structural_only_configuration_explicitly_omits_linguistic_capability() -> None:
-    structural_configuration = LINGUISTIC_CONFIGURATIONS[0]
+def test_structural_only_configuration_omits_local_nlp() -> None:
+    structural_configuration = STRUCTURAL_CONFIGURATIONS[0]
     assert ContractCapability.PROJECT_SEMANTICS in structural_configuration.capabilities
-    assert ContractCapability.LINGUISTIC_CANDIDATES not in structural_configuration.capabilities
+    assert structural_configuration.linguistic_factory is None

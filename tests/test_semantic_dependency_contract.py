@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from thorn.dependencies import DependencyResolution, ExtractedProject
-from thorn.evidence import InferenceStatus
 from thorn.frontend import LatexFrontend
 from thorn.frontends import RegexLatexFrontend
 from thorn.frontends.pylatexenc import PylatexencLatexFrontend
@@ -27,7 +26,6 @@ LinguisticFactory = Callable[[], LinguisticFrontend]
 
 class ContractCapability(StrEnum):
     PROJECT_SEMANTICS = "project-semantics"
-    LINGUISTIC_CANDIDATES = "linguistic-candidates"
 
 
 @dataclass(frozen=True)
@@ -194,72 +192,40 @@ Use Lemma~\ref{lem:dup} and Lemma~\ref{lem:missing}.
     assert all(edge.target_identifier is None for edge in unresolved)
 
 
-_PLACEHOLDER_RE = re.compile(r"THORN[A-Z]+\d+")
-
-
 class _StaticDependencyFrontend:
     name = "contract-static-dependencies"
 
     def parse(self, text: str) -> LinguisticDocument:
+        matches = list(re.finditer(r"\S+", text))
         tokens = [
             LinguisticToken(
-                index=0,
-                text="observed",
-                lemma="observe",
-                pos="VERB",
-                dependency="ROOT",
+                index=index,
+                text=match.group(0),
+                lemma=match.group(0),
+                pos="VERB" if index == 0 else "X",
+                dependency="ROOT" if index == 0 else "dep",
                 head_index=0,
                 sentence_index=0,
-                start=0,
-                end=0,
+                start=match.start(),
+                end=match.end(),
             )
+            for index, match in enumerate(matches)
         ]
-        for match in _PLACEHOLDER_RE.finditer(text):
-            tokens.append(
-                LinguisticToken(
-                    index=len(tokens),
-                    text=match.group(0),
-                    lemma=match.group(0),
-                    pos="PROPN",
-                    dependency="obl",
-                    head_index=0,
-                    sentence_index=0,
-                    start=match.start(),
-                    end=match.end(),
-                )
-            )
         return LinguisticDocument(text=text, tokens=tokens)
 
 
-LINGUISTIC_CONFIGURATIONS = (
-    STRUCTURAL_CONFIGURATIONS[0],
-    ContractConfiguration(
-        name="regex-static-nlp",
-        frontend_factory=RegexLatexFrontend,
-        linguistic_factory=_StaticDependencyFrontend,
-        capabilities=frozenset(
-            {
-                ContractCapability.PROJECT_SEMANTICS,
-                ContractCapability.LINGUISTIC_CANDIDATES,
-            }
-        ),
-    ),
+LINGUISTIC_CONFIGURATION = ContractConfiguration(
+    name="regex-static-nlp",
+    frontend_factory=RegexLatexFrontend,
+    linguistic_factory=_StaticDependencyFrontend,
+    capabilities=frozenset({ContractCapability.PROJECT_SEMANTICS}),
 )
 
 
-@pytest.mark.parametrize(
-    "configuration",
-    LINGUISTIC_CONFIGURATIONS,
-    ids=lambda configuration: configuration.name,
-)
-def test_linguistic_candidates_remain_non_authoritative(
-    tmp_path: Path,
-    configuration: ContractConfiguration,
-) -> None:
-    configuration.require(ContractCapability.LINGUISTIC_CANDIDATES)
+def test_linguistic_observations_do_not_become_symbol_authority(tmp_path: Path) -> None:
     run = _write_project(
         tmp_path,
-        configuration,
+        LINGUISTIC_CONFIGURATION,
         r"""
 \begin{theorem}\label{thm:main}
 A conclusion holds.
@@ -270,9 +236,10 @@ Fix $x\in X$ for the argument.
 """,
     )
 
-    candidate = next(item for item in run.project.symbol_table.candidates if item.name == "x")
-    assert candidate.status == InferenceStatus.AMBIGUOUS
-    raw = run.main_file.read_text(encoding="utf-8")
-    assert candidate.source.text(raw) == "x"
+    # This backend-independent contract does not require complete linguistic source
+    # regions from the reduced regex frontend. Production Tree-sitter source
+    # preservation is covered by the Local NLP contract; here the invariant is only
+    # that generic linguistic observations cannot change mathematical symbol authority.
+    assert run.project.symbol_table.candidates == []
     assert all(symbol.name != "x" for symbol in run.project.symbol_table.symbols)
     run.assert_not_authoritative("x")

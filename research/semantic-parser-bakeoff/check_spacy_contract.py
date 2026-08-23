@@ -15,7 +15,6 @@ from thorn.linguistic import (
 )
 from thorn.spacy_linguistic import SpacyLinguisticFrontend
 from thorn.support import QualifierKind, SupportKind
-from thorn.symbols import SymbolCandidateKind
 
 _CASES = Path(__file__).with_name("cases.json")
 _PLACEHOLDER_RE = re.compile(r"THORN[A-Z]+\d+")
@@ -160,24 +159,30 @@ def _assert_prior_claim_contract(
     return checked
 
 
-def _assert_symbol_and_binder_contract(
+def _assert_source_and_binder_contract(
     root: Path,
     frontend: SpacyLinguisticFrontend,
 ) -> None:
-    symbol_path = _write_case(
+    source_path = _write_case(
         root,
-        "symbol-contract",
+        "source-contract",
         r"Fix $x\in X$ for the argument. Put $c:=a+b$ for later use.",
     )
-    symbol_project = extract_project(symbol_path, linguistic_frontend=frontend)
-    candidates = {item.name: item for item in symbol_project.symbol_table.candidates}
-    assert candidates["x"].kind == SymbolCandidateKind.INTRODUCTION
-    assert candidates["c"].kind == SymbolCandidateKind.DEFINITION
-    assert candidates["x"].status == InferenceStatus.AMBIGUOUS
-    assert candidates["c"].status == InferenceStatus.AMBIGUOUS
-    assert candidates["x"].evidence[0].frontend == "spacy"
-    assert candidates["c"].evidence[0].frontend == "spacy"
-    assert all(symbol.name not in {"x", "c"} for symbol in symbol_project.symbol_table.symbols)
+    source_project = extract_project(source_path, linguistic_frontend=frontend)
+
+    # Generic linguistic parsing preserves exact reviewable source but does not invent
+    # a mathematical symbol interpretation. That ownership boundary is the #203
+    # replacement for the historical candidate-existence contract.
+    assert source_project.symbol_table.candidates == []
+    assert all(
+        symbol.name not in {"x", "c"} for symbol in source_project.symbol_table.symbols
+    )
+    statements = source_project.linguistic_statements
+    assert statements is not None
+    assert statements.complete
+    assert statements.frontend == "spacy"
+    assert any(r"$x\in X$" in statement.text for statement in statements.statements)
+    assert any(r"$c:=a+b$" in statement.text for statement in statements.statements)
 
     binder_path = _write_case(
         root,
@@ -211,7 +216,7 @@ def main() -> int:
         root = Path(directory)
         support_cases = _assert_result_support_contract(root, frontend, cases)
         prior_cases = _assert_prior_claim_contract(root, frontend, cases)
-        _assert_symbol_and_binder_contract(root, frontend)
+        _assert_source_and_binder_contract(root, frontend)
 
     print(
         json.dumps(
@@ -221,7 +226,7 @@ def main() -> int:
                 "prior_claim_cases_checked": prior_cases,
                 "contract": (
                     "Thorn-owned normalized structures, ambiguity/provenance semantics, "
-                    "and deterministic-graph isolation"
+                    "source preservation, and deterministic-graph isolation"
                 ),
                 "note": (
                     "raw dependency-template counts are diagnostic research output and are "
