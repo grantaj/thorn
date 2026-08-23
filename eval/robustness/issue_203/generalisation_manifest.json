@@ -1,0 +1,51 @@
+{
+  "format": "thorn-issue-203-generalisation/1",
+  "policy": "Frozen before retrieval measurement; ranks are observations, not expected answers.",
+  "cases": [
+    {
+      "id": "mechanical-tail-fade",
+      "class": "mechanically-varied-equivalent",
+      "equivalence_group": "decay-with-ambient-window",
+      "source": "eval/robustness/issue_203/mechanical_tail_fade.tex",
+      "target": "thm:tail",
+      "required_source_needles": ["A family has tail fade when", "A fixed horizon $H>0$ governs each comparison."]
+    },
+    {
+      "id": "mechanical-balanced-wrapper",
+      "class": "mechanically-varied-equivalent",
+      "equivalence_group": "definition-plus-ambient-domain",
+      "source": "eval/robustness/issue_203/mechanical_balanced_wrapper.tex",
+      "target": "thm:balanced",
+      "required_source_needles": ["A point is \\shade{balanced} exactly when", "The ambient box is $B=[-2,2]^2$."]
+    },
+    {
+      "id": "mechanical-admissible-reordered",
+      "class": "mechanically-varied-equivalent",
+      "equivalence_group": "definition-plus-ambient-parameter",
+      "source": "eval/robustness/issue_203/mechanical_admissible_reordered.tex",
+      "target": "thm:admissible",
+      "required_source_needles": ["The admissible pairs are precisely", "For this section the comparison scale is $\\rho=3$."]
+    },
+    {
+      "id": "heldout-core-vectors",
+      "class": "fresh-heldout",
+      "source": "eval/robustness/issue_203/heldout_core_vectors.tex",
+      "target": "thm:core",
+      "required_source_needles": ["The core comprises those vectors", "The reference radius has value $R=4$."]
+    },
+    {
+      "id": "heldout-quiet-regime",
+      "class": "fresh-heldout",
+      "source": "eval/robustness/issue_203/heldout_quiet_regime.tex",
+      "target": "thm:quiet",
+      "required_source_needles": ["A trajectory belongs to the quiet regime precisely if", "The observation interval is $I=[0,5]$."]
+    },
+    {
+      "id": "heldout-anchor-pairs",
+      "class": "fresh-heldout",
+      "source": "eval/robustness/issue_203/heldout_anchor_pairs.tex",
+      "target": "thm:anchor",
+      "required_source_needles": ["Anchor pairs consist of points", "The comparison map $F$ is $2$-Lipschitz"]
+    }
+  ]
+}
