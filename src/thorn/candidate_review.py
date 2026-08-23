@@ -48,6 +48,7 @@ def attach_advisory_context(
                 ),
                 text=candidate.text,
                 source_span=candidate.source,
+                source_range=candidate.source.source_range(),
             )
         )
         existing.add(key)
