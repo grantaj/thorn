@@ -14,7 +14,7 @@ from test_semantic_dependency_contract import (
 
 from thorn.context_retrieval import build_result_context_pools
 from thorn.evidence import InferenceStatus
-from thorn.frontends import RegexLatexFrontend
+from thorn.frontends.tree_sitter import TreeSitterLatexFrontend
 from thorn.linguistic import LinguisticDocument, LinguisticFrontend, LinguisticToken
 from thorn.spacy_linguistic import LinguisticFrontendUnavailable, SpacyLinguisticFrontend
 
@@ -35,6 +35,18 @@ def _assert_normalized_frontend_boundary(frontend: LinguisticFrontend) -> None:
     assert all(isinstance(token, LinguisticToken) for token in document.tokens)
 
 
+def _production_source_configuration(
+    configuration: ContractConfiguration,
+    frontend: LinguisticFrontend,
+) -> ContractConfiguration:
+    return ContractConfiguration(
+        name=f"tree-sitter-{configuration.name}",
+        frontend_factory=TreeSitterLatexFrontend,
+        linguistic_factory=lambda: frontend,
+        capabilities=configuration.capabilities,
+    )
+
+
 def _assert_candidate_contract(
     tmp_path: Path,
     configuration: ContractConfiguration,
@@ -47,12 +59,7 @@ def _assert_candidate_contract(
     _assert_normalized_frontend_boundary(frontend)
     run = _write_project(
         tmp_path,
-        ContractConfiguration(
-            name=configuration.name,
-            frontend_factory=configuration.frontend_factory,
-            linguistic_factory=lambda: frontend,
-            capabilities=configuration.capabilities,
-        ),
+        _production_source_configuration(configuration, frontend),
         r"""
 \begin{theorem}\label{thm:main}
 A conclusion holds.
@@ -96,8 +103,8 @@ def test_fixture_and_real_spacy_share_the_candidate_contract(tmp_path: Path) -> 
 
     spacy_frontend = _spacy_frontend_or_skip()
     spacy_configuration = ContractConfiguration(
-        name="regex-local-spacy",
-        frontend_factory=RegexLatexFrontend,
+        name="local-spacy",
+        frontend_factory=TreeSitterLatexFrontend,
         linguistic_factory=lambda: spacy_frontend,
         capabilities=frozenset(
             {
@@ -115,8 +122,8 @@ def test_real_spacy_prose_is_exact_retrievable_source_not_authority(tmp_path: Pa
     run = _write_project(
         tmp_path,
         ContractConfiguration(
-            name="regex-local-spacy",
-            frontend_factory=RegexLatexFrontend,
+            name="tree-sitter-local-spacy",
+            frontend_factory=TreeSitterLatexFrontend,
             linguistic_factory=lambda: frontend,
             capabilities=frozenset(
                 {
@@ -141,11 +148,7 @@ The map $f$ is admissible.
 
     pools = build_result_context_pools(run.project, "thm:main")
     assert pools
-    assert any(
-        candidate.text == sentence
-        for pool in pools
-        for candidate in pool.candidates
-    )
+    assert any(candidate.text == sentence for pool in pools for candidate in pool.candidates)
 
     # Retrieval eligibility is not authority. The old declaration grammar used to
     # promote this sentence; production now preserves it as exact advisory evidence.
