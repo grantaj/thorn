@@ -1,0 +1,86 @@
+name: Issue 213 local semantic experiment
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/issue-213-nli.yml"
+      - "pyproject.toml"
+      - "src/thorn/**"
+      - "research/dependency-semantics/**"
+      - "research/semantic-parser-bakeoff/**"
+
+jobs:
+  semantic-effect-screen:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ""
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install Thorn, Local NLP, and research-only NLI stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+          python -m spacy download en_core_web_sm
+          python -m pip install 'sentence-transformers>=5,<6'
+      - name: Re-run frozen issue 160 baselines
+        run: |
+          python research/semantic-parser-bakeoff/run_declaration_bakeoff.py \
+            --output /tmp/issue-160-baselines.json > /tmp/issue-160-baselines.stdout
+      - name: Run dictionary-free graph-effect screen
+        run: |
+          python research/dependency-semantics/run_nli_effect_screen.py \
+            --output /tmp/issue-213-nli.json > /tmp/issue-213-nli.stdout
+      - name: Verify cached offline execution
+        run: |
+          REVISION="$(python -c 'import json; print(json.load(open("/tmp/issue-213-nli.json"))["resolved_model_revision"])')"
+          HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+            python research/dependency-semantics/run_nli_effect_screen.py \
+              --revision "$REVISION" \
+              --output /tmp/issue-213-nli-offline.json > /tmp/issue-213-nli-offline.stdout
+          python - <<'PY'
+          import json
+          online = json.load(open('/tmp/issue-213-nli.json'))
+          offline = json.load(open('/tmp/issue-213-nli-offline.json'))
+          assert online['resolved_model_revision'] == offline['resolved_model_revision']
+          assert online['metrics'] == offline['metrics']
+          assert online['records'] == offline['records']
+          print('offline_replay_exact=true')
+          PY
+      - name: Print compact measurement summary
+        run: |
+          python - <<'PY'
+          import json
+          baseline = json.load(open('/tmp/issue-160-baselines.json'))
+          nli = json.load(open('/tmp/issue-213-nli.json'))
+          summary = {
+              'model': nli['model'],
+              'revision': nli['resolved_model_revision'],
+              'packages': nli['package_versions'],
+              'model_snapshot_bytes': nli['model_snapshot_bytes'],
+              'runtime': nli['runtime'],
+              'nli_metrics': nli['metrics'],
+              'issue160': [
+                  {key: report[key] for key in (
+                      'strategy', 'precision', 'recall', 'false_authority_risk',
+                      'lexical_challenge_recall', 'provenance_failures'
+                  )}
+                  for report in baseline['strategies']
+              ],
+          }
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+      - name: Upload measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-213-semantic-${{ github.sha }}
+          path: |
+            /tmp/issue-160-baselines.json
+            /tmp/issue-213-nli.json
+            /tmp/issue-213-nli-offline.json
+          if-no-files-found: error
