@@ -33,6 +33,17 @@ class FrontendRegionKind(StrEnum):
     MATH = "math"
 
 
+class FrontendSyntaxKind(StrEnum):
+    """Parser-owned syntax that is not a linguistic word.
+
+    This classification says nothing about the semantic meaning of the construct.
+    It only identifies source syntax that a linguistic segmentation view may mask
+    while retaining exact source provenance separately.
+    """
+
+    CONTROL = "control"
+
+
 class SourceSpan(BaseModel):
     """Exact source provenance for a normalized frontend fact.
 
@@ -90,6 +101,7 @@ class FrontendMath(BaseModel):
     delimiter: str
     raw: str
     span: SourceSpan
+    terminal_punctuation: SourceSpan | None = None
 
 
 class FrontendRegion(BaseModel):
@@ -101,6 +113,11 @@ class FrontendRegion(BaseModel):
         return self.kind == FrontendRegionKind.DOCUMENT_TEXT
 
 
+class FrontendSyntax(BaseModel):
+    kind: FrontendSyntaxKind
+    span: SourceSpan
+
+
 class FrontendFile(BaseModel):
     path: str
     raw: str
@@ -109,6 +126,8 @@ class FrontendFile(BaseModel):
     math: list[FrontendMath] = Field(default_factory=list)
     regions: list[FrontendRegion] = Field(default_factory=list)
     regions_complete: bool = False
+    syntax: list[FrontendSyntax] = Field(default_factory=list)
+    syntax_complete: bool = False
 
     def span(self, start: int, end: int) -> SourceSpan:
         """Construct an exact span without duplicating line/column arithmetic."""
