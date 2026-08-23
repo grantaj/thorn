@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from declaration_contract_frontend import DeclarationContractFrontend
+from candidate_context_contract import prepare_all_prior_context
+from sentence_contract_frontend import SentenceContractFrontend
+from thorn.context_retrieval import build_result_context_pools
 from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
 from thorn.llm_proof_language import parse_source_rescue_request, render_source_rescue
@@ -15,7 +17,6 @@ from thorn.proof_language_review import (
     advertised_source_addresses,
 )
 from thorn.report import ProofReviewReportInput, ReviewExecution, proof_review_metadata
-from thorn.review_workflow import prepare_proof_review
 
 ROOT = Path(__file__).resolve().parents[1]
 A2_SOURCE = ROOT / "eval" / "robustness" / "issue_101" / "variant_prose_uniformity.tex"
@@ -24,7 +25,7 @@ A2_SOURCE = ROOT / "eval" / "robustness" / "issue_101" / "variant_prose_uniformi
 def _extract(path: Path):
     return extract_project(
         path,
-        linguistic_frontend=DeclarationContractFrontend(),
+        linguistic_frontend=SentenceContractFrontend(),
     )
 
 
@@ -40,8 +41,7 @@ def _prepare(tmp_path: Path, body: str):
         encoding="utf-8",
     )
     project = _extract(paper)
-    unit = project.unit("thm:main")
-    return paper, prepare_proof_review(project, unit)
+    return paper, project, prepare_all_prior_context(project, "thm:main")
 
 
 def _source_matching(prepared, needle: str):
@@ -54,7 +54,7 @@ def test_reduced_prose_predicate_is_reachable_without_packet_prose(tmp_path: Pat
     definition = (
         "A map will be called \\emph{balanced} when every fibre contains exactly two points."
     )
-    paper, prepared = _prepare(
+    paper, project, prepared = _prepare(
         tmp_path,
         rf"""
 {definition}
@@ -78,13 +78,14 @@ The assertion follows from the construction.
     assert source.source_span is not None
     assert source.source_span.file == str(paper.resolve())
     assert source.source_span.text(paper.read_text(encoding="utf-8")) == definition
+    assert not any(symbol.name == "balanced" for symbol in project.symbol_table.symbols)
 
     request = parse_source_rescue_request(prepared.document, f"NEED_SOURCE {source.address}")
     rescue = render_source_rescue(prepared.document, request)
     assert definition in rescue.text
 
 
-def test_direct_project_semantics_survive_result_level_selection(tmp_path: Path) -> None:
+def test_prose_context_is_not_promoted_into_result_selector_authority(tmp_path: Path) -> None:
     paper = tmp_path / "paper.tex"
     paper.write_text(
         r"""\documentclass{article}
@@ -106,17 +107,23 @@ The assertion follows from the construction.
     project = _extract(paper)
 
     item = build_result_review_context(project, "thm:main").items[0]
-
-    assert any(symbol.name == "balanced" for symbol in item.symbols)
-    assert any(
+    assert all(symbol.name != "balanced" for symbol in item.symbols)
+    assert not any(
         "every fibre contains exactly two points" in definition.raw
         for definition in item.definitions
     )
 
+    pools = build_result_context_pools(project, "thm:main")
+    assert any(
+        "every fibre contains exactly two points" in candidate.text
+        for pool in pools
+        for candidate in pool.candidates
+    )
 
-def test_ambient_convention_is_reachable_when_result_uses_its_subject(tmp_path: Path) -> None:
+
+def test_ambient_convention_is_exact_reachable_context(tmp_path: Path) -> None:
     convention = r"Throughout, the coefficient ring is \(R=\mathbb Z/6\mathbb Z\)."
-    _, prepared = _prepare(
+    _, project, prepared = _prepare(
         tmp_path,
         rf"""
 {convention}
@@ -137,11 +144,12 @@ Apply the stated cancellation law.
         prepared.document,
         parse_source_rescue_request(prepared.document, f"NEED_SOURCE {source.address}"),
     ).text
+    assert not any(symbol.name == "coefficient ring" for symbol in project.symbol_table.symbols)
 
 
-def test_nearby_motivational_prose_is_not_semantic_source(tmp_path: Path) -> None:
+def test_nearby_motivational_prose_may_be_candidate_but_not_authority(tmp_path: Path) -> None:
     motivation = "Balanced maps are a useful illustration of finite covering phenomena."
-    _, prepared = _prepare(
+    _, project, prepared = _prepare(
         tmp_path,
         rf"""
 A map will be called \emph{{balanced}} when every fibre contains exactly two points.
@@ -158,16 +166,17 @@ The assertion follows from the construction.
 
     source_texts = [source.text for source in prepared.document.sources]
     assert any("every fibre contains exactly two points" in text for text in source_texts)
-    assert not any(motivation in text for text in source_texts)
+    assert any(motivation in text for text in source_texts)
     assert motivation not in prepared.document.render_initial()
+    assert not any(symbol.name == "balanced" for symbol in project.symbol_table.symbols)
 
 
-def test_held_out_geometric_predicate_uses_same_dependency_mechanism(tmp_path: Path) -> None:
+def test_held_out_geometric_predicate_uses_same_context_mechanism(tmp_path: Path) -> None:
     definition = (
         "A quadrilateral is called \\emph{diagonal-regular} when its two diagonals "
         "have equal length."
     )
-    _, prepared = _prepare(
+    _, project, prepared = _prepare(
         tmp_path,
         rf"""
 {definition}
@@ -185,13 +194,14 @@ Use the usual diagonal symmetry of a rectangle.
     assert source.address in set(advertised_source_addresses(prepared.document))
     assert "converg" not in source.text.lower()
     assert "uniform" not in source.text.lower()
+    assert not any(symbol.name == "regular" for symbol in project.symbol_table.symbols)
 
 
 def test_recovered_prose_keeps_report_source_navigation(tmp_path: Path) -> None:
     definition = (
         "A map will be called \\emph{balanced} when every fibre contains exactly two points."
     )
-    paper, prepared = _prepare(
+    paper, project, prepared = _prepare(
         tmp_path,
         rf"""
 {definition}
@@ -204,7 +214,6 @@ The assertion follows from the construction.
 \end{{proof}}
 """,
     )
-    project = _extract(paper)
     unit = project.unit("thm:main")
     source = _source_matching(prepared, "every fibre contains exactly two points")
     initial = ProofReviewTurnRequest(
@@ -222,7 +231,7 @@ The assertion follows from the construction.
             ProofReviewItem(
                 id="RV1",
                 kind="question",
-                summary="What is the authoritative meaning of balanced?",
+                summary="What source context defines balanced?",
             ),
         ),
         source_review_item_ids=("RV1",),
@@ -258,8 +267,8 @@ The assertion follows from the construction.
     assert report_source.uri is not None and report_source.uri.startswith("file:")
 
 
-def test_source_rescue_remains_closed_world_for_semantic_context(tmp_path: Path) -> None:
-    _, prepared = _prepare(
+def test_source_rescue_remains_closed_world_for_advisory_context(tmp_path: Path) -> None:
+    _, _, prepared = _prepare(
         tmp_path,
         r"""
 A map will be called \emph{balanced} when every fibre contains exactly two points.
@@ -279,7 +288,7 @@ The assertion follows from the construction.
 
 def test_historical_a2_definition_and_ambient_window_are_reachable() -> None:
     project = _extract(A2_SOURCE)
-    prepared = prepare_proof_review(project, project.unit("thm:uniform-decay"))
+    prepared = prepare_all_prior_context(project, "thm:uniform-decay")
     advertised = set(advertised_source_addresses(prepared.document))
 
     definition = _source_matching(prepared, "will be called \\emph{stable}")
