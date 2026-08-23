@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential #203 evidence for ablating legacy project prose authority."""
+"""Differential #203 evidence for ablating hand-written prose interpretation."""
 
 from __future__ import annotations
 
@@ -61,22 +61,28 @@ def _dependency_graph_snapshot(project: Any) -> dict[str, Any]:
     }
 
 
-def _normalized_evidence(project: Any) -> dict[str, Any]:
+def _generic_evidence(project: Any) -> dict[str, Any]:
+    """Facts that must survive removal of the legacy English interpretation layer."""
+
     statements = project.linguistic_statements
-    declarations = project.prose_declarations
+    workspace = project.workspace
     return {
         "statements": (
             statements.model_dump(mode="json") if statements is not None else None
         ),
-        "prose_declarations": (
-            declarations.model_dump(mode="json") if declarations is not None else None
-        ),
+        "workspace": workspace.model_dump(mode="json") if workspace is not None else None,
         "symbol_candidates": [
             candidate.model_dump(mode="json")
             for candidate in project.symbol_table.candidates
         ],
         "scopes": [scope.model_dump(mode="json") for scope in project.symbol_table.scopes],
+        "proof_support_graph": project.proof_support_graph.model_dump(mode="json"),
     }
+
+
+def _legacy_declaration_count(project: Any) -> int:
+    declarations = project.prose_declarations
+    return len(declarations.candidates) if declarations is not None else 0
 
 
 def _classify(
@@ -110,6 +116,7 @@ def _case(
         source,
         frontend=frontend,
         linguistic_frontend=linguistic,
+        legacy_prose_semantic_context=True,
     )
     candidate_project = extract_project(
         source,
@@ -119,12 +126,16 @@ def _case(
     )
     target = case["target"]
 
-    evidence_equal = _normalized_evidence(legacy_project) == _normalized_evidence(
+    generic_evidence_equal = _generic_evidence(legacy_project) == _generic_evidence(
         candidate_project
     )
-    if not evidence_equal:
+    if not generic_evidence_equal:
         errors.append(
-            f"{case['id']}: prose ablation changed normalized candidate/source evidence"
+            f"{case['id']}: declaration-grammar ablation changed generic source/NLP/workspace evidence"
+        )
+    if candidate_project.prose_declarations is not None:
+        errors.append(
+            f"{case['id']}: candidate still materialized the legacy prose declaration inventory"
         )
 
     dependency_graph_equal = _dependency_graph_snapshot(
@@ -132,7 +143,7 @@ def _case(
     ) == _dependency_graph_snapshot(candidate_project)
     if not dependency_graph_equal:
         errors.append(
-            f"{case['id']}: prose ablation changed structural theorem dependency graph"
+            f"{case['id']}: declaration-grammar ablation changed structural theorem dependency graph"
         )
 
     pools = build_result_context_pools(candidate_project, target)
@@ -199,7 +210,7 @@ def _case(
             lost_sources = sorted(legacy_sources - candidate_sources)
             if lost_sources:
                 errors.append(
-                    f"{case['id']}: source/provenance loss after prose ablation under "
+                    f"{case['id']}: source/provenance loss after declaration-grammar ablation under "
                     f"{ranker.name}: {lost_sources}"
                 )
 
@@ -229,7 +240,7 @@ def _case(
                         ),
                         "canonical_state_equal": state_equal,
                         "structural_dependency_graph_equal": dependency_graph_equal,
-                        "normalized_candidate_evidence_equal": evidence_equal,
+                        "generic_evidence_equal": generic_evidence_equal,
                         "legacy_project_dependencies": legacy_dependencies,
                         "candidate_project_dependencies": candidate_dependencies,
                         "legacy_only_project_dependency_ids": sorted(
@@ -259,6 +270,8 @@ def _case(
             ),
             "statement_count": len(statements.statements) if statements is not None else 0,
             "target_occurrence_count": len(pools),
+            "legacy_prose_declaration_count": _legacy_declaration_count(legacy_project),
+            "candidate_prose_declaration_inventory": candidate_project.prose_declarations,
             "legacy_project_dependency_count": len(legacy_dependencies),
             "candidate_project_dependency_count": len(candidate_dependencies),
             "measurements": measurements,
@@ -303,9 +316,9 @@ def main() -> int:
             errors.extend(case_errors)
 
     report = {
-        "format": "thorn-issue-203-prose-semantic-ablation/1",
+        "format": "thorn-issue-203-prose-declaration-ablation/1",
         "issue": 203,
-        "ablation": "legacy-project-prose-semantic-authority",
+        "ablation": "legacy-prose-declaration-grammar-and-semantic-authority",
         "provider_call_made": False,
         "retrieval_authority": False,
         "bounded_candidate_semantics": "truncation-not-irrelevance",
