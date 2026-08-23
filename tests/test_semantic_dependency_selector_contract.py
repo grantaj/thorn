@@ -1,24 +1,16 @@
-"""Contract observations for Thorn's two current review-context selectors."""
+"""Contract observations for Thorn's review-context selectors."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Protocol
 
-import pytest
-from test_semantic_dependency_contract import (
-    PROSE_AUTHORITY_CONFIGURATIONS,
-    ContractConfiguration,
-    _write_project,
-)
 from test_semantic_review import make_project
 
 from thorn.eval_review import build_result_review_context
-from thorn.evidence import InferenceStatus, StructuralEvidence
+from thorn.evidence import InferenceStatus
 from thorn.frontend import SourceSpan
 from thorn.semantic_review import SemanticReviewItem, build_review_context
-from thorn.support import SupportEdge, SupportKind
 
 
 class _Identified(Protocol):
@@ -68,9 +60,8 @@ def _assert_canonical_selector_projection(project: object, item: SemanticReviewI
         trigger = canonical_relations[trigger_identifier]
         assert trigger.status in {InferenceStatus.AMBIGUOUS, InferenceStatus.UNRESOLVED}
 
-    # Selector-visible mathematical context must correspond to canonical Symbol
-    # IR objects. This comparison intentionally derives identifiers from the item
-    # rather than freezing any private identifier spelling.
+    # Selector-visible mathematical context must correspond to canonical Symbol IR
+    # objects. Ambiguous linguistic candidates stay candidates after projection.
     canonical_symbols = _canonical_by_identifier(table.symbols)
     canonical_definitions = _canonical_by_identifier(table.definitions)
     canonical_constraints = _canonical_by_identifier(table.constraints)
@@ -86,7 +77,8 @@ def _assert_canonical_selector_projection(project: object, item: SemanticReviewI
         assert candidate.status != InferenceStatus.CONFIDENT
 
     # Nearby prose is admitted only through exact evidence already attached to a
-    # selected canonical support relation. There is no whole-paper fallback here.
+    # selected canonical support relation. Generic project context now belongs to
+    # the separate advisory statement/retrieval boundary, not selector-private state.
     canonical_context = {
         (evidence.context.strip(), _source_key(evidence.source))
         for relation in item.support_relations
@@ -109,40 +101,6 @@ def _item_with_dependency_statement(
     )
 
 
-def _item_with_trigger(
-    items: list[SemanticReviewItem],
-    trigger_identifier: str,
-) -> SemanticReviewItem:
-    return next(
-        item for item in items if trigger_identifier in item.trigger_relation_identifiers
-    )
-
-
-def _selected_declarations(item: SemanticReviewItem) -> list[object]:
-    return [*item.definitions, *item.hypotheses, *item.local_constraints]
-
-
-def _assert_exact_canonical_declaration(
-    project: object,
-    item: SemanticReviewItem,
-    source_text: str,
-) -> object:
-    canonical = [
-        declaration
-        for declaration in [
-            *project.symbol_table.definitions,
-            *project.symbol_table.constraints,
-        ]
-        if declaration.raw == source_text
-    ]
-    assert len(canonical) == 1
-    declaration = canonical[0]
-    assert declaration in _selected_declarations(item)
-    raw_file = Path(declaration.source.file).read_text(encoding="utf-8")
-    assert declaration.source.text(raw_file) == source_text
-    return declaration
-
-
 def test_current_selectors_project_canonical_authority_and_uncertainty() -> None:
     project = make_project()
     result_item = build_result_review_context(project, project.units[0].identifier).items[0]
@@ -155,8 +113,8 @@ def test_current_selectors_project_canonical_authority_and_uncertainty() -> None
     for item in (result_item, targeted_item):
         _assert_canonical_selector_projection(project, item)
 
-        # Structured result dependency and local semantic context compose inside
-        # the same Thorn-owned item; neither selector gets a private authority graph.
+        # Structured result dependency and explicit mathematical context compose
+        # inside the same Thorn-owned item; neither selector gets a private graph.
         assert any(
             dependency.statement == "The needed local estimate is valid."
             for dependency in item.dependencies
@@ -164,121 +122,9 @@ def test_current_selectors_project_canonical_authority_and_uncertainty() -> None
         assert any(definition.raw == "Define $f(x)=x$." for definition in item.definitions)
         assert any(constraint.raw == "$x>0$" for constraint in item.hypotheses)
 
-        # Ambiguous candidate evidence remains candidate evidence after projection.
         candidate = next(candidate for candidate in item.symbol_candidates if candidate.name == "z")
         assert candidate.status == InferenceStatus.AMBIGUOUS
         assert all(symbol.name != candidate.name for symbol in item.symbols)
-
-
-@pytest.mark.parametrize(
-    "configuration",
-    PROSE_AUTHORITY_CONFIGURATIONS,
-    ids=lambda configuration: configuration.name,
-)
-def test_both_selectors_preserve_transitive_project_semantic_closure(
-    tmp_path: Path,
-    configuration: ContractConfiguration,
-) -> None:
-    convention = r"Throughout, the base field is $K=\mathbb R$."
-    definition = "A matrix is called regular when its determinant is nonzero over the base field."
-    run = _write_project(
-        tmp_path,
-        configuration,
-        rf"""
-{convention}
-{definition}
-
-\begin{{lemma}}\label{{lem:criterion}}
-A matrix with nonzero determinant is invertible.
-\end{{lemma}}
-\begin{{proof}}Use the adjugate formula.\end{{proof}}
-
-\begin{{lemma}}\label{{lem:aside}}
-The identity matrix is invertible.
-\end{{lemma}}
-\begin{{proof}}Its inverse is itself.\end{{proof}}
-
-\begin{{theorem}}\label{{thm:main}}
-Every regular matrix is invertible; compare Lemma~\ref{{lem:aside}}.
-\end{{theorem}}
-\begin{{proof}}
-Apply Lemma~\ref{{lem:criterion}}.
-\end{{proof}}
-""",
-    )
-    project = run.project
-
-    # Use a real extracted project-scope declaration chain, but inject only the
-    # uncertainty trigger needed to exercise targeted policy. This characterizes
-    # selector behavior without extending prose recognition or choosing a policy.
-    claims = project.proof_support_graph.claims_for_result("thm:main")
-    assert claims
-    trigger_claim = claims[0]
-    trigger_identifier = "selector-contract:criterion-support"
-    project.proof_support_graph.edges.append(
-        SupportEdge(
-            identifier=trigger_identifier,
-            target_claim_identifier=trigger_claim.identifier,
-            kind=SupportKind.RESULT_REFERENCE,
-            source=trigger_claim.source,
-            raw_justification=r"Lemma~\ref{lem:criterion}",
-            target_label="lem:criterion",
-            status=InferenceStatus.UNRESOLVED,
-            confidence=None,
-            evidence=[
-                StructuralEvidence(
-                    reason="contract-only uncertain support role",
-                    source=trigger_claim.source,
-                    context=trigger_claim.raw,
-                    frontend="selector-contract-fixture",
-                )
-            ],
-        )
-    )
-
-    result_item = build_result_review_context(project, "thm:main").items[0]
-    targeted_item = _item_with_trigger(build_review_context(project).items, trigger_identifier)
-    criterion = project.dependency_graph.node("lem:criterion")
-    aside = project.dependency_graph.node("lem:aside")
-
-    regular_declaration = next(
-        declaration
-        for declaration in [
-            *project.symbol_table.definitions,
-            *project.symbol_table.constraints,
-        ]
-        if declaration.raw == definition
-    )
-    base_field_declaration = next(
-        declaration
-        for declaration in [
-            *project.symbol_table.definitions,
-            *project.symbol_table.constraints,
-        ]
-        if declaration.raw == convention
-    )
-    regular_symbol = project.symbol_table.symbol(regular_declaration.symbol_identifier)
-    assert any(
-        use.scope_identifier == "project"
-        and use.resolved_symbol_identifier == base_field_declaration.symbol_identifier
-        and use.source.file == regular_symbol.introduction_source.file
-        and regular_symbol.introduction_source.start_offset <= use.source.start_offset
-        and use.source.end_offset <= regular_symbol.introduction_source.end_offset
-        for use in project.symbol_table.uses
-    )
-
-    for item in (result_item, targeted_item):
-        _assert_canonical_selector_projection(project, item)
-        assert criterion in item.dependencies
-        _assert_exact_canonical_declaration(project, item, definition)
-        _assert_exact_canonical_declaration(project, item, convention)
-
-    # The shared mathematical closure is canonical, while dependency breadth is
-    # still selector policy: result-wide selection keeps both direct references;
-    # the targeted item keeps only the dependency implicated by its trigger.
-    assert aside in result_item.dependencies
-    assert aside not in targeted_item.dependencies
-    assert trigger_identifier in targeted_item.trigger_relation_identifiers
 
 
 def test_selector_policy_differences_remain_observations_not_shared_authority() -> None:
