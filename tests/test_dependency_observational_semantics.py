@@ -21,12 +21,16 @@ def _paper(body: str) -> str:
 
 
 def _definition(snapshot, name: str) -> str | None:
-    matches = [item for item in snapshot.declarations if item.name == name]
+    matches = [item for item in snapshot.semantic.declarations if item.name == name]
     assert len(matches) <= 1
     if not matches or not matches[0].definition_expressions:
         return None
     assert len(matches[0].definition_expressions) == 1
     return matches[0].definition_expressions[0]
+
+
+def _declaration_provenance(snapshot, key: str):
+    return next(item for item in snapshot.provenance.declarations if item.key == key)
 
 
 def test_q_snapshot_detects_alias_semantic_loss_without_losing_formula_control(
@@ -55,6 +59,9 @@ def test_q_snapshot_detects_alias_semantic_loss_without_losing_formula_control(
     assert _definition(baseline, r"\star") == "x+y"
     assert _definition(baseline, "q") == "1"
 
+    baseline_q = next(item for item in baseline.semantic.declarations if item.name == "q")
+    baseline_q_provenance = _declaration_provenance(baseline, baseline_q.key)
+
     monkeypatch.setattr(project_context, "_ALIAS_BRIDGE_RE", re.compile(r"(?!)"))
     candidate = snapshot_dependency_observations(
         extract_project(main, frontend=RegexLatexFrontend())
@@ -62,22 +69,52 @@ def test_q_snapshot_detects_alias_semantic_loss_without_losing_formula_control(
 
     assert _definition(candidate, r"\star") is None
     assert _definition(candidate, "q") == "1"
-    assert baseline != candidate
+    assert baseline.semantic != candidate.semantic
+
+    candidate_q = next(item for item in candidate.semantic.declarations if item.name == "q")
+    assert candidate_q == baseline_q
+    assert _declaration_provenance(candidate, candidate_q.key) == baseline_q_provenance
 
     baseline_result = next(
-        item for item in baseline.results if item.result_identifier == "thm:use"
+        item for item in baseline.semantic.results if item.result_identifier == "thm:use"
     )
     candidate_result = next(
-        item for item in candidate.results if item.result_identifier == "thm:use"
+        item for item in candidate.semantic.results if item.result_identifier == "thm:use"
     )
     assert any(
-        key.startswith(r"\star@")
+        key.startswith(r"\star#")
         for key in baseline_result.project_declaration_dependencies
     )
     assert not any(
-        key.startswith(r"\star@")
+        key.startswith(r"\star#")
         for key in candidate_result.project_declaration_dependencies
     )
+
+
+def test_semantic_q_ignores_source_offset_changes_while_provenance_p_tracks_them(
+    tmp_path: Path,
+) -> None:
+    """Source relocation changes assurance evidence, not dependency semantics."""
+
+    main = tmp_path / "main.tex"
+    body = (
+        "Set $q = 1$.\n"
+        "\\begin{theorem}\\label{thm:use}\n"
+        "$q=q$.\n"
+        "\\end{theorem}\n"
+    )
+    main.write_text(_paper(body), encoding="utf-8")
+    original = snapshot_dependency_observations(
+        extract_project(main, frontend=RegexLatexFrontend())
+    )
+
+    main.write_text(_paper("\n\n" + body), encoding="utf-8")
+    shifted = snapshot_dependency_observations(
+        extract_project(main, frontend=RegexLatexFrontend())
+    )
+
+    assert original.semantic == shifted.semantic
+    assert original.provenance != shifted.provenance
 
 
 def test_q_snapshot_observes_project_shadowing_by_expanded_source_order(tmp_path: Path) -> None:
@@ -100,23 +137,18 @@ def test_q_snapshot_observes_project_shadowing_by_expanded_source_order(tmp_path
     snapshot = snapshot_dependency_observations(
         extract_project(main, frontend=RegexLatexFrontend())
     )
-    q_declarations = [item for item in snapshot.declarations if item.name == "q"]
+    q_declarations = [item for item in snapshot.semantic.declarations if item.name == "q"]
     assert [item.definition_expressions for item in q_declarations] == [["1"], ["2"]]
+    assert [item.key for item in q_declarations] == ["q#0", "q#1"]
 
     theorem_uses = [
         use
-        for use in snapshot.uses
+        for use in snapshot.semantic.uses
         if use.result_identifier == "thm:after" and use.name == "q"
     ]
     assert theorem_uses
     targets = {use.target_key for use in theorem_uses}
-    assert len(targets) == 1
-    target = next(iter(targets))
-    assert target is not None
-    second_key = next(
-        item.key for item in q_declarations if item.definition_expressions == ["2"]
-    )
-    assert target == second_key
+    assert targets == {"q#1"}
 
 
 def test_q_snapshot_preserves_repeated_occurrence_fail_closed_resolution(tmp_path: Path) -> None:
@@ -143,7 +175,7 @@ def test_q_snapshot_preserves_repeated_occurrence_fail_closed_resolution(tmp_pat
     )
     child_uses = [
         use
-        for use in snapshot.uses
+        for use in snapshot.semantic.uses
         if use.result_identifier == "thm:child" and use.name == "q"
     ]
     assert child_uses
