@@ -1,11 +1,125 @@
 from __future__ import annotations
 
-from thorn.context_retrieval import BoundedContextProposal, ContextProposalStatus
+import hashlib
+import json
+
+from thorn.context_retrieval import (
+    BoundedContextProposal,
+    ContextCandidate,
+    ContextProposalStatus,
+    ResultContextPool,
+)
 from thorn.dependencies import ExtractedProject
 from thorn.llm_proof_language import LLMProofLanguage, ProofLanguageSourceHandle
 from thorn.models import TheoremUnit
 from thorn.review_cache import ReviewCacheProvenance
 from thorn.review_workflow import PreparedProofReview, prepare_proof_review
+
+
+def _advisory_identifier(candidate: ContextCandidate) -> str:
+    return (
+        f"advisory-context:{candidate.occurrence_id}:"
+        f"{candidate.statement_identifier}"
+    )
+
+
+def _context_digest(
+    candidates: tuple[ContextCandidate, ...],
+    *,
+    target_occurrence_id: str | None,
+    total_candidate_count: int,
+    truncated: bool,
+) -> str:
+    payload = {
+        "target_occurrence_id": target_occurrence_id,
+        "total_candidate_count": total_candidate_count,
+        "truncated": truncated,
+        "candidates": [
+            {
+                "identifier": candidate.identifier,
+                "statement_identifier": candidate.statement_identifier,
+                "occurrence_id": candidate.occurrence_id,
+                "text": candidate.text,
+                "source": candidate.source.model_dump(mode="json"),
+            }
+            for candidate in candidates
+        ],
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+def _next_context_index(document: LLMProofLanguage) -> int:
+    indices = [
+        int(source.address.removeprefix("CCTX"))
+        for source in document.sources
+        if source.address.startswith("CCTX")
+        and source.address.removeprefix("CCTX").isdigit()
+    ]
+    return max(indices, default=0) + 1
+
+
+def _attach_candidates(
+    document: LLMProofLanguage,
+    candidates: tuple[ContextCandidate, ...],
+    *,
+    target_occurrence_id: str | None,
+    total_candidate_count: int,
+    truncated: bool,
+) -> LLMProofLanguage:
+    if not candidates:
+        return document
+
+    existing = {
+        source.ir_identifier: source.address
+        for source in document.sources
+        if source.ir_identifier.startswith("advisory-context:")
+    }
+    handles: list[ProofLanguageSourceHandle] = []
+    addresses: list[str] = []
+    next_index = _next_context_index(document)
+
+    for candidate in candidates:
+        identifier = _advisory_identifier(candidate)
+        address = existing.get(identifier)
+        if address is None:
+            address = f"CCTX{next_index}"
+            next_index += 1
+            handles.append(
+                ProofLanguageSourceHandle(
+                    address=address,
+                    ir_identifier=identifier,
+                    text=candidate.text,
+                    source_span=candidate.source,
+                    source_range=candidate.source.source_range(),
+                )
+            )
+            existing[identifier] = address
+        addresses.append(address)
+
+    digest = _context_digest(
+        candidates,
+        target_occurrence_id=target_occurrence_id,
+        total_candidate_count=total_candidate_count,
+        truncated=truncated,
+    )
+    marker = "CONTEXT_TRUNCATED" if truncated else "CONTEXT"
+    target = target_occurrence_id or "unknown"
+    line = (
+        f"{marker} target={target} @{','.join(addresses)} "
+        f"shown={len(candidates)}/{total_candidate_count} context={digest}"
+    )
+    return document.model_copy(
+        update={
+            "lines": (*document.lines, line),
+            "sources": (*document.sources, *handles),
+        }
+    )
 
 
 def attach_advisory_context(
@@ -16,54 +130,39 @@ def attach_advisory_context(
 
     if proposal.status != ContextProposalStatus.COMPLETE or not proposal.candidates:
         return document
-
-    existing = {
-        (
-            source.source_span.file,
-            source.source_span.start_offset,
-            source.source_span.end_offset,
-            source.text,
-        )
-        for source in document.sources
-        if source.source_span is not None
-    }
-    handles: list[ProofLanguageSourceHandle] = []
-    for item in proposal.candidates:
-        candidate = item.candidate
-        key = (
-            candidate.source.file,
-            candidate.source.start_offset,
-            candidate.source.end_offset,
-            candidate.text,
-        )
-        if key in existing:
-            continue
-        address = f"CCTX{len(handles) + 1}"
-        handles.append(
-            ProofLanguageSourceHandle(
-                address=address,
-                ir_identifier=(
-                    f"advisory-context:{candidate.occurrence_id}:"
-                    f"{candidate.statement_identifier}"
-                ),
-                text=candidate.text,
-                source_span=candidate.source,
-                source_range=candidate.source.source_range(),
-            )
-        )
-        existing.add(key)
-
-    if not handles:
-        return document
-    addresses = ",".join(handle.address for handle in handles)
-    marker = "CONTEXT_TRUNCATED" if proposal.truncated else "CONTEXT"
-    line = f"{marker} @{addresses} shown={len(handles)}/{proposal.total_candidate_count}"
-    return document.model_copy(
-        update={
-            "lines": (*document.lines, line),
-            "sources": (*document.sources, *handles),
-        }
+    return _attach_candidates(
+        document,
+        tuple(item.candidate for item in proposal.candidates),
+        target_occurrence_id=proposal.target_occurrence_id,
+        total_candidate_count=proposal.total_candidate_count,
+        truncated=proposal.truncated,
     )
+
+
+def attach_complete_advisory_context(
+    document: LLMProofLanguage,
+    pools: tuple[ResultContextPool, ...],
+) -> LLMProofLanguage:
+    """Advertise every eligible prior statement, preserving occurrence identity.
+
+    This is the production correctness path. It makes no relevance judgment and does
+    not truncate. Generic ranking may later provide a smaller advisory view, but
+    omission from such a view must never become the only way exact prior source is
+    reachable to review.
+    """
+
+    enriched = document
+    for pool in pools:
+        if pool.status != ContextProposalStatus.COMPLETE or not pool.candidates:
+            continue
+        enriched = _attach_candidates(
+            enriched,
+            pool.candidates,
+            target_occurrence_id=pool.target_occurrence_id,
+            total_candidate_count=len(pool.candidates),
+            truncated=False,
+        )
+    return enriched
 
 
 def prepare_candidate_proof_review(
@@ -71,7 +170,7 @@ def prepare_candidate_proof_review(
     unit: TheoremUnit,
     proposal: BoundedContextProposal,
 ) -> PreparedProofReview:
-    """Build ordinary Thorn proof state plus advisory ranked source reachability.
+    """Build canonical proof state plus one advisory ranked source proposal.
 
     Retrieval does not modify claims, symbols, dependencies, support relations or
     their certainty. It only extends the exact, closed-world source handles that a
@@ -81,7 +180,11 @@ def prepare_candidate_proof_review(
 
     if proposal.result_identifier != unit.identifier:
         raise ValueError("context proposal does not match the requested result")
-    prepared = prepare_proof_review(project, unit)
+    prepared = prepare_proof_review(
+        project,
+        unit,
+        include_advisory_context=False,
+    )
     document = attach_advisory_context(prepared.document, proposal)
     provenance = prepared.provenance
     if provenance is None:
