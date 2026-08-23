@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 from thorn.dependencies import ExtractedProject
 from thorn.eval_review import build_result_review_context
-from thorn.llm_proof_language import LLMProofLanguage, project_llm_proof_language
+from thorn.llm_proof_language import (
+    LLMProofLanguage,
+    ProofLanguageSourceHandle,
+    project_llm_proof_language,
+)
 from thorn.models import AttackReport, TheoremUnit
 from thorn.proof_language_review import (
     ProofLanguageReviewRequest,
@@ -32,6 +36,7 @@ from thorn.review_cache import (
     proof_review_cache_key,
     review_contract_identity,
 )
+from thorn.semantic_review import SemanticReviewItem
 from thorn.semantic_review_render import build_semantic_review_request
 from thorn.semantic_transformations import (
     SemanticTransformationIR,
@@ -86,6 +91,87 @@ class _TracingTransport:
         return self._transport.review_proof_turn(request)
 
 
+def _source_key(file: str, start: int, end: int) -> tuple[str, int, int]:
+    return file, start, end
+
+
+def _with_statement_sources(
+    project: ExtractedProject,
+    item: SemanticReviewItem,
+    document: LLMProofLanguage,
+) -> LLMProofLanguage:
+    """Advertise exact NLP-delimited statements without turning them into semantic roles."""
+
+    inventory = project.linguistic_statements
+    if inventory is None or not inventory.complete:
+        return document
+
+    statement_keys = {
+        (
+            statement.source.file,
+            statement.source.start_offset,
+            statement.source.end_offset,
+            statement.text,
+        )
+        for statement in inventory.statements
+    }
+    contexts = [
+        context
+        for context in item.nearby_context
+        if (
+            context.source.file,
+            context.source.start_offset,
+            context.source.end_offset,
+            context.text,
+        )
+        in statement_keys
+    ]
+    if not contexts:
+        return document
+
+    existing_spans = {
+        _source_key(
+            source.source_span.file,
+            source.source_span.start_offset,
+            source.source_span.end_offset,
+        )
+        for source in document.sources
+        if source.source_span is not None
+    }
+    handles: list[ProofLanguageSourceHandle] = []
+    for context in contexts:
+        key = _source_key(
+            context.source.file,
+            context.source.start_offset,
+            context.source.end_offset,
+        )
+        if key in existing_spans:
+            continue
+        address = f"SCTX{len(handles) + 1}"
+        handles.append(
+            ProofLanguageSourceHandle(
+                address=address,
+                ir_identifier=(
+                    f"statement-context:{context.source.file}:"
+                    f"{context.source.start_offset}:{context.source.end_offset}"
+                ),
+                text=context.text,
+                source_span=context.source,
+            )
+        )
+        existing_spans.add(key)
+
+    if not handles:
+        return document
+    addresses = ",".join(handle.address for handle in handles)
+    return document.model_copy(
+        update={
+            "lines": (*document.lines, f"CONTEXT @{addresses}"),
+            "sources": (*document.sources, *handles),
+        }
+    )
+
+
 def _build_review_state(
     project: ExtractedProject,
     unit: TheoremUnit,
@@ -93,14 +179,16 @@ def _build_review_state(
     context = build_result_review_context(project, unit.identifier)
     if len(context.items) != 1:
         raise ValueError(f"expected exactly one review item for {unit.identifier!r}")
-    semantic_request = build_semantic_review_request(context.items[0])
+    item = context.items[0]
+    semantic_request = build_semantic_review_request(item)
     state = build_semantic_transformation_ir(
         unit,
         semantic_request,
         symbol_table=project.symbol_table,
         dependency_graph=project.dependency_graph,
     )
-    return state, project_llm_proof_language(state)
+    document = project_llm_proof_language(state)
+    return state, _with_statement_sources(project, item, document)
 
 
 def _target_content_fingerprint(unit: TheoremUnit) -> str:
