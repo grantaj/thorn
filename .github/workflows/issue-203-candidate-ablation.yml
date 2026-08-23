@@ -5,15 +5,19 @@ on:
     branches:
       - issue-203-mature-substrate-ablation
       - issue-203-ablate-prose-semantic-context
+      - issue-203-ablate-project-alias
   pull_request:
     paths:
       - ".github/workflows/issue-203-candidate-ablation.yml"
       - "eval/robustness/issue_203/**"
       - "scripts/measure_issue_203_candidate.py"
+      - "scripts/measure_issue_203_project_context.py"
       - "src/thorn/candidate_review.py"
       - "src/thorn/context_retrieval.py"
       - "src/thorn/latex.py"
       - "src/thorn/linguistic_statements.py"
+      - "src/thorn/project_context.py"
+      - "src/thorn/symbols.py"
       - "src/thorn/frontends/tree_sitter.py"
   workflow_dispatch:
 
@@ -61,6 +65,10 @@ jobs:
             --manifest /tmp/issue-198-frozen-manifest.json \
             --manifest eval/robustness/issue_203/generalisation_manifest.json \
             --output /tmp/issue-203-candidate-evidence.json
+      - name: Measure project-context alias ablation
+        run: |
+          python scripts/measure_issue_203_project_context.py \
+            --output /tmp/issue-203-project-context-evidence.json
       - name: Upload production candidate evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,5 +77,6 @@ jobs:
           path: |
             /tmp/issue-198-frozen-manifest.json
             /tmp/issue-203-candidate-evidence.json
+            /tmp/issue-203-project-context-evidence.json
             eval/robustness/issue_203/generalisation_manifest.json
           if-no-files-found: warn
