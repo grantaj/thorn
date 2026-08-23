@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - issue-203-mature-substrate-ablation
+      - issue-203-ablate-prose-semantic-context
   pull_request:
     paths:
       - ".github/workflows/issue-203-candidate-ablation.yml"
       - "eval/robustness/issue_203/**"
       - "scripts/measure_issue_203_candidate.py"
+      - "scripts/measure_issue_203_prose_ablation.py"
       - "src/thorn/candidate_review.py"
       - "src/thorn/context_retrieval.py"
+      - "src/thorn/latex.py"
       - "src/thorn/linguistic_statements.py"
       - "src/thorn/frontends/tree_sitter.py"
   workflow_dispatch:
@@ -74,21 +77,21 @@ jobs:
           python scripts/prepare_issue_198_qualification.py \
             --manifest /tmp/issue-198-legacy-control-manifest.json \
             --output /tmp/issue-198-legacy-control.json
-      - name: Measure advisory candidate on frozen evidence
+      - name: Measure prose semantic-context ablation on frozen evidence
         run: |
-          python scripts/measure_issue_203_candidate.py \
+          python scripts/measure_issue_203_prose_ablation.py \
             --manifest /tmp/issue-198-frozen-manifest.json \
             --manifest eval/robustness/issue_203/generalisation_manifest.json \
-            --output /tmp/issue-203-candidate-evidence.json
+            --output /tmp/issue-203-prose-ablation-evidence.json
       - name: Upload differential evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: issue-203-candidate-evidence-${{ github.sha }}
+          name: issue-203-prose-ablation-evidence-${{ github.sha }}
           path: |
             /tmp/issue-198-frozen-manifest.json
             /tmp/issue-198-legacy-control-manifest.json
             /tmp/issue-198-legacy-control.json
-            /tmp/issue-203-candidate-evidence.json
+            /tmp/issue-203-prose-ablation-evidence.json
             eval/robustness/issue_203/generalisation_manifest.json
           if-no-files-found: warn
