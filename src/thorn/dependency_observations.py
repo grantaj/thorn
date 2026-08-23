@@ -155,16 +155,16 @@ def _semantic_symbol_keys(symbols: list[Symbol]) -> dict[str, str]:
     return keys
 
 
-def _semantic_use_keys(uses: list[SymbolUse]) -> dict[str, str]:
+def _semantic_use_keys(uses: list[SymbolUse]) -> list[str]:
     """Assign coordinate-free local keys to uses for provenance correspondence."""
 
     ordinals: dict[str, int] = defaultdict(int)
-    keys: dict[str, str] = {}
+    keys: list[str] = []
     for use in uses:
         name = canonical_symbol_name(use.name)
         ordinal = ordinals[name]
         ordinals[name] += 1
-        keys[use.identifier] = f"{name}-use#{ordinal}"
+        keys.append(f"{name}-use#{ordinal}")
     return keys
 
 
@@ -232,9 +232,8 @@ def snapshot_dependency_observations(
 
     semantic_uses: list[SemanticUseResolutionObservation] = []
     use_provenance: list[UseProvenanceObservation] = []
-    for use in uses:
+    for use, key in zip(uses, use_keys, strict=True):
         scope = table.scope(use.scope_identifier)
-        key = use_keys[use.identifier]
         semantic_uses.append(
             SemanticUseResolutionObservation(
                 key=key,
