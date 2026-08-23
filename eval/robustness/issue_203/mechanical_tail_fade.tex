@@ -1,0 +1,16 @@
+\documentclass{article}
+\newtheorem{theorem}{Theorem}
+\begin{document}
+A family has tail fade when, for every tolerance $\varepsilon>0$, there is an index $N$ such that
+\[
+ |u_n(x)|<\varepsilon \qquad n\geq N.
+\]
+A fixed horizon $H>0$ governs each comparison.
+An historical aside discusses an unrelated normalization convention.
+\begin{theorem}\label{thm:tail}
+Every family with tail fade satisfies the uniform estimate on the fixed horizon.
+\end{theorem}
+\begin{proof}
+Use tail fade beyond its witness index and keep the fixed horizon throughout the estimate.
+\end{proof}
+\end{document}

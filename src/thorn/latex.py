@@ -21,7 +21,7 @@ from thorn.frontend import (
 from thorn.frontend import ParsedProject as FrontendProject
 from thorn.frontends import get_default_frontend
 from thorn.linguistic import LinguisticFrontend
-from thorn.linguistic_declarations import collect_project_prose_declarations
+from thorn.linguistic_statements import collect_project_linguistic_statements
 from thorn.linguistic_support import apply_linguistic_uncertainty
 from thorn.models import TheoremUnit
 from thorn.project_partiality import normalize_project_structure
@@ -203,8 +203,8 @@ def extract_project(
     """Extract theorem/result, dependency, symbol, and proof-support IR.
 
     LaTeX syntax is supplied by a parser-neutral frontend. Optional local NLP
-    proposes structural candidates only; mathematical interpretation remains
-    Thorn-owned above both parser boundaries.
+    supplies generic linguistic observations and source-mapped statements only;
+    mathematical interpretation remains Thorn-owned above both substrate boundaries.
     """
 
     parser = frontend or get_default_frontend()
@@ -370,7 +370,7 @@ def extract_project(
         dependencies=graph,
         units=enriched,
     )
-    prose_declarations = collect_project_prose_declarations(
+    linguistic_statements = collect_project_linguistic_statements(
         parsed,
         regions,
         linguistic_frontend,
@@ -384,12 +384,11 @@ def extract_project(
             parsed,
             regions,
             workspace=workspace,
-            prose_declarations=prose_declarations,
             linguistic_frontend=linguistic_frontend,
         ),
         proof_support_graph=support_graph,
         workspace=workspace,
-        prose_declarations=prose_declarations,
+        linguistic_statements=linguistic_statements,
     )
 
 

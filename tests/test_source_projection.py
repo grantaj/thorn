@@ -110,23 +110,20 @@ def test_projection_fails_closed_when_frontend_region_coverage_is_partial() -> N
 
 
 @pytest.mark.parametrize("frontend_factory", _FRONTENDS, ids=_frontend_id)
-def test_sentence_provenance_handles_math_as_a_typed_placeholder(
+def test_math_placeholder_preserves_exact_source_provenance(
     tmp_path: Path,
     frontend_factory: FrontendFactory,
 ) -> None:
     tex = tmp_path / "main.tex"
     source = r"""\begin{document}
-A graph is called balanced when $d(v)=2.$
-The next sentence is separate.
+Visible prose before $d(v)=2.$ and after it.
 \end{document}
 """
     tex.write_text(source, encoding="utf-8")
 
     file = frontend_factory().parse_project(tex).files[0]
     projection = build_linguistic_projection(file)
-    cue = source.index("called balanced")
-    sentence = projection.sentence_span(cue)
-
-    assert sentence.text(source) == "A graph is called balanced when $d(v)=2.$"
     math = next(token for token in projection.tokens if token.kind == ProjectionTokenKind.MATH)
+
     assert math.source.text(source) == r"$d(v)=2.$"
+    assert projection.token_containing(math.source.start_offset) == math

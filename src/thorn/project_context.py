@@ -240,6 +240,65 @@ def _scope_for_use(
     return None
 
 
+def _record_project_declaration_uses(
+    project: ParsedProject,
+    table: SymbolTable,
+    symbols: list[Symbol],
+    *,
+    workspace: ProjectWorkspaceFacts,
+    projections: dict[str, LinguisticProjection],
+    existing: set[tuple[str, str, int, int]],
+) -> None:
+    """Record exact math-symbol references between explicit project declarations."""
+
+    files = {file.path: file for file in project.files}
+    for owner in symbols:
+        file = files.get(owner.introduction_source.file)
+        projection = projections.get(owner.introduction_source.file)
+        if file is None or projection is None:
+            continue
+        for math in file.math:
+            if not (
+                owner.introduction_source.start_offset <= math.span.start_offset
+                and math.span.end_offset <= owner.introduction_source.end_offset
+                and projection.source_span_eligible(math.span)
+            ):
+                continue
+            content, content_start = _math_inner(file, math)
+            masked = _masked_content(content)
+            for symbol in symbols:
+                for start, end in _symbol_occurrences(masked, symbol.name):
+                    source = _span(
+                        file.path,
+                        file.raw,
+                        content_start + start,
+                        content_start + end,
+                    )
+                    if _is_declaration_occurrence(table, symbol.name, source):
+                        continue
+                    key = (symbol.name, source.file, source.start_offset, source.end_offset)
+                    if key in existing:
+                        continue
+                    resolved = table.resolve(
+                        symbol.name,
+                        "project",
+                        source,
+                        workspace=workspace,
+                    )
+                    table.uses.append(
+                        SymbolUse(
+                            name=symbol.name,
+                            scope_identifier="project",
+                            source=source,
+                            raw=source.text(file.raw),
+                            resolved_symbol_identifier=(
+                                resolved.identifier if resolved is not None else None
+                            ),
+                        )
+                    )
+                    existing.add(key)
+
+
 def _record_uses(
     project: ParsedProject,
     regions: list[ResultRegion],
@@ -249,15 +308,29 @@ def _record_uses(
     workspace: ProjectWorkspaceFacts,
     projections: dict[str, LinguisticProjection],
 ) -> None:
-    """Record uses for new project symbols with occurrence-aware resolution."""
+    """Record project-symbol uses with occurrence-aware resolution."""
 
-    if not added:
-        return
     files = {file.path: file for file in project.files}
     existing = {
         (use.name, use.source.file, use.source.start_offset, use.source.end_offset)
         for use in table.uses
     }
+    project_symbols = [
+        symbol
+        for symbol in table.symbols
+        if table.scope(symbol.scope_identifier).kind == ScopeKind.PROJECT
+    ]
+    _record_project_declaration_uses(
+        project,
+        table,
+        project_symbols,
+        workspace=workspace,
+        projections=projections,
+        existing=existing,
+    )
+
+    if not added:
+        return
 
     for region in regions:
         file = files.get(region.file)
@@ -347,10 +420,7 @@ def add_project_authoritative_context(
     if workspace is None or workspace.resolution != WorkspaceResolution.RESOLVED:
         return
 
-    projections = {
-        file.path: build_linguistic_projection(file)
-        for file in project.files
-    }
+    projections = {file.path: build_linguistic_projection(file) for file in project.files}
     if any(not projection.complete for projection in projections.values()):
         return
 

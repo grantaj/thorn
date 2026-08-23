@@ -327,6 +327,6 @@ def test_structured_project_provenance_survives_result_review_selection(
     )
 
     assert symbol.source.text(source) == "q"
-    assert symbol.introduction_source.text(source) == "Set $q = 1$."
-    assert definition.source.text(source) == "Set $q = 1$."
-    assert definition.raw == "Set $q = 1$."
+    assert symbol.introduction_source.text(source) == "Set $q = 1$"
+    assert definition.source.text(source) == "Set $q = 1$"
+    assert definition.raw == "Set $q = 1$"

@@ -15,6 +15,8 @@ from thorn.frontend import (
     FrontendMath,
     FrontendRegion,
     FrontendRegionKind,
+    FrontendSyntax,
+    FrontendSyntaxKind,
     ParsedProject,
     SourceSpan,
 )
@@ -38,6 +40,7 @@ _NATIVE_OPAQUE_TYPES = {
 _COMMENT_TYPES = {"line_comment", "block_comment"}
 _GROUP_PREFIXES = ("curly_group", "brack_group")
 _MATH_TYPES = {"inline_formula", "displayed_equation", "math_environment"}
+_SENTENCE_PUNCTUATION = {".", "!", "?"}
 
 
 class _Coordinates:
@@ -52,8 +55,6 @@ class _Coordinates:
             self._byte_boundaries.append(byte_offset)
 
     def character_offset(self, byte_offset: int) -> int:
-        # Nodes are expected to end on UTF-8 boundaries. bisect keeps malformed
-        # parser coordinates fail-closed instead of inventing a later offset.
         return max(0, bisect_right(self._byte_boundaries, byte_offset) - 1)
 
     def line_column(self, offset: int) -> tuple[int, int]:
@@ -89,7 +90,6 @@ def _load_parser() -> Any:
             "tree-sitter frontend requires the pinned tree-sitter runtime and "
             "tree-sitter-language-pack grammar bundle; install `thorn-math[treesitter]`"
         ) from exc
-
     return get_parser("latex")
 
 
@@ -145,23 +145,16 @@ def _command_macro(
     command_raw = coordinates.byte_slice(source_bytes, command)
     if not command_raw.startswith("\\"):
         return None
-
     starred = command_raw.endswith("*")
     name = command_raw[1:-1] if starred else command_raw[1:]
     if not name:
         return None
-
     arguments: list[FrontendArgument] = []
     for child in node.children:
         if _same_node(child, command):
             continue
         if child.type.startswith(_GROUP_PREFIXES):
             arguments.append(_group_argument(path, source_bytes, coordinates, child))
-
-    # Structural nodes such as sections may own following document content.  A
-    # FrontendMacro represents only the command invocation, so derive its span
-    # from the parser-owned command and direct argument nodes rather than the
-    # enclosing structural node.
     start = coordinates.character_offset(int(command.start_byte))
     end = max(
         [
@@ -216,7 +209,6 @@ def _environment(
                 source=coordinates.span(path, int(begin.start_byte), int(begin.end_byte)),
             ),
         )
-
     arguments: list[FrontendArgument] = []
     name_node = _field(begin, "name")
     for child in begin.children:
@@ -224,7 +216,6 @@ def _environment(
             continue
         if child.type.startswith(_GROUP_PREFIXES):
             arguments.append(_group_argument(path, source_bytes, coordinates, child))
-
     return (
         FrontendEnvironment(
             name=begin_name,
@@ -235,6 +226,50 @@ def _environment(
         ),
         None,
     )
+
+
+def _math_content_bounds(node: Any) -> tuple[int, int] | None:
+    """Return parser-owned byte bounds for mathematical content, excluding delimiters."""
+
+    begin = _field(node, "begin")
+    end = _field(node, "end")
+    if begin is not None and end is not None:
+        return int(begin.end_byte), int(end.start_byte)
+    children = list(node.children)
+    if len(children) < 2:
+        return None
+    return int(children[0].end_byte), int(children[-1].start_byte)
+
+
+def _terminal_punctuation(
+    path: Path,
+    source_bytes: bytes,
+    coordinates: _Coordinates,
+    node: Any,
+) -> SourceSpan | None:
+    """Return sentence punctuation at the parser-owned end of mathematical content."""
+
+    bounds = _math_content_bounds(node)
+    if bounds is None:
+        return None
+    content_start, content_end = bounds
+    leaves = [
+        child
+        for child in _walk(node)
+        if not child.children
+        and content_start <= int(child.start_byte)
+        and int(child.end_byte) <= content_end
+        and int(child.end_byte) > int(child.start_byte)
+    ]
+    if not leaves:
+        return None
+    tail = max(leaves, key=lambda child: int(child.end_byte))
+    raw = coordinates.byte_slice(source_bytes, tail)
+    if not raw or raw[-1] not in _SENTENCE_PUNCTUATION:
+        return None
+    end_byte = int(tail.end_byte)
+    punctuation_bytes = raw[-1].encode("utf-8")
+    return coordinates.span(path, end_byte - len(punctuation_bytes), end_byte)
 
 
 def _math(path: Path, source_bytes: bytes, coordinates: _Coordinates, node: Any) -> FrontendMath:
@@ -256,7 +291,52 @@ def _math(path: Path, source_bytes: bytes, coordinates: _Coordinates, node: Any)
         delimiter=delimiter,
         raw=raw,
         span=coordinates.span(path, int(node.start_byte), int(node.end_byte)),
+        terminal_punctuation=_terminal_punctuation(path, source_bytes, coordinates, node),
     )
+
+
+def _syntax_facts(
+    path: Path,
+    source_bytes: bytes,
+    coordinates: _Coordinates,
+    nodes: list[Any],
+) -> list[FrontendSyntax]:
+    """Expose control syntax by CST role, never by command-name catalogue."""
+
+    spans: dict[tuple[int, int], FrontendSyntax] = {}
+
+    def add(span: SourceSpan) -> None:
+        if span.end_offset <= span.start_offset:
+            return
+        spans[(span.start_offset, span.end_offset)] = FrontendSyntax(
+            kind=FrontendSyntaxKind.CONTROL,
+            span=span,
+        )
+
+    for node in nodes:
+        command = _field(node, "command")
+        if command is None:
+            continue
+        macro = _command_macro(path, source_bytes, coordinates, node)
+        if macro is None:
+            continue
+        if node.type != "generic_command":
+            add(macro.span)
+            continue
+        add(coordinates.span(path, int(command.start_byte), int(command.end_byte)))
+        for child in node.children:
+            if not child.type.startswith(_GROUP_PREFIXES):
+                continue
+            children = list(child.children)
+            if not children:
+                continue
+            opening = children[0]
+            closing = children[-1]
+            if not bool(getattr(opening, "is_named", False)):
+                add(coordinates.span(path, int(opening.start_byte), int(opening.end_byte)))
+            if not bool(getattr(closing, "is_named", False)):
+                add(coordinates.span(path, int(closing.start_byte), int(closing.end_byte)))
+    return [spans[key] for key in sorted(spans)]
 
 
 def _diagnostic_for_error(path: Path, coordinates: _Coordinates, node: Any) -> FrontendDiagnostic:
@@ -322,7 +402,6 @@ def _regions(
     body_start = document.body_span.start_offset if document else 0
     body_end = document.body_span.end_offset if document else len(text)
     regions: list[FrontendRegion] = []
-
     if body_start > 0:
         regions.append(
             FrontendRegion(
@@ -337,17 +416,14 @@ def _regions(
                 span=_span_from_characters(path, coordinates, body_end, len(text)),
             )
         )
-
     excluded: list[tuple[int, int]] = []
     for macro in macros:
         if macro.span.start_offset >= body_start and macro.span.end_offset <= body_end:
             excluded.append((macro.span.start_offset, macro.span.end_offset))
-
     for item in math:
         if item.span.start_offset >= body_start and item.span.end_offset <= body_end:
             excluded.append((item.span.start_offset, item.span.end_offset))
             regions.append(FrontendRegion(kind=FrontendRegionKind.MATH, span=item.span))
-
     for node in nodes:
         kind: FrontendRegionKind | None = None
         if node.type in _COMMENT_TYPES:
@@ -361,10 +437,6 @@ def _regions(
         if span.start_offset >= body_start and span.end_offset <= body_end:
             excluded.append((span.start_offset, span.end_offset))
             regions.append(region)
-
-    # A small source-role fallback is retained only for constructs the pinned
-    # grammar parses structurally but does not classify as native trivia. It
-    # consumes the Tree-sitter-owned environment span; it does not rescan source.
     for environment in environments:
         kind = _GENERIC_OPAQUE_ENVIRONMENT_KINDS.get(environment.name)
         if kind is None:
@@ -378,7 +450,6 @@ def _regions(
                 for region in regions
             ):
                 regions.append(FrontendRegion(kind=kind, span=environment.span))
-
     cursor = body_start
     for start, end in _merge_intervals(excluded):
         start = max(start, body_start)
@@ -398,7 +469,6 @@ def _regions(
                 span=_span_from_characters(path, coordinates, cursor, body_end),
             )
         )
-
     regions.sort(key=lambda item: (item.span.start_offset, item.kind.value))
     return regions
 
@@ -409,7 +479,6 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
     coordinates = _Coordinates(text)
     tree = parser.parse(source_bytes)
     nodes = _walk(tree.root_node)
-
     diagnostics: list[FrontendDiagnostic] = []
     seen_diagnostics: set[tuple[int, int, str]] = set()
     for node in nodes:
@@ -426,7 +495,6 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
             if diagnostic_key not in seen_diagnostics:
                 diagnostics.append(diagnostic)
                 seen_diagnostics.add(diagnostic_key)
-
     macros_by_key: dict[tuple[int, str], FrontendMacro] = {}
     for node in nodes:
         macro = _command_macro(path, source_bytes, coordinates, node)
@@ -437,7 +505,6 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
         if incumbent is None or macro.span.end_offset > incumbent.span.end_offset:
             macros_by_key[macro_key] = macro
     macros = sorted(macros_by_key.values(), key=lambda item: item.span.start_offset)
-
     environments: list[FrontendEnvironment] = []
     environment_types = {"generic_environment", "math_environment", *_NATIVE_OPAQUE_TYPES}
     for node in nodes:
@@ -457,7 +524,6 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
         if converted is not None:
             environments.append(converted)
     environments.sort(key=lambda item: item.span.start_offset)
-
     opaque_spans = [
         coordinates.span(path, int(node.start_byte), int(node.end_byte))
         for node in nodes
@@ -477,14 +543,12 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
             for span in opaque_spans
         )
     ]
-
     math = [
         _math(path, source_bytes, coordinates, node)
         for node in nodes
         if node.type in _MATH_TYPES
     ]
     math.sort(key=lambda item: item.span.start_offset)
-
     return (
         FrontendFile(
             path=str(path),
@@ -494,17 +558,15 @@ def _parse_file(path: Path, parser: Any) -> tuple[FrontendFile, list[FrontendDia
             math=math,
             regions=_regions(path, text, coordinates, nodes, macros, environments, math),
             regions_complete=True,
+            syntax=_syntax_facts(path, source_bytes, coordinates, nodes),
+            syntax_complete=True,
         ),
         diagnostics,
     )
 
 
 class TreeSitterLatexFrontend:
-    """Experimental source-preserving frontend backed by tree-sitter-latex.
-
-    Tree-sitter objects are consumed only inside this adapter. Downstream Thorn
-    receives the same parser-neutral models as every other frontend.
-    """
+    """Source-preserving frontend backed by tree-sitter-latex."""
 
     name = "tree-sitter"
 
@@ -515,12 +577,10 @@ class TreeSitterLatexFrontend:
         main = Path(main_file).resolve()
         if not main.exists():
             raise FileNotFoundError(main)
-
         files: list[FrontendFile] = []
         diagnostics: list[FrontendDiagnostic] = []
         pending: list[tuple[Path, SourceSpan | None]] = [(main, None)]
         seen: set[Path] = set()
-
         while pending:
             path, include_source = pending.pop(0)
             path = path.resolve()
@@ -535,12 +595,10 @@ class TreeSitterLatexFrontend:
                     )
                 )
                 continue
-
             seen.add(path)
             parsed_file, file_diagnostics = _parse_file(path, self._parser)
             files.append(parsed_file)
             diagnostics.extend(file_diagnostics)
-
             for macro in parsed_file.macros:
                 if macro.name not in {"input", "include"} or not macro.arguments:
                     continue
@@ -553,5 +611,4 @@ class TreeSitterLatexFrontend:
                 child = (path.parent / child).resolve()
                 if child not in seen:
                     pending.append((child, macro.span))
-
         return ParsedProject(main_file=str(main), files=files, diagnostics=diagnostics)

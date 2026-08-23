@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -248,85 +247,6 @@ class LinguisticProjection:
             text="".join(pieces),
             placeholders=tuple(placeholders),
         )
-
-    def _body_bounds(self, cue_offset: int) -> tuple[int, int]:
-        floor = 0
-        ceiling = len(self.text)
-        for region in self.file.regions:
-            if (
-                region.kind == FrontendRegionKind.PREAMBLE
-                and region.span.end_offset <= cue_offset
-            ):
-                floor = max(floor, region.span.end_offset)
-            elif (
-                region.kind == FrontendRegionKind.NON_DOCUMENT
-                and cue_offset <= region.span.start_offset
-            ):
-                ceiling = min(ceiling, region.span.start_offset)
-        return floor, ceiling
-
-    @staticmethod
-    def _math_ends_sentence(raw: str) -> bool:
-        return (
-            re.search(r"[.!?]\s*(?:\\\]|\\\)|\$\$|\$)\s*\Z", raw, re.DOTALL)
-            is not None
-        )
-
-    def sentence_span(self, cue_offset: int) -> SourceSpan:
-        """Return the exact source sentence containing a projection/source offset."""
-
-        if not self.complete:
-            raise ValueError("sentence provenance is unavailable for a partial projection")
-        if cue_offset < 0 or cue_offset > len(self.text):
-            raise ValueError("cue offset is outside the projection")
-
-        floor, ceiling = self._body_bounds(cue_offset)
-        paragraph_marker = self.text.rfind("\n\n", floor, cue_offset)
-        paragraph_start = paragraph_marker + 2 if paragraph_marker >= floor else floor
-        paragraph_end = self.text.find("\n\n", cue_offset, ceiling)
-        if paragraph_end < 0:
-            paragraph_end = ceiling
-
-        start = cue_offset
-        cursor = cue_offset - 1
-        while cursor >= paragraph_start:
-            token = self.token_containing(cursor)
-            if token is not None:
-                if token.kind == ProjectionTokenKind.MATH and self._math_ends_sentence(
-                    token.source.text(self.file.raw)
-                ):
-                    start = token.source.end_offset
-                    break
-                cursor = token.source.start_offset - 1
-                continue
-            if self.text[cursor] in ".!?":
-                start = cursor + 1
-                break
-            cursor -= 1
-        else:
-            start = paragraph_start
-        while start < cue_offset and self.text[start].isspace():
-            start += 1
-
-        cursor = cue_offset
-        end = paragraph_end
-        while cursor < paragraph_end:
-            token = self.token_containing(cursor)
-            if token is not None:
-                cursor = token.source.end_offset
-                if token.kind == ProjectionTokenKind.MATH and self._math_ends_sentence(
-                    token.source.text(self.file.raw)
-                ):
-                    end = cursor
-                    break
-                continue
-            if self.text[cursor] in ".!?":
-                end = cursor + 1
-                break
-            cursor += 1
-        while end > start and self.file.raw[end - 1].isspace():
-            end -= 1
-        return self.source_span(start, end)
 
 
 def _mask(characters: list[str], start: int, end: int) -> None:

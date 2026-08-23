@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -15,9 +14,6 @@ from thorn.workspace import (
     ProjectWorkspaceFacts,
     WorkspaceResolution,
 )
-
-if TYPE_CHECKING:
-    from thorn.linguistic_declarations import ProseDeclarationInventory
 
 _ATOMIC_BRACED_SUBSCRIPT_RE = re.compile(
     r"^(?P<base>(?:\\[A-Za-z]+|[A-Za-z]))_\{(?P<sub>\\[A-Za-z]+|[A-Za-z0-9]+)\}$"
@@ -250,8 +246,6 @@ class SymbolTable(BaseModel):
                 next(iter(best_identifiers)) if len(best_identifiers) == 1 else None
             )
 
-        # One physical use can represent several expanded project occurrences. It
-        # acquires path-level authority only when every occurrence resolves identically.
         if len(occurrence_targets) != 1:
             return None
         target_identifier = next(iter(occurrence_targets))
@@ -268,10 +262,6 @@ class SymbolTable(BaseModel):
         workspace: ProjectWorkspaceFacts | None = None,
     ) -> Symbol | None:
         canonical_name = canonical_symbol_name(name)
-
-        # Bounded result/proof/local scope remains ordinary lexical scope. Project
-        # authority is deliberately excluded here and resolved from occurrence facts
-        # below, so cross-file byte offsets can never decide mathematical shadowing.
         for symbol in self.visible_symbols(scope_identifier, source):
             if canonical_symbol_name(symbol.name) == canonical_name:
                 return symbol
@@ -288,7 +278,6 @@ def extract_symbol_table(
     regions: list[ResultRegion],
     *,
     workspace: ProjectWorkspaceFacts | None = None,
-    prose_declarations: ProseDeclarationInventory | None = None,
     linguistic_frontend: LinguisticFrontend | None = None,
 ) -> SymbolTable:
     """Build deterministic symbols plus optional ambiguity-aware candidates."""
@@ -297,18 +286,15 @@ def extract_symbol_table(
 
     table = run_extractor(project, regions)
 
-    # Structured recognition is not itself authority. Normalize it immediately
-    # through parser-owned source eligibility and workspace availability before a
-    # project-context pass can consume it.
     from thorn.structured_authority import enforce_structured_authority_boundary
 
     enforce_structured_authority_boundary(project, table, workspace=workspace)
 
-    # Mathematical project declarations remain Thorn-owned authority. Prose
-    # authority is a separate policy layer consuming the normalized candidate and
-    # workspace boundaries established by #161; it never reparses declaration grammar.
+    # Explicit mathematical project declarations remain Thorn-owned authority. Their
+    # source span is the exact structural introduction recovered by this extractor;
+    # broader prose belongs to the separate generic statement/context substrate.
     from thorn.project_context import add_project_authoritative_context
-    from thorn.project_context_source import preserve_project_authoritative_source
+    from thorn.project_context_source import add_project_mapping_constraints
 
     add_project_authoritative_context(
         project,
@@ -316,19 +302,8 @@ def extract_symbol_table(
         table,
         workspace=workspace,
     )
-    preserve_project_authoritative_source(project, table)
+    add_project_mapping_constraints(project, table)
     enforce_structured_authority_boundary(project, table, workspace=workspace)
-
-    if workspace is not None and prose_declarations is not None:
-        from thorn.project_semantic_context import add_project_semantic_context
-
-        add_project_semantic_context(
-            project,
-            regions,
-            table,
-            workspace=workspace,
-            prose_declarations=prose_declarations,
-        )
 
     if linguistic_frontend is not None:
         from thorn.linguistic_symbols import add_linguistic_symbol_candidates

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from declaration_contract_frontend import DeclarationContractFrontend
 from thorn.eval_review import build_result_review_context
 from thorn.latex import extract_project
 from thorn.semantic_dependencies import (
@@ -70,44 +69,37 @@ The second included fact holds.
     assert [dependency.identifier for dependency in item.dependencies] == ["lem:z", "lem:a"]
 
 
-def test_result_review_closes_canonical_project_symbol_dependencies(tmp_path: Path) -> None:
+def test_result_review_closes_explicit_project_symbol_dependencies(tmp_path: Path) -> None:
     main = tmp_path / "main.tex"
-    first = "A transformation is called nonsingular when its determinant is nonzero."
-    second = (
-        "A transformation is called regular when it is nonsingular on every invariant subspace."
-    )
     _write_main(
         main,
-        rf"""
-{first}
-{second}
+        r"""
+Define $a:=1$.
+Define $b:=a+1$.
 
-\begin{{theorem}}\label{{thm:main}}
-The transformation $T$ is regular.
-\end{{theorem}}
-\begin{{proof}}Use the construction.\end{{proof}}
+\begin{theorem}\label{thm:main}
+We have $b>0$.
+\end{theorem}
+\begin{proof}Use the definitions.\end{proof}
 """,
     )
 
-    project = extract_project(
-        main,
-        linguistic_frontend=DeclarationContractFrontend(),
-    )
+    project = extract_project(main)
     table = project.symbol_table
 
     direct_ids = result_project_symbol_dependency_ids(project, "thm:main")
-    assert [table.symbol(identifier).name for identifier in direct_ids] == ["regular"]
+    assert [table.symbol(identifier).name for identifier in direct_ids] == ["b"]
 
-    regular_identifier = direct_ids[0]
-    upstream_ids = project_symbol_dependency_ids(project, regular_identifier)
-    assert [table.symbol(identifier).name for identifier in upstream_ids] == ["nonsingular"]
+    b_identifier = direct_ids[0]
+    upstream_ids = project_symbol_dependency_ids(project, b_identifier)
+    assert [table.symbol(identifier).name for identifier in upstream_ids] == ["a"]
 
     closed_ids = close_project_symbol_dependencies(project, direct_ids)
     closed_symbols = sorted(
         (table.symbol(identifier) for identifier in closed_ids),
         key=lambda symbol: (*semantic_symbol_sort_key(project, symbol), symbol.identifier),
     )
-    assert [symbol.name for symbol in closed_symbols] == ["nonsingular", "regular"]
+    assert [symbol.name for symbol in closed_symbols] == ["a", "b"]
 
     item = build_result_review_context(project, "thm:main").items[0]
     project_symbols = [
@@ -115,4 +107,4 @@ The transformation $T$ is regular.
         for symbol in item.symbols
         if table.scope(symbol.scope_identifier).kind.value == "project"
     ]
-    assert project_symbols == ["nonsingular", "regular"]
+    assert project_symbols == ["a", "b"]
