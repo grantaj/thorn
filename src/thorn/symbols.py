@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -15,9 +14,6 @@ from thorn.workspace import (
     ProjectWorkspaceFacts,
     WorkspaceResolution,
 )
-
-if TYPE_CHECKING:
-    from thorn.linguistic_declarations import ProseDeclarationInventory
 
 _ATOMIC_BRACED_SUBSCRIPT_RE = re.compile(
     r"^(?P<base>(?:\\[A-Za-z]+|[A-Za-z]))_\{(?P<sub>\\[A-Za-z]+|[A-Za-z0-9]+)\}$"
@@ -288,7 +284,6 @@ def extract_symbol_table(
     regions: list[ResultRegion],
     *,
     workspace: ProjectWorkspaceFacts | None = None,
-    prose_declarations: ProseDeclarationInventory | None = None,
     linguistic_frontend: LinguisticFrontend | None = None,
 ) -> SymbolTable:
     """Build deterministic symbols plus optional ambiguity-aware candidates."""
@@ -304,9 +299,7 @@ def extract_symbol_table(
 
     enforce_structured_authority_boundary(project, table, workspace=workspace)
 
-    # Mathematical project declarations remain Thorn-owned authority. Prose
-    # authority is a separate policy layer consuming the normalized candidate and
-    # workspace boundaries established by #161; it never reparses declaration grammar.
+    # Explicit mathematical project declarations remain Thorn-owned authority.
     from thorn.project_context import add_project_authoritative_context
     from thorn.project_context_source import preserve_project_authoritative_source
 
@@ -318,17 +311,6 @@ def extract_symbol_table(
     )
     preserve_project_authoritative_source(project, table)
     enforce_structured_authority_boundary(project, table, workspace=workspace)
-
-    if workspace is not None and prose_declarations is not None:
-        from thorn.project_semantic_context import add_project_semantic_context
-
-        add_project_semantic_context(
-            project,
-            regions,
-            table,
-            workspace=workspace,
-            prose_declarations=prose_declarations,
-        )
 
     if linguistic_frontend is not None:
         from thorn.linguistic_symbols import add_linguistic_symbol_candidates
