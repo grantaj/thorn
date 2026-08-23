@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from test_semantic_dependency_contract import (
     LINGUISTIC_CONFIGURATION,
+    STRUCTURAL_CONFIGURATIONS,
     ContractCapability,
     ContractConfiguration,
-    STRUCTURAL_CONFIGURATIONS,
     _write_project,
 )
 
