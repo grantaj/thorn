@@ -10,6 +10,7 @@ on:
     paths:
       - ".github/workflows/issue-198-projection-spike.yml"
       - "scripts/evaluate_issue_198_cst_projection_roles.py"
+      - "scripts/evaluate_issue_198_structural_nlp_segmentation.py"
 
 permissions:
   contents: read
@@ -27,20 +28,28 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install frozen Thorn runtime
+      - name: Install frozen Thorn runtime and local English model
         run: |
           python -m pip install --upgrade pip
           python -m pip install -c constraints/provider-runtime.txt -e '.[dev]'
+          python -m pip install \
+            https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
       - name: Check frozen qualification contract before spike
         run: pytest -q tests/test_issue_198_qualification.py
       - name: Inspect Tree-sitter CST projection roles
         run: |
           python scripts/evaluate_issue_198_cst_projection_roles.py \
             --output /tmp/issue-198-cst-projection-role-spike.json
+      - name: Evaluate CST-driven NLP segmentation
+        run: |
+          python scripts/evaluate_issue_198_structural_nlp_segmentation.py \
+            --output /tmp/issue-198-structural-nlp-segmentation-spike.json
       - name: Upload spike evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: issue-198-cst-projection-role-spike-${{ github.sha }}
-          path: /tmp/issue-198-cst-projection-role-spike.json
+          name: issue-198-structural-projection-spike-${{ github.sha }}
+          path: |
+            /tmp/issue-198-cst-projection-role-spike.json
+            /tmp/issue-198-structural-nlp-segmentation-spike.json
           if-no-files-found: error
