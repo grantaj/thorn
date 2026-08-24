@@ -250,15 +250,15 @@ def declaration_frames(
         if not authorial(tokens, anchor, naming=False) or not maths:
             continue
         bind = maths[0] if lemma in {"fix", "let", "define", "set"} else None
-        payload = tuple(maths[1:] if bind is not None and len(maths) > 1 else maths)
-        if payload:
+        intro_payload = tuple(maths[1:] if bind is not None and len(maths) > 1 else maths)
+        if intro_payload:
             result.append(
                 Frame(
                     "declare",
                     "introduction-operator",
                     anchor.sentence_index,
                     bind=bind,
-                    payload=payload,
+                    payload=intro_payload,
                     evidence=(grounding(case, anchor.text, anchor.start, anchor.end),),
                 )
             )
@@ -269,28 +269,35 @@ def declaration_frames(
             continue
         if not authorial(tokens, anchor, naming=True):
             continue
-        condition = None if lemma == "mean" else condition_after(tokens, anchor)
-        if lemma != "mean" and condition is None:
+        naming_condition = None if lemma == "mean" else condition_after(tokens, anchor)
+        if lemma != "mean" and naming_condition is None:
             continue
-        term = naming_term(tokens, anchor, condition)
-        payload = [
+        naming = naming_term(tokens, anchor, naming_condition)
+        naming_payload = [
             item
             for item in maths
-            if item.start > (anchor.end if condition is None else condition.end)
+            if item.start > (anchor.end if naming_condition is None else naming_condition.end)
         ]
-        if term is None or not payload:
+        if naming is None or not naming_payload:
             continue
-        term_text, term_start, term_end = term
+        term_text, term_start, term_end = naming
         evidence = [grounding(case, anchor.text, anchor.start, anchor.end)]
-        if condition is not None:
-            evidence.append(grounding(case, condition.text, condition.start, condition.end))
+        if naming_condition is not None:
+            evidence.append(
+                grounding(
+                    case,
+                    naming_condition.text,
+                    naming_condition.start,
+                    naming_condition.end,
+                )
+            )
         result.append(
             Frame(
                 "declare",
                 "naming-operator",
                 anchor.sentence_index,
                 bind=grounding(case, term_text, term_start, term_end),
-                payload=tuple(payload),
+                payload=tuple(naming_payload),
                 evidence=tuple(evidence),
             )
         )
@@ -298,27 +305,32 @@ def declaration_frames(
     conditions = [token for token in tokens if token.text.casefold() in CONDITIONS]
     exacts = [token for token in tokens if token.lemma.casefold() == "exactly"]
     if conditions and exacts:
-        condition = conditions[0]
+        exact_condition = conditions[0]
         candidates = [
             token
             for token in tokens
-            if token.start < condition.start
+            if token.start < exact_condition.start
             and token.pos in {"ADJ", "NOUN", "PROPN"}
             and token.dependency not in {"nsubj", "nsubjpass", "dobj", "pobj"}
         ]
-        payload = [item for item in maths if item.start > condition.end]
-        if candidates and payload:
-            term = candidates[-1]
+        exact_payload = [item for item in maths if item.start > exact_condition.end]
+        if candidates and exact_payload:
+            exact_term = candidates[-1]
             result.append(
                 Frame(
                     "declare",
                     "exact-biconditional",
-                    condition.sentence_index,
-                    bind=grounding(case, term.text, term.start, term.end),
-                    payload=tuple(payload),
+                    exact_condition.sentence_index,
+                    bind=grounding(case, exact_term.text, exact_term.start, exact_term.end),
+                    payload=tuple(exact_payload),
                     evidence=(
                         grounding(case, exacts[0].text, exacts[0].start, exacts[0].end),
-                        grounding(case, condition.text, condition.start, condition.end),
+                        grounding(
+                            case,
+                            exact_condition.text,
+                            exact_condition.start,
+                            exact_condition.end,
+                        ),
                     ),
                 )
             )
