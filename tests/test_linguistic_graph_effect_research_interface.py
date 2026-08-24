@@ -43,12 +43,12 @@ def _token(
 
 
 def test_frozen_operator_inventory_is_exposed_unchanged() -> None:
-    assert INTRODUCE == {"assume", "define", "fix", "let", "set", "suppose"}
-    assert NAME == {"call", "mean", "say", "term"}
-    assert SUPPORT_VERBS == {"apply", "follow", "invoke", "use"}
-    assert SUPPORT_NOUNS == {"consequence"}
-    assert CONDITIONS == {"if", "provided", "when", "whenever"}
-    assert HYPOTHETICAL == {"could", "might", "would"}
+    assert {"assume", "define", "fix", "let", "set", "suppose"} == INTRODUCE
+    assert {"call", "mean", "say", "term"} == NAME
+    assert {"apply", "follow", "invoke", "use"} == SUPPORT_VERBS
+    assert {"consequence"} == SUPPORT_NOUNS
+    assert {"if", "provided", "when", "whenever"} == CONDITIONS
+    assert {"could", "might", "would"} == HYPOTHETICAL
 
 
 def test_research_interface_preserves_exact_reference_grounding() -> None:
