@@ -152,13 +152,20 @@ def adapt_linguistic_span_projection(projection: LinguisticSpanProjection) -> Ad
         source_cursor += len(raw)
         projected_cursor += len(projected)
 
-    for placeholder in sorted(projection.placeholders, key=lambda item: item.projected_start):
+    for placeholder in sorted(
+        projection.placeholders,
+        key=lambda item: item.projected_start,
+    ):
         if placeholder.projected_start < text_cursor:
             raise ValueError("overlapping linguistic projection placeholders")
-        if projection.text[placeholder.projected_start : placeholder.projected_end] != placeholder.token:
+        placeholder_text = projection.text[
+            placeholder.projected_start : placeholder.projected_end
+        ]
+        if placeholder_text != placeholder.token:
             raise ValueError("linguistic projection placeholder offsets do not match text")
 
-        append(projection.text[text_cursor : placeholder.projected_start], projection.text[text_cursor : placeholder.projected_start])
+        literal = projection.text[text_cursor : placeholder.projected_start]
+        append(literal, literal)
 
         projected = placeholder.token
         if placeholder.kind == LinguisticSpanTokenKind.RESULT_REFERENCE:
