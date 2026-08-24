@@ -117,6 +117,7 @@ def test_production_projection_adapter_preserves_result_identity() -> None:
     math_start = projected.index("THORNMATH1")
     result_raw = r"\ref{lem:key}"
     math_raw = "$x>0$"
+    source_span = _span(source, source)
     projection = LinguisticSpanProjection(
         text=projected,
         placeholders=(
@@ -140,10 +141,11 @@ def test_production_projection_adapter_preserves_result_identity() -> None:
         ),
     )
 
-    adapted = adapt_linguistic_span_projection(projection)
+    adapted = adapt_linguistic_span_projection(projection, source=source_span)
 
     assert adapted.case.source == source
     assert adapted.case.projected == "Using THORNREF1, we obtain THORNMATH1."
+    assert adapted.source == source_span
     reference = adapted.result_reference("THORNREF1")
     assert reference.label == "lem:key"
     assert reference.raw == result_raw
@@ -170,23 +172,29 @@ def test_production_source_projection_reaches_frozen_compiler(tmp_path: Path) ->
     file = parsed.files[0]
     start = file.raw.index("Using")
     end = file.raw.index(".", start) + 1
+    source = file.span(start, end)
     projection = build_linguistic_projection(file).project_span(
-        file.span(start, end),
+        source,
         result_identifiers={"lem:key"},
     )
-    adapted = adapt_linguistic_span_projection(projection)
+    adapted = adapt_linguistic_span_projection(projection, source=source)
     document = SpacyLinguisticFrontend().parse(adapted.case.projected)
 
     frames = compile_effects(adapted.case, document)
     requirements = [frame for frame in frames if frame.operation == "require"]
 
     assert len(requirements) == 1
-    assert [item.text for item in requirements[0].prerequisites] == ["THORNREF1"]
+    requirement = requirements[0]
+    assert [item.text for item in requirement.prerequisites] == ["THORNREF1"]
     reference = adapted.result_reference("THORNREF1")
     assert reference.label == "lem:key"
     assert reference.raw == r"\ref{lem:key}"
     assert reference.source.text(file.raw) == r"\ref{lem:key}"
-    assert requirements[0].exact
+    assert adapted.absolute_source_span(requirement.prerequisites[0]) == reference.source
+    relation_source = adapted.absolute_source_span(requirement.evidence[0])
+    assert relation_source is not None
+    assert relation_source.text(file.raw) == "Using"
+    assert requirement.exact
 
 
 def test_research_interface_preserves_noninvertible_projection_as_ungrounded() -> None:
