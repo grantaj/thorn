@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from thorn.linguistic import LinguisticDocument, LinguisticToken
+from thorn.source_projection import (
+    LinguisticSpanPlaceholder,
+    LinguisticSpanProjection,
+    LinguisticSpanTokenKind,
+)
 
 # Frozen before the first semantic measurement for #215. These are deliberately
 # graph-semantic operator classes, not whole-sentence templates. Do not expand
@@ -46,6 +51,28 @@ class CaseText:
             source_start = segment.source_start + delta
             return source_start, source_start + (end - start)
         return None
+
+
+@dataclass(frozen=True)
+class AdaptedResultReference:
+    """One production result-reference placeholder exposed to the frozen compiler."""
+
+    token: str
+    placeholder: LinguisticSpanPlaceholder
+
+
+@dataclass(frozen=True)
+class AdaptedCase:
+    """Frozen research input plus lossless production result-reference identity."""
+
+    case: CaseText
+    result_references: tuple[AdaptedResultReference, ...] = ()
+
+    def result_reference(self, token: str) -> LinguisticSpanPlaceholder:
+        for item in self.result_references:
+            if item.token == token:
+                return item.placeholder
+        raise KeyError(token)
 
 
 @dataclass(frozen=True)
@@ -96,6 +123,60 @@ def build_case(raw_case: dict[str, Any]) -> CaseText:
         source_cursor += len(raw)
         projected_cursor += len(projected)
     return CaseText("".join(source_parts), "".join(projected_parts), tuple(segments))
+
+
+def adapt_linguistic_span_projection(projection: LinguisticSpanProjection) -> AdaptedCase:
+    """Losslessly adapt the production typed projection to the frozen #215 dialect.
+
+    The semantic compiler remains unchanged: production ``THORNRESULTn`` placeholders
+    are renamed deterministically to the already-frozen ``THORNREFn`` research input.
+    The original production placeholder is retained alongside that token so callers can
+    join a recognized support frame to independently established result resolution and
+    exact ``SourceSpan`` provenance. Equation/generic references remain typed production
+    placeholders and are deliberately invisible to the frozen result-support compiler.
+    """
+
+    source_parts: list[str] = []
+    projected_parts: list[str] = []
+    segments: list[Segment] = []
+    references: list[AdaptedResultReference] = []
+    source_cursor = projected_cursor = text_cursor = result_index = 0
+
+    def append(raw: str, projected: str) -> None:
+        nonlocal source_cursor, projected_cursor
+        if not raw and not projected:
+            return
+        segments.append(Segment(raw, projected, source_cursor, projected_cursor))
+        source_parts.append(raw)
+        projected_parts.append(projected)
+        source_cursor += len(raw)
+        projected_cursor += len(projected)
+
+    for placeholder in sorted(projection.placeholders, key=lambda item: item.projected_start):
+        if placeholder.projected_start < text_cursor:
+            raise ValueError("overlapping linguistic projection placeholders")
+        if projection.text[placeholder.projected_start : placeholder.projected_end] != placeholder.token:
+            raise ValueError("linguistic projection placeholder offsets do not match text")
+
+        append(projection.text[text_cursor : placeholder.projected_start], projection.text[text_cursor : placeholder.projected_start])
+
+        projected = placeholder.token
+        if placeholder.kind == LinguisticSpanTokenKind.RESULT_REFERENCE:
+            result_index += 1
+            projected = f"THORNREF{result_index}"
+            references.append(AdaptedResultReference(projected, placeholder))
+        append(placeholder.raw, projected)
+        text_cursor = placeholder.projected_end
+
+    append(projection.text[text_cursor:], projection.text[text_cursor:])
+    return AdaptedCase(
+        case=CaseText(
+            source="".join(source_parts),
+            projected="".join(projected_parts),
+            segments=tuple(segments),
+        ),
+        result_references=tuple(references),
+    )
 
 
 def sentence_groups(document: LinguisticDocument) -> list[list[LinguisticToken]]:
