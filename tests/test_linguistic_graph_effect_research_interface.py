@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from thorn.frontend import SourceSpan
+from thorn.frontends import get_default_frontend
 from thorn.linguistic import LinguisticDocument, LinguisticToken
 from thorn.research.graph_effects import (
     CONDITIONS,
@@ -14,9 +16,17 @@ from thorn.research.graph_effects import (
     NAME,
     SUPPORT_NOUNS,
     SUPPORT_VERBS,
+    adapt_linguistic_span_projection,
     build_case,
     compile_effects,
 )
+from thorn.source_projection import (
+    LinguisticSpanPlaceholder,
+    LinguisticSpanProjection,
+    LinguisticSpanTokenKind,
+    build_linguistic_projection,
+)
+from thorn.spacy_linguistic import SpacyLinguisticFrontend
 
 
 def _token(
@@ -39,6 +49,20 @@ def _token(
         sentence_index=0,
         start=start,
         end=end,
+    )
+
+
+def _span(source: str, raw: str) -> SourceSpan:
+    start = source.index(raw)
+    end = start + len(raw)
+    return SourceSpan(
+        file="paper.tex",
+        start_offset=start,
+        end_offset=end,
+        start_line=1,
+        start_column=start + 1,
+        end_line=1,
+        end_column=end + 1,
     )
 
 
@@ -84,6 +108,85 @@ def test_research_interface_preserves_exact_reference_grounding() -> None:
     assert [item.text for item in frame.prerequisites] == ["THORNREF1"]
     assert frame.prerequisites[0].source == (6, 19)
     assert frame.exact
+
+
+def test_production_projection_adapter_preserves_result_identity() -> None:
+    source = r"Using \ref{lem:key}, we obtain $x>0$."
+    projected = "Using THORNRESULT1, we obtain THORNMATH1."
+    result_start = projected.index("THORNRESULT1")
+    math_start = projected.index("THORNMATH1")
+    result_raw = r"\ref{lem:key}"
+    math_raw = "$x>0$"
+    projection = LinguisticSpanProjection(
+        text=projected,
+        placeholders=(
+            LinguisticSpanPlaceholder(
+                token="THORNRESULT1",
+                kind=LinguisticSpanTokenKind.RESULT_REFERENCE,
+                source=_span(source, result_raw),
+                raw=result_raw,
+                projected_start=result_start,
+                projected_end=result_start + len("THORNRESULT1"),
+                label="lem:key",
+            ),
+            LinguisticSpanPlaceholder(
+                token="THORNMATH1",
+                kind=LinguisticSpanTokenKind.MATH,
+                source=_span(source, math_raw),
+                raw=math_raw,
+                projected_start=math_start,
+                projected_end=math_start + len("THORNMATH1"),
+            ),
+        ),
+    )
+
+    adapted = adapt_linguistic_span_projection(projection)
+
+    assert adapted.case.source == source
+    assert adapted.case.projected == "Using THORNREF1, we obtain THORNMATH1."
+    reference = adapted.result_reference("THORNREF1")
+    assert reference.label == "lem:key"
+    assert reference.raw == result_raw
+    assert reference.source == _span(source, result_raw)
+    assert adapted.case.source_span(6, 15) == (
+        source.index(result_raw),
+        source.index(result_raw) + len(result_raw),
+    )
+
+
+def test_production_source_projection_reaches_frozen_compiler(tmp_path: Path) -> None:
+    if importlib.util.find_spec("en_core_web_sm") is None:
+        pytest.skip("production projection integration requires the normal local spaCy model")
+
+    main = tmp_path / "main.tex"
+    main.write_text(
+        "\\documentclass{article}\n"
+        "\\begin{document}\n"
+        "Using \\ref{lem:key}, we obtain $x>0$.\n"
+        "\\end{document}\n",
+        encoding="utf-8",
+    )
+    parsed = get_default_frontend().parse_project(main)
+    file = parsed.files[0]
+    start = file.raw.index("Using")
+    end = file.raw.index(".", start) + 1
+    projection = build_linguistic_projection(file).project_span(
+        file.span(start, end),
+        result_identifiers={"lem:key"},
+    )
+    adapted = adapt_linguistic_span_projection(projection)
+    document = SpacyLinguisticFrontend().parse(adapted.case.projected)
+
+    frames = compile_effects(adapted.case, document)
+    requirements = [frame for frame in frames if frame.operation == "require"]
+
+    assert len(requirements) == 1
+    assert [item.text for item in requirements[0].prerequisites] == ["THORNREF1"]
+    reference = adapted.result_reference("THORNREF1")
+    assert reference.label == "lem:key"
+    assert reference.raw == r"\ref{lem:key}"
+    assert reference.source.text(file.raw) == r"\ref{lem:key}"
+    assert requirements[0].exact
 
 
 def test_research_interface_preserves_noninvertible_projection_as_ungrounded() -> None:
