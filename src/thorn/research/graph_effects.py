@@ -5,6 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
+from thorn.frontend import SourceSpan
 from thorn.linguistic import LinguisticDocument, LinguisticToken
 from thorn.source_projection import (
     LinguisticSpanPlaceholder,
@@ -63,9 +64,10 @@ class AdaptedResultReference:
 
 @dataclass(frozen=True)
 class AdaptedCase:
-    """Frozen research input plus lossless production result-reference identity."""
+    """Frozen research input plus lossless production source/reference identity."""
 
     case: CaseText
+    source: SourceSpan
     result_references: tuple[AdaptedResultReference, ...] = ()
 
     def result_reference(self, token: str) -> LinguisticSpanPlaceholder:
@@ -73,6 +75,34 @@ class AdaptedCase:
             if item.token == token:
                 return item.placeholder
         raise KeyError(token)
+
+    def absolute_source_span(self, item: Grounding) -> SourceSpan | None:
+        """Map one exactly grounded frozen field back to its original source span."""
+
+        if item.source is None:
+            return None
+        start, end = item.source
+        if not (0 <= start <= end <= len(self.case.source)):
+            return None
+
+        def line_column(offset: int) -> tuple[int, int]:
+            prefix = self.case.source[:offset]
+            newline_count = prefix.count("\n")
+            if newline_count == 0:
+                return self.source.start_line, self.source.start_column + offset
+            return self.source.start_line + newline_count, len(prefix.rsplit("\n", 1)[1]) + 1
+
+        start_line, start_column = line_column(start)
+        end_line, end_column = line_column(end)
+        return SourceSpan(
+            file=self.source.file,
+            start_offset=self.source.start_offset + start,
+            end_offset=self.source.start_offset + end,
+            start_line=start_line,
+            start_column=start_column,
+            end_line=end_line,
+            end_column=end_column,
+        )
 
 
 @dataclass(frozen=True)
@@ -125,7 +155,11 @@ def build_case(raw_case: dict[str, Any]) -> CaseText:
     return CaseText("".join(source_parts), "".join(projected_parts), tuple(segments))
 
 
-def adapt_linguistic_span_projection(projection: LinguisticSpanProjection) -> AdaptedCase:
+def adapt_linguistic_span_projection(
+    projection: LinguisticSpanProjection,
+    *,
+    source: SourceSpan,
+) -> AdaptedCase:
     """Losslessly adapt the production typed projection to the frozen #215 dialect.
 
     The semantic compiler remains unchanged: production ``THORNRESULTn`` placeholders
@@ -158,6 +192,12 @@ def adapt_linguistic_span_projection(projection: LinguisticSpanProjection) -> Ad
     ):
         if placeholder.projected_start < text_cursor:
             raise ValueError("overlapping linguistic projection placeholders")
+        if (
+            placeholder.source.file != source.file
+            or placeholder.source.start_offset < source.start_offset
+            or source.end_offset < placeholder.source.end_offset
+        ):
+            raise ValueError("linguistic projection placeholder lies outside source span")
         placeholder_text = projection.text[
             placeholder.projected_start : placeholder.projected_end
         ]
@@ -176,12 +216,16 @@ def adapt_linguistic_span_projection(projection: LinguisticSpanProjection) -> Ad
         text_cursor = placeholder.projected_end
 
     append(projection.text[text_cursor:], projection.text[text_cursor:])
+    case = CaseText(
+        source="".join(source_parts),
+        projected="".join(projected_parts),
+        segments=tuple(segments),
+    )
+    if len(case.source) != source.end_offset - source.start_offset:
+        raise ValueError("linguistic projection source length does not match source span")
     return AdaptedCase(
-        case=CaseText(
-            source="".join(source_parts),
-            projected="".join(projected_parts),
-            segments=tuple(segments),
-        ),
+        case=case,
+        source=source,
         result_references=tuple(references),
     )
 
