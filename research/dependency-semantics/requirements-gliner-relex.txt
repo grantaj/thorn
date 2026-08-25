@@ -1,2 +1,2 @@
+# Isolated issue #219 research environment. Not a production Thorn dependency.
 gliner==0.2.28
-huggingface-hub==0.30.2
