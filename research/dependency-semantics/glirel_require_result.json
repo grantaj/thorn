@@ -75,7 +75,7 @@
   },
   "disposition": {
     "production_authority": false,
-    "private_holdout_ready": false,
-    "reason": "GLiREL exposes a zero-false-positive abstention regime, but recall is only 3/17. Evaluate a second off-the-shelf grounded relation extractor on the same public benchmark before freezing any private-holdout candidate."
+    "private_holdout_ready": true,
+    "reason": "The independent GLiNER-RelEx comparator did not expose a useful high-precision abstention regime. This exact GLiREL configuration is therefore frozen in require_relation_selection.json for an untouched private holdout, without private tuning."
   }
 }
