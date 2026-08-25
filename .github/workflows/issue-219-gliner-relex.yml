@@ -2,17 +2,6 @@ name: Issue 219 GLiNER-RelEx REQUIRE evaluation
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - issue-219-require-relation-eval
-    paths:
-      - ".github/workflows/issue-219-gliner-relex.yml"
-      - "research/dependency-semantics/require_relation_cases.json"
-      - "research/dependency-semantics/run_gliner_relex_require_screen.py"
-      - "research/dependency-semantics/requirements-gliner-relex.txt"
-      - "src/thorn/research/require_relations.py"
-      - "tests/test_issue_219_require_relation_corpus.py"
-      - "tests/test_issue_219_require_relation_contract.py"
 
 permissions:
   contents: read
