@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "issue": 219,
+  "status": "frozen_for_private_holdout",
+  "selection_basis": {
+    "benchmark": "research/dependency-semantics/require_relation_cases.json",
+    "glirel_result": "research/dependency-semantics/glirel_require_result.json",
+    "gliner_relex_result": "research/dependency-semantics/gliner_relex_require_result.json"
+  },
+  "candidate": {
+    "implementation": "GLiREL",
+    "model_id": "jackboyla/glirel-large-v0",
+    "model_revision": "40a523e12a8432d6da364cf2a195a28755ff04d3",
+    "base_model_id": "microsoft/deberta-v3-large",
+    "base_model_revision": "64a8c8eab3e352a784c658aef62be1662607476f",
+    "glirel_version": "1.2.1",
+    "torch_version": "2.6.0+cpu"
+  },
+  "semantic_configuration": {
+    "relation_label": "is required to establish the current result",
+    "threshold": 0.2,
+    "direction": "known dependent owner -> exact result-reference occurrence",
+    "decision_policy": "score >= threshold proposes REQUIRE; otherwise abstain",
+    "low_score_semantics": "abstention, never canonical NON_REQUIRE",
+    "candidate_labels_per_call": 1
+  },
+  "entity_configuration": {
+    "owner_type": "RESULT_OWNER",
+    "reference_type": "RESULT_REFERENCE",
+    "owner_and_reference_are_supplied": true,
+    "reference_resolution_is_external": true,
+    "canonical_owner_inference_is_external": true
+  },
+  "context_configuration": {
+    "input_unit": "the bounded context supplied by the RequireCase contract",
+    "tokenization": "frozen run_glirel_require_screen.py tokenizer with THORNOWNER/THORNREF sentinels",
+    "private_tuning_allowed": false
+  },
+  "public_measurement": {
+    "tp": 3,
+    "fp": 0,
+    "fn": 14,
+    "precision": 1.0,
+    "recall": 0.17647058823529413,
+    "unresolved_assertions": 0
+  },
+  "authority": {
+    "production_authority": false,
+    "prediction_is_proposal_only": true,
+    "private_holdout_must_not_tune_model_label_threshold_context_or_entity_policy": true
+  }
+}

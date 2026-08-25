@@ -1,0 +1,709 @@
+{
+  "version": 1,
+  "issue": 219,
+  "purpose": "Focused public REQUIRE relation-semantics benchmark with owner and resolution held fixed.",
+  "owner_surface": "THORNOWNER",
+  "relation_label_candidates": [
+    "uses as a direct prerequisite",
+    "depends on for this proof",
+    "is required to establish the current result"
+  ],
+  "cases": [
+    {
+      "id": "req-explicit-applying",
+      "owner": "RESULT_CURRENT",
+      "context": "Applying THORNREF1, we obtain the required estimate.",
+      "subtype": "explicit_application",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-explicit-applying",
+            "char_start": 9,
+            "char_end": 18
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-explicit-by",
+      "owner": "RESULT_CURRENT",
+      "context": "By THORNREF1, the sequence converges.",
+      "subtype": "explicit_by",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-explicit-by",
+            "char_start": 3,
+            "char_end": 12
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-follows-from",
+      "owner": "RESULT_CURRENT",
+      "context": "The desired bound follows from THORNREF1.",
+      "subtype": "follows_from",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-follows-from",
+            "char_start": 31,
+            "char_end": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-using",
+      "owner": "RESULT_CURRENT",
+      "context": "Using THORNREF1, we conclude that the map is injective.",
+      "subtype": "explicit_using",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-using",
+            "char_start": 6,
+            "char_end": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-consequence",
+      "owner": "RESULT_CURRENT",
+      "context": "The claim is an immediate consequence of THORNREF1.",
+      "subtype": "consequence",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-consequence",
+            "char_start": 41,
+            "char_end": 50
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-since-establishes",
+      "owner": "RESULT_CURRENT",
+      "context": "Since THORNREF1 establishes the estimate, the remaining term vanishes.",
+      "subtype": "operator_absent_support",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-since-establishes",
+            "char_start": 6,
+            "char_end": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-in-hand",
+      "owner": "RESULT_CURRENT",
+      "context": "With THORNREF1 in hand, the induction closes.",
+      "subtype": "operator_absent_support",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-in-hand",
+            "char_start": 5,
+            "char_end": 14
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-immediate-from",
+      "owner": "RESULT_CURRENT",
+      "context": "The conclusion is immediate from THORNREF1.",
+      "subtype": "operator_absent_support",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-immediate-from",
+            "char_start": 33,
+            "char_end": 42
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-after-clause",
+      "owner": "RESULT_CURRENT",
+      "context": "The estimate therefore holds, by THORNREF1.",
+      "subtype": "reference_after_claim",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-after-clause",
+            "char_start": 33,
+            "char_end": 42
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-cross-sentence",
+      "owner": "RESULT_CURRENT",
+      "context": "THORNREF1 supplies the uniform bound. Therefore the limiting argument applies.",
+      "subtype": "cross_sentence_support",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-cross-sentence",
+            "char_start": 0,
+            "char_end": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-as-established",
+      "owner": "RESULT_CURRENT",
+      "context": "As established in THORNREF1, every admissible point has this property.",
+      "subtype": "operator_absent_support",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-as-established",
+            "char_start": 18,
+            "char_end": 27
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-invoking",
+      "owner": "RESULT_CURRENT",
+      "context": "Invoking THORNREF1 reduces the problem to the compact case.",
+      "subtype": "explicit_invocation",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-invoking",
+            "char_start": 9,
+            "char_end": 18
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-joint-two",
+      "owner": "RESULT_CURRENT",
+      "context": "Combining THORNREF1 with THORNREF2 gives the required inequality.",
+      "subtype": "joint_support",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-joint-two",
+            "char_start": 10,
+            "char_end": 19
+          }
+        },
+        {
+          "placeholder": "THORNREF2",
+          "resolved_target": "RESULT_B",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-joint-two",
+            "char_start": 25,
+            "char_end": 34
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-mixed-mention",
+      "owner": "RESULT_CURRENT",
+      "context": "THORNREF2 is a related result, but applying THORNREF1 proves the present claim.",
+      "subtype": "multi_reference_discrimination",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-mixed-mention",
+            "char_start": 44,
+            "char_end": 53
+          }
+        },
+        {
+          "placeholder": "THORNREF2",
+          "resolved_target": "RESULT_B",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-mixed-mention",
+            "char_start": 0,
+            "char_end": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-mixed-comparison",
+      "owner": "RESULT_CURRENT",
+      "context": "Unlike THORNREF2, THORNREF1 yields the estimate needed here.",
+      "subtype": "multi_reference_discrimination",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-mixed-comparison",
+            "char_start": 18,
+            "char_end": 27
+          }
+        },
+        {
+          "placeholder": "THORNREF2",
+          "resolved_target": "RESULT_B",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-mixed-comparison",
+            "char_start": 7,
+            "char_end": 16
+          }
+        }
+      ]
+    },
+    {
+      "id": "req-not-other",
+      "owner": "RESULT_CURRENT",
+      "context": "By THORNREF1, and not by THORNREF2, the asserted bound follows.",
+      "subtype": "multi_reference_negation",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-not-other",
+            "char_start": 3,
+            "char_end": 12
+          }
+        },
+        {
+          "placeholder": "THORNREF2",
+          "resolved_target": "RESULT_B",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/req-not-other",
+            "char_start": 25,
+            "char_end": 34
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-mention",
+      "owner": "RESULT_CURRENT",
+      "context": "THORNREF1 proves a related statement about the same objects.",
+      "subtype": "mention_only",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-mention",
+            "char_start": 0,
+            "char_end": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-comparison",
+      "owner": "RESULT_CURRENT",
+      "context": "Unlike THORNREF1, our argument does not assume compactness.",
+      "subtype": "comparison",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-comparison",
+            "char_start": 7,
+            "char_end": 16
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-history",
+      "owner": "RESULT_CURRENT",
+      "context": "THORNREF1 was one of the first results to study this phenomenon.",
+      "subtype": "historical_attribution",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-history",
+            "char_start": 0,
+            "char_end": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-other-author-use",
+      "owner": "RESULT_CURRENT",
+      "context": "Another author applies THORNREF1 to a different problem.",
+      "subtype": "reported_use",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-other-author-use",
+            "char_start": 23,
+            "char_end": 32
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-explicit-not-needed",
+      "owner": "RESULT_CURRENT",
+      "context": "THORNREF1 is not needed for the present argument.",
+      "subtype": "explicit_non_use",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-explicit-not-needed",
+            "char_start": 0,
+            "char_end": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-hypothetical",
+      "owner": "RESULT_CURRENT",
+      "context": "If we were to use THORNREF1, the proof could be shortened.",
+      "subtype": "hypothetical_non_use",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-hypothetical",
+            "char_start": 18,
+            "char_end": 27
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-see-background",
+      "owner": "RESULT_CURRENT",
+      "context": "For background on this terminology, see THORNREF1.",
+      "subtype": "background_reference",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-see-background",
+            "char_start": 40,
+            "char_end": 49
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-compare",
+      "owner": "RESULT_CURRENT",
+      "context": "For comparison, see THORNREF1.",
+      "subtype": "comparison_reference",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-compare",
+            "char_start": 20,
+            "char_end": 29
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-quotation",
+      "owner": "RESULT_CURRENT",
+      "context": "The phrase \"apply THORNREF1\" occurs in the historical discussion, not in this proof.",
+      "subtype": "quotation",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-quotation",
+            "char_start": 18,
+            "char_end": 27
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-independent-proof",
+      "owner": "RESULT_CURRENT",
+      "context": "THORNREF1 gives a similar bound, but the argument below is independent of it.",
+      "subtype": "explicit_independence",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-independent-proof",
+            "char_start": 0,
+            "char_end": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-would-suffice",
+      "owner": "RESULT_CURRENT",
+      "context": "Although THORNREF1 would suffice, we do not use it here.",
+      "subtype": "counterfactual_non_use",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-would-suffice",
+            "char_start": 9,
+            "char_end": 18
+          }
+        }
+      ]
+    },
+    {
+      "id": "neg-cross-sentence",
+      "owner": "RESULT_CURRENT",
+      "context": "THORNREF1 gives a related estimate. We will not use that estimate in this proof.",
+      "subtype": "cross_sentence_non_use",
+      "frozen_operator_present": true,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "NON_REQUIRE",
+          "provenance": {
+            "source_id": "synthetic://issue-219/neg-cross-sentence",
+            "char_start": 0,
+            "char_end": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "amb-see",
+      "owner": "RESULT_CURRENT",
+      "context": "See THORNREF1.",
+      "subtype": "ambiguous_rhetorical",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "UNRESOLVED",
+          "provenance": {
+            "source_id": "synthetic://issue-219/amb-see",
+            "char_start": 4,
+            "char_end": 13
+          }
+        }
+      ]
+    },
+    {
+      "id": "amb-recall",
+      "owner": "RESULT_CURRENT",
+      "context": "Recall THORNREF1.",
+      "subtype": "ambiguous_rhetorical",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "UNRESOLVED",
+          "provenance": {
+            "source_id": "synthetic://issue-219/amb-recall",
+            "char_start": 7,
+            "char_end": 16
+          }
+        }
+      ]
+    },
+    {
+      "id": "amb-may-be-useful",
+      "owner": "RESULT_CURRENT",
+      "context": "THORNREF1 may also be useful here.",
+      "subtype": "ambiguous_modal",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "UNRESOLVED",
+          "provenance": {
+            "source_id": "synthetic://issue-219/amb-may-be-useful",
+            "char_start": 0,
+            "char_end": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "amb-appeal-if-desired",
+      "owner": "RESULT_CURRENT",
+      "context": "We can appeal to THORNREF1 if desired.",
+      "subtype": "ambiguous_optional_support",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "UNRESOLVED",
+          "provenance": {
+            "source_id": "synthetic://issue-219/amb-appeal-if-desired",
+            "char_start": 17,
+            "char_end": 26
+          }
+        }
+      ]
+    },
+    {
+      "id": "amb-relation-useful",
+      "owner": "RESULT_CURRENT",
+      "context": "The relation with THORNREF1 is useful at this point.",
+      "subtype": "ambiguous_relation",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "UNRESOLVED",
+          "provenance": {
+            "source_id": "synthetic://issue-219/amb-relation-useful",
+            "char_start": 18,
+            "char_end": 27
+          }
+        }
+      ]
+    },
+    {
+      "id": "amb-alternative",
+      "owner": "RESULT_CURRENT",
+      "context": "Either THORNREF1 or THORNREF2 gives the required estimate.",
+      "subtype": "alternative_support",
+      "frozen_operator_present": false,
+      "references": [
+        {
+          "placeholder": "THORNREF1",
+          "resolved_target": "RESULT_A",
+          "expected": "UNRESOLVED",
+          "provenance": {
+            "source_id": "synthetic://issue-219/amb-alternative",
+            "char_start": 7,
+            "char_end": 16
+          }
+        },
+        {
+          "placeholder": "THORNREF2",
+          "resolved_target": "RESULT_B",
+          "expected": "UNRESOLVED",
+          "provenance": {
+            "source_id": "synthetic://issue-219/amb-alternative",
+            "char_start": 20,
+            "char_end": 29
+          }
+        }
+      ]
+    }
+  ]
+}

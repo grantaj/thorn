@@ -1,0 +1,95 @@
+name: Issue 219 GLiNER-RelEx REQUIRE evaluation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gliner-relex-require-screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPENAI_API_KEY: ""
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      HF_HOME: /tmp/issue-219-gliner-relex-hf
+    steps:
+      - name: Checkout Thorn
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.28"
+
+      - name: Create isolated research environment
+        run: |
+          uv venv /tmp/issue-219-gliner-relex-venv
+          uv pip install \
+            --python /tmp/issue-219-gliner-relex-venv/bin/python \
+            torch==2.6.0 \
+            --index-url https://download.pytorch.org/whl/cpu
+          uv pip install \
+            --python /tmp/issue-219-gliner-relex-venv/bin/python \
+            -r research/dependency-semantics/requirements-gliner-relex.txt
+
+      - name: Run focused GLiNER-RelEx REQUIRE screen
+        run: |
+          /tmp/issue-219-gliner-relex-venv/bin/python \
+            research/dependency-semantics/run_gliner_relex_require_screen.py \
+            --output /tmp/issue-219-gliner-relex-measurement.json
+
+      - name: Verify keyless research envelope
+        run: |
+          /tmp/issue-219-gliner-relex-venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("/tmp/issue-219-gliner-relex-measurement.json")
+          data = json.loads(path.read_text())
+          expected_labels = [
+              "uses as a direct prerequisite",
+              "depends on for this proof",
+              "is required to establish the current result",
+          ]
+          assert data["format_version"] == 1
+          assert data["issue"] == 219
+          assert data["keyless"] is True
+          assert data["provider_calls"] == 0
+          assert data["authority"].startswith("research-only")
+          assert data["benchmark"]["cases"] == 34
+          assert data["benchmark"]["reference_occurrences"] == 39
+          assert data["model"]["requested_revision"] == (
+              "e6a880049a19c5cc222a7a479c32e84b0d8cdd9a"
+          )
+          assert [item["relation_label"] for item in data["evaluations"]] == expected_labels
+          print(json.dumps([
+              {
+                  "relation_label": item["relation_label"],
+                  "entity_grounding": item["entity_grounding"],
+              }
+              for item in data["evaluations"]
+          ], indent=2))
+          PY
+
+      - name: Record exact research environment
+        run: |
+          uv pip freeze --python /tmp/issue-219-gliner-relex-venv/bin/python \
+            > /tmp/issue-219-gliner-relex-environment.txt
+
+      - name: Upload focused measurement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-219-gliner-relex-${{ github.sha }}
+          path: |
+            /tmp/issue-219-gliner-relex-measurement.json
+            /tmp/issue-219-gliner-relex-environment.txt
+          if-no-files-found: warn

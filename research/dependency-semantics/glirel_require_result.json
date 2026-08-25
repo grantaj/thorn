@@ -1,0 +1,81 @@
+{
+  "format_version": 1,
+  "issue": 219,
+  "measurement": {
+    "workflow_run": 32815718381,
+    "artifact_id": 9551365367,
+    "artifact_zip_sha256": "587c32fc48a1ff7de9a4875895eea6244595dfe0f7955d90c920618484742491",
+    "measurement_json_sha256": "cae3a075abcd347712c93ab254aa6be8eb350a62357008766c3a2c75f3a74df2",
+    "thorn_revision": "00f58ef63b2a2a548b28b125930e4ae3087aa987",
+    "keyless": true,
+    "provider_calls": 0
+  },
+  "model": {
+    "id": "jackboyla/glirel-large-v0",
+    "requested_revision": "40a523e12a8432d6da364cf2a195a28755ff04d3",
+    "resolved_revision": "40a523e12a8432d6da364cf2a195a28755ff04d3",
+    "base_model_id": "microsoft/deberta-v3-large",
+    "base_model_resolved_revision": "64a8c8eab3e352a784c658aef62be1662607476f",
+    "glirel_version": "1.2.1",
+    "torch_version": "2.6.0+cpu"
+  },
+  "benchmark": {
+    "cases": 34,
+    "reference_occurrences": 39,
+    "require": 17,
+    "non_require": 15,
+    "unresolved": 7
+  },
+  "runtime": {
+    "model_load_seconds": 67.27605832500001,
+    "total_inference_seconds": 57.30429258000002,
+    "peak_rss_kib": 4252052,
+    "parameter_count": 466577920
+  },
+  "endpoint_grounding": {
+    "uses as a direct prerequisite": 1.0,
+    "depends on for this proof": 1.0,
+    "is required to establish the current result": 1.0
+  },
+  "threshold_sweep": {
+    "uses as a direct prerequisite": [
+      {"threshold": 0.05, "tp": 16, "fp": 14, "fn": 1, "precision": 0.5333333333333333, "recall": 0.9411764705882353, "unresolved_assertions": 7},
+      {"threshold": 0.1, "tp": 14, "fp": 10, "fn": 3, "precision": 0.5833333333333334, "recall": 0.8235294117647058, "unresolved_assertions": 6},
+      {"threshold": 0.2, "tp": 4, "fp": 4, "fn": 13, "precision": 0.5, "recall": 0.23529411764705882, "unresolved_assertions": 0},
+      {"threshold": 0.3, "tp": 0, "fp": 0, "fn": 17, "precision": null, "recall": 0.0, "unresolved_assertions": 0}
+    ],
+    "depends on for this proof": [
+      {"threshold": 0.05, "tp": 17, "fp": 15, "fn": 0, "precision": 0.53125, "recall": 1.0, "unresolved_assertions": 7},
+      {"threshold": 0.1, "tp": 14, "fp": 12, "fn": 3, "precision": 0.5384615384615384, "recall": 0.8235294117647058, "unresolved_assertions": 7},
+      {"threshold": 0.2, "tp": 7, "fp": 2, "fn": 10, "precision": 0.7777777777777778, "recall": 0.4117647058823529, "unresolved_assertions": 1},
+      {"threshold": 0.3, "tp": 0, "fp": 0, "fn": 17, "precision": null, "recall": 0.0, "unresolved_assertions": 0}
+    ],
+    "is required to establish the current result": [
+      {"threshold": 0.05, "tp": 16, "fp": 14, "fn": 1, "precision": 0.5333333333333333, "recall": 0.9411764705882353, "unresolved_assertions": 7},
+      {"threshold": 0.1, "tp": 14, "fp": 7, "fn": 3, "precision": 0.6666666666666666, "recall": 0.8235294117647058, "unresolved_assertions": 5},
+      {"threshold": 0.2, "tp": 3, "fp": 0, "fn": 14, "precision": 1.0, "recall": 0.17647058823529413, "unresolved_assertions": 0},
+      {"threshold": 0.3, "tp": 0, "fp": 0, "fn": 17, "precision": null, "recall": 0.0, "unresolved_assertions": 0}
+    ]
+  },
+  "selected_public_configuration": {
+    "relation_label": "is required to establish the current result",
+    "threshold": 0.2,
+    "policy": "score >= threshold proposes REQUIRE; otherwise abstain",
+    "tp": 3,
+    "fp": 0,
+    "fn": 14,
+    "precision": 1.0,
+    "recall": 0.17647058823529413,
+    "unresolved_assertions": 0,
+    "asserted_reference_occurrences": [
+      {"case_id": "req-in-hand", "reference": "THORNREF1", "subtype": "operator_absent_support", "score": 0.21332387626171112},
+      {"case_id": "req-joint-two", "reference": "THORNREF1", "subtype": "joint_support", "score": 0.20748592913150787},
+      {"case_id": "req-joint-two", "reference": "THORNREF2", "subtype": "joint_support", "score": 0.23765000700950623}
+    ]
+  },
+  "disposition": {
+    "production_authority": false,
+    "private_holdout_ready": true,
+    "reason": "The independent GLiNER-RelEx comparator did not expose a useful high-precision abstention regime. This exact GLiREL configuration is therefore frozen in require_relation_selection.json for an untouched private holdout, without private tuning."
+  }
+}
