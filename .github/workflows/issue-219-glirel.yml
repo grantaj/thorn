@@ -79,10 +79,11 @@ jobs:
 
       - name: Record exact research environment
         run: |
-          /tmp/issue-219-venv/bin/python -m pip freeze \
+          uv pip freeze --python /tmp/issue-219-venv/bin/python \
             > /tmp/issue-219-environment.txt
 
       - name: Upload focused measurement
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: issue-219-glirel-${{ github.sha }}
