@@ -1,0 +1,85 @@
+{
+  "format_version": 1,
+  "issue": 219,
+  "measurement": {
+    "workflow_run": 32833062907,
+    "artifact_id": 9557596038,
+    "artifact_zip_sha256": "5d6d5e5b81e0187a1d09367b0fa2b9a3a4f88c22fcc8762f6fcfc85943dbfb19",
+    "measurement_json_sha256": "91c21d3ccfff87059310b4538339646aef0e5636dd0d7672af28af5498ec2890",
+    "thorn_revision": "a92c0e039eddeae14edb819b1861b485cff4f5b0",
+    "keyless": true,
+    "provider_calls": 0
+  },
+  "model": {
+    "id": "knowledgator/gliner-relex-large-v1.0",
+    "requested_revision": "4aedc92",
+    "resolved_revision": "4aedc9226a5ac9e2f6b5ea3e91c1ee577c88a290",
+    "gliner_version": "0.2.28",
+    "torch_version": "2.6.0+cpu"
+  },
+  "benchmark": {
+    "cases": 34,
+    "reference_occurrences": 39,
+    "require": 17,
+    "non_require": 15,
+    "unresolved": 7
+  },
+  "runtime": {
+    "model_load_seconds": 11.345092696000002,
+    "total_inference_seconds": 127.549612371,
+    "peak_rss_kib": 2809196,
+    "parameter_count": 466576896
+  },
+  "grounding": {
+    "supplied_endpoint_entities": {
+      "found": 39,
+      "total": 39,
+      "rate": 1.0
+    },
+    "exact_owner_to_reference_relation_candidates": {
+      "found": 39,
+      "total": 39,
+      "rate": 1.0
+    }
+  },
+  "representative_thresholds": {
+    "uses as a direct prerequisite": [
+      {"threshold": 0.9, "tp": 17, "fp": 15, "fn": 0, "precision": 0.53125, "recall": 1.0, "unresolved_assertions": 7}
+    ],
+    "depends on for this proof": [
+      {"threshold": 0.9, "tp": 17, "fp": 14, "fn": 0, "precision": 0.5483870967741935, "recall": 1.0, "unresolved_assertions": 7}
+    ],
+    "is required to establish the current result": [
+      {"threshold": 0.5, "tp": 9, "fp": 10, "fn": 8, "precision": 0.47368421052631576, "recall": 0.5294117647058824, "unresolved_assertions": 5},
+      {"threshold": 0.8, "tp": 6, "fp": 7, "fn": 11, "precision": 0.46153846153846156, "recall": 0.35294117647058826, "unresolved_assertions": 4},
+      {"threshold": 0.9, "tp": 5, "fp": 4, "fn": 12, "precision": 0.5555555555555556, "recall": 0.29411764705882354, "unresolved_assertions": 4}
+    ]
+  },
+  "all_observed_score_cutpoints": {
+    "criterion": "retain at least one true REQUIRE with zero NON_REQUIRE assertions and zero UNRESOLVED assertions",
+    "uses as a direct prerequisite": false,
+    "depends on for this proof": false,
+    "is required to establish the current result": false,
+    "note": "The third label can eliminate resolved-negative false positives only after it still asserts ambiguous cases; there is no positive safe cut-point."
+  },
+  "comparison_to_glirel": {
+    "glirel_configuration": {
+      "relation_label": "is required to establish the current result",
+      "threshold": 0.2,
+      "tp": 3,
+      "fp": 0,
+      "fn": 14,
+      "precision": 1.0,
+      "recall": 0.17647058823529413,
+      "unresolved_assertions": 0
+    },
+    "winner_on_false_authority_first_policy": "GLiREL",
+    "reason": "GLiNER-RelEx preserves supplied entities exactly but provides no non-empty zero-false-authority abstention regime on the frozen public benchmark."
+  },
+  "disposition": {
+    "production_authority": false,
+    "private_holdout_candidate": false,
+    "candidate_result": "negative",
+    "next": "Freeze the existing GLiREL public configuration before any untouched private holdout qualification; do not tune GLiNER-RelEx or alter the public benchmark in response to this result."
+  }
+}
