@@ -311,7 +311,12 @@ def main() -> int:
         json.dumps(output, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    print(json.dumps({"model": output["model"], "benchmark": output["benchmark"], "runtime": output["runtime"]}, indent=2))
+    summary = {
+        "model": output["model"],
+        "benchmark": output["benchmark"],
+        "runtime": output["runtime"],
+    }
+    print(json.dumps(summary, indent=2))
     for evaluation in evaluations:
         print(evaluation["relation_label"])
         print(json.dumps(evaluation["threshold_sweep"], indent=2))
