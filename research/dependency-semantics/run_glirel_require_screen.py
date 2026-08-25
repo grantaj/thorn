@@ -15,7 +15,6 @@ from typing import Any
 MODEL_ID = "jackboyla/glirel-large-v0"
 MODEL_REVISION = "40a523e12a8432d6da364cf2a195a28755ff04d3"
 BASE_MODEL_ID = "microsoft/deberta-v3-large"
-DEFAULT_RELATION_LABEL = "uses as a direct prerequisite"
 THRESHOLDS = (0.0, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 _TOKEN_RE = re.compile(r"THORN(?:OWNER|REF\d+)|[A-Za-z]+(?:'[A-Za-z]+)?|\d+|[^\w\s]")
 
@@ -122,41 +121,14 @@ def _load_cases(path: Path) -> dict[str, Any]:
     return payload
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--cases",
-        type=Path,
-        default=Path(__file__).with_name("require_relation_cases.json"),
-    )
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--label", default=DEFAULT_RELATION_LABEL)
-    args = parser.parse_args()
-
-    if os.environ.get("OPENAI_API_KEY"):
-        raise RuntimeError("issue 219 evaluation must remain provider-keyless")
-
-    from glirel import GLiREL
-    from huggingface_hub import model_info
-    import torch
-
-    payload = _load_cases(args.cases)
-    owner_surface = str(payload["owner_surface"])
-    if args.label not in payload["relation_label_candidates"]:
-        raise ValueError("relation label must be frozen in the public benchmark")
-
-    glirel_info = model_info(MODEL_ID, revision=MODEL_REVISION)
-    base_info = model_info(BASE_MODEL_ID)
-
-    load_started = time.perf_counter()
-    model = GLiREL.from_pretrained(
-        MODEL_ID,
-        revision=MODEL_REVISION,
-        map_location="cpu",
-    )
-    model.eval()
-    load_seconds = time.perf_counter() - load_started
-
+def _evaluate_label(
+    *,
+    model: Any,
+    torch: Any,
+    payload: dict[str, Any],
+    owner_surface: str,
+    label: str,
+) -> dict[str, Any]:
     observations: list[dict[str, Any]] = []
     inference_started = time.perf_counter()
     with torch.inference_mode():
@@ -175,9 +147,11 @@ def main() -> int:
                     ]
                 )
 
+            # Evaluate each label independently so labels do not compete with one
+            # another inside GLiREL's candidate-label ranking.
             relations = model.predict_relations(
                 tokens,
-                [args.label],
+                [label],
                 threshold=0.0,
                 ner=ner,
                 top_k=1,
@@ -188,7 +162,7 @@ def main() -> int:
                     relations,
                     owner_surface=owner_surface,
                     reference=placeholder,
-                    label=args.label,
+                    label=label,
                 )
                 observations.append(
                     {
@@ -206,10 +180,81 @@ def main() -> int:
                     }
                 )
     inference_seconds = time.perf_counter() - inference_started
-
     endpoint_found = sum(bool(item["endpoint_found"]) for item in observations)
+    return {
+        "relation_label": label,
+        "inference_seconds": inference_seconds,
+        "endpoint_grounding": {
+            "found": endpoint_found,
+            "total": len(observations),
+            "rate": _score_ratio(endpoint_found, len(observations)),
+        },
+        "threshold_sweep": [
+            _threshold_metrics(observations, threshold) for threshold in THRESHOLDS
+        ],
+        "observations": observations,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--cases",
+        type=Path,
+        default=Path(__file__).with_name("require_relation_cases.json"),
+    )
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--label",
+        action="append",
+        dest="labels",
+        help="Evaluate one frozen label; repeat to evaluate several. Defaults to all.",
+    )
+    args = parser.parse_args()
+
+    if os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("issue 219 evaluation must remain provider-keyless")
+
+    import torch
+    from glirel import GLiREL
+    from huggingface_hub import model_info
+
+    payload = _load_cases(args.cases)
+    owner_surface = str(payload["owner_surface"])
+    frozen_labels = [str(label) for label in payload["relation_label_candidates"]]
+    labels = args.labels or frozen_labels
+    if any(label not in frozen_labels for label in labels):
+        raise ValueError("relation labels must be frozen in the public benchmark")
+    if len(set(labels)) != len(labels):
+        raise ValueError("relation labels must not be repeated")
+
+    glirel_info = model_info(MODEL_ID, revision=MODEL_REVISION)
+    base_info = model_info(BASE_MODEL_ID)
+
+    load_started = time.perf_counter()
+    model = GLiREL.from_pretrained(
+        MODEL_ID,
+        revision=MODEL_REVISION,
+        map_location="cpu",
+    )
+    model.eval()
+    load_seconds = time.perf_counter() - load_started
+
+    evaluations = [
+        _evaluate_label(
+            model=model,
+            torch=torch,
+            payload=payload,
+            owner_surface=owner_surface,
+            label=label,
+        )
+        for label in labels
+    ]
+    reference_occurrences = sum(
+        len(case["references"]) for case in payload["cases"]
+    )
     output = {
-        "format_version": 1,
+        "format_version": 2,
         "issue": 219,
         "keyless": True,
         "provider_calls": 0,
@@ -219,7 +264,10 @@ def main() -> int:
             "At a threshold the model may propose REQUIRE; otherwise Thorn abstains. "
             "The evaluator never turns a low score into canonical NON_REQUIRE."
         ),
-        "relation_label": args.label,
+        "label_policy": (
+            "Every frozen label is evaluated independently in a separate GLiREL call "
+            "so candidate labels do not compete with one another."
+        ),
         "model": {
             "id": MODEL_ID,
             "requested_revision": MODEL_REVISION,
@@ -231,41 +279,42 @@ def main() -> int:
         },
         "benchmark": {
             "cases": len(payload["cases"]),
-            "reference_occurrences": len(observations),
-            "require": sum(item["expected"] == "REQUIRE" for item in observations),
-            "non_require": sum(
-                item["expected"] == "NON_REQUIRE" for item in observations
+            "reference_occurrences": reference_occurrences,
+            "require": sum(
+                reference["expected"] == "REQUIRE"
+                for case in payload["cases"]
+                for reference in case["references"]
             ),
-            "unresolved": sum(item["expected"] == "UNRESOLVED" for item in observations),
+            "non_require": sum(
+                reference["expected"] == "NON_REQUIRE"
+                for case in payload["cases"]
+                for reference in case["references"]
+            ),
+            "unresolved": sum(
+                reference["expected"] == "UNRESOLVED"
+                for case in payload["cases"]
+                for reference in case["references"]
+            ),
         },
         "runtime": {
             "model_load_seconds": load_seconds,
-            "inference_seconds": inference_seconds,
+            "total_inference_seconds": sum(
+                float(evaluation["inference_seconds"]) for evaluation in evaluations
+            ),
             "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
         },
-        "endpoint_grounding": {
-            "found": endpoint_found,
-            "total": len(observations),
-            "rate": _score_ratio(endpoint_found, len(observations)),
-        },
-        "threshold_sweep": [
-            _threshold_metrics(observations, threshold) for threshold in THRESHOLDS
-        ],
-        "observations": observations,
+        "evaluations": evaluations,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(output, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    print(
-        json.dumps(
-            {key: output[key] for key in ("model", "benchmark", "runtime")},
-            indent=2,
-        )
-    )
-    print(json.dumps(output["threshold_sweep"], indent=2))
+    print(json.dumps({"model": output["model"], "benchmark": output["benchmark"], "runtime": output["runtime"]}, indent=2))
+    for evaluation in evaluations:
+        print(evaluation["relation_label"])
+        print(json.dumps(evaluation["threshold_sweep"], indent=2))
     return 0
 
 
