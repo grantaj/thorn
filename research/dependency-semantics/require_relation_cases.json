@@ -279,8 +279,8 @@
           "expected": "REQUIRE",
           "provenance": {
             "source_id": "synthetic://issue-219/req-mixed-mention",
-            "char_start": 45,
-            "char_end": 54
+            "char_start": 44,
+            "char_end": 53
           }
         },
         {
@@ -423,8 +423,8 @@
           "expected": "NON_REQUIRE",
           "provenance": {
             "source_id": "synthetic://issue-219/neg-other-author-use",
-            "char_start": 22,
-            "char_end": 31
+            "char_start": 23,
+            "char_end": 32
           }
         }
       ]
@@ -461,8 +461,8 @@
           "expected": "NON_REQUIRE",
           "provenance": {
             "source_id": "synthetic://issue-219/neg-hypothetical",
-            "char_start": 17,
-            "char_end": 26
+            "char_start": 18,
+            "char_end": 27
           }
         }
       ]
