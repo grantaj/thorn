@@ -1,0 +1,2 @@
+# Isolated issue #219 research environment. Not a production Thorn dependency.
+gliner==0.2.28
