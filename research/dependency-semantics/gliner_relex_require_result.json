@@ -1,0 +1,75 @@
+{
+  "format_version": 1,
+  "issue": 219,
+  "measurement": {
+    "workflow_run": 32832930044,
+    "artifact_id": 9557632070,
+    "artifact_zip_sha256": "d67e17cc617bb6c183d8cc17a52f5076b5ef897a98d76360ea28b0190735f986",
+    "measurement_json_sha256": "2b0d8701d448fa0cdcbdfb16f162dc74a6a2ec40af8dd73445dbe0a5ed71b3a0",
+    "environment_sha256": "81ce7ddfa1e6a4666dd38c95d096494c4f917780de3210a1196279fe7ed80b90",
+    "thorn_revision": "f677b4d915ee1df78f480c38d0b53e2a87ba814f",
+    "keyless": true,
+    "provider_calls": 0
+  },
+  "model": {
+    "id": "knowledgator/gliner-relex-base-v1.0",
+    "requested_revision": "e6a880049a19c5cc222a7a479c32e84b0d8cdd9a",
+    "resolved_revision": "e6a880049a19c5cc222a7a479c32e84b0d8cdd9a",
+    "gliner_version": "0.2.28"
+  },
+  "benchmark": {
+    "cases": 34,
+    "reference_occurrences": 39,
+    "require": 17,
+    "non_require": 15,
+    "unresolved": 7
+  },
+  "runtime": {
+    "model_load_seconds": 10.992992372999993,
+    "total_inference_seconds": 280.75080231699997,
+    "peak_rss_kib": 6670736,
+    "parameter_count": 225086211
+  },
+  "transport_boundary": {
+    "supplied_entities_supported": false,
+    "policy": "Only GLiNER entities whose character span exactly equals the frozen Thorn owner/reference sentinel are remapped to Thorn identity; all others are discarded.",
+    "exact_endpoint_pairs": 39,
+    "total_endpoint_pairs": 39,
+    "rate": 1.0
+  },
+  "high_threshold_rows": {
+    "uses as a direct prerequisite": {
+      "threshold": 0.9,
+      "tp": 16,
+      "fp": 15,
+      "fn": 1,
+      "precision": 0.5161290322580645,
+      "recall": 0.9411764705882353,
+      "unresolved_assertions": 7
+    },
+    "depends on for this proof": {
+      "threshold": 0.9,
+      "tp": 17,
+      "fp": 12,
+      "fn": 0,
+      "precision": 0.5862068965517241,
+      "recall": 1.0,
+      "unresolved_assertions": 7
+    },
+    "is required to establish the current result": {
+      "threshold": 0.9,
+      "tp": 15,
+      "fp": 9,
+      "fn": 2,
+      "precision": 0.625,
+      "recall": 0.8823529411764706,
+      "unresolved_assertions": 6
+    }
+  },
+  "disposition": {
+    "production_authority": false,
+    "private_holdout_ready": false,
+    "progression_candidate": false,
+    "reason": "Exact sentinel rediscovery succeeds, but no frozen label exposes a useful high-precision abstention regime. Even the strongest label at threshold 0.9 asserts 9/15 NON_REQUIRE and 6/7 UNRESOLVED references."
+  }
+}
