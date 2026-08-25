@@ -118,23 +118,35 @@ def _evaluate_label(
     label: str,
 ) -> dict[str, Any]:
     observations: list[dict[str, Any]] = []
-    inference_started = time.perf_counter()
     prefix = f"{owner_surface}: "
-    for case in payload["cases"]:
-        context = str(case["context"])
-        text = prefix + context
-        entity_batches, relation_batches = model.inference(
-            texts=[text],
-            labels=list(ENTITY_LABELS),
-            relations=[label],
-            threshold=0.0,
-            adjacency_threshold=0.0,
-            relation_threshold=0.0,
-            return_relations=True,
-            flat_ner=False,
-        )
-        entities = list(entity_batches[0])
-        relations = list(relation_batches[0])
+    texts = [prefix + str(case["context"]) for case in payload["cases"]]
+
+    inference_started = time.perf_counter()
+    entity_batches, relation_batches = model.inference(
+        texts=texts,
+        labels=list(ENTITY_LABELS),
+        relations=[label],
+        threshold=0.0,
+        adjacency_threshold=0.0,
+        relation_threshold=0.0,
+        return_relations=True,
+        flat_ner=False,
+        batch_size=8,
+    )
+    inference_seconds = time.perf_counter() - inference_started
+
+    if len(entity_batches) != len(texts) or len(relation_batches) != len(texts):
+        raise RuntimeError("GLiNER-RelEx returned an unexpected batch shape")
+
+    for case, text, entity_batch, relation_batch in zip(
+        payload["cases"],
+        texts,
+        entity_batches,
+        relation_batches,
+        strict=True,
+    ):
+        entities = list(entity_batch)
+        relations = list(relation_batch)
         owner_indices = _matching_entity_indices(
             entities,
             text=owner_surface,
@@ -178,7 +190,7 @@ def _evaluate_label(
                     "predicted_relation_count": len(relations),
                 }
             )
-    inference_seconds = time.perf_counter() - inference_started
+
     exact_owner = sum(bool(item["owner_entity_found"]) for item in observations)
     exact_reference = sum(bool(item["reference_entity_found"]) for item in observations)
     exact_endpoints = sum(bool(item["endpoint_found"]) for item in observations)
