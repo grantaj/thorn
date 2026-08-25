@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "issue": 219,
+  "purpose": "Freeze the public REQUIRE relation candidate before any private natural-corpus qualification.",
+  "benchmark": {
+    "path": "research/dependency-semantics/require_relation_cases.json",
+    "git_blob_sha": "9410cb2d11df891fd8c88acf0d14a5188155a51d",
+    "cases": 34,
+    "reference_occurrences": 39,
+    "require": 17,
+    "non_require": 15,
+    "unresolved": 7
+  },
+  "candidate": {
+    "implementation": "GLiREL",
+    "model_id": "jackboyla/glirel-large-v0",
+    "model_revision": "40a523e12a8432d6da364cf2a195a28755ff04d3",
+    "base_model_id": "microsoft/deberta-v3-large",
+    "base_model_revision": "64a8c8eab3e352a784c658aef62be1662607476f",
+    "glirel_version": "1.2.1",
+    "torch_version": "2.6.0+cpu",
+    "relation_label": "is required to establish the current result",
+    "threshold": 0.2,
+    "direction": "THORNOWNER -> exact supplied result-reference occurrence",
+    "decision_policy": "score >= 0.2 proposes REQUIRE; otherwise abstain",
+    "non_require_policy": "A score below threshold never asserts canonical NON_REQUIRE.",
+    "authority": "research proposal only; independent Thorn authority/provenance gates remain required"
+  },
+  "public_measurement": {
+    "tp": 3,
+    "fp": 0,
+    "fn": 14,
+    "precision": 1.0,
+    "recall": 0.17647058823529413,
+    "unresolved_assertions": 0,
+    "endpoint_grounding_rate": 1.0,
+    "workflow_run": 32815718381,
+    "artifact_id": 9551365367,
+    "artifact_zip_sha256": "587c32fc48a1ff7de9a4875895eea6244595dfe0f7955d90c920618484742491",
+    "measurement_json_sha256": "cae3a075abcd347712c93ab254aa6be8eb350a62357008766c3a2c75f3a74df2"
+  },
+  "selection_reason": {
+    "policy": "false direct authority before coverage",
+    "comparison": "GLiNER-RelEx preserved supplied endpoints but had no non-empty score cut-point with zero NON_REQUIRE and zero UNRESOLVED assertions on the same frozen public benchmark.",
+    "private_tuning_forbidden": true
+  }
+}
