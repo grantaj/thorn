@@ -65,6 +65,12 @@ jobs:
 
           path = Path("/tmp/issue-219-glirel-measurement.json")
           data = json.loads(path.read_text())
+          expected_labels = [
+              "uses as a direct prerequisite",
+              "depends on for this proof",
+              "is required to establish the current result",
+          ]
+          assert data["format_version"] == 2
           assert data["issue"] == 219
           assert data["keyless"] is True
           assert data["provider_calls"] == 0
@@ -74,7 +80,20 @@ jobs:
           assert data["model"]["requested_revision"] == (
               "40a523e12a8432d6da364cf2a195a28755ff04d3"
           )
-          print(json.dumps(data["endpoint_grounding"], indent=2))
+          assert [item["relation_label"] for item in data["evaluations"]] == expected_labels
+          for item in data["evaluations"]:
+              assert item["endpoint_grounding"] == {
+                  "found": 39,
+                  "total": 39,
+                  "rate": 1.0,
+              }
+          print(json.dumps([
+              {
+                  "relation_label": item["relation_label"],
+                  "endpoint_grounding": item["endpoint_grounding"],
+              }
+              for item in data["evaluations"]
+          ], indent=2))
           PY
 
       - name: Record exact research environment
