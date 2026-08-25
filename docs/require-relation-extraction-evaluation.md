@@ -88,7 +88,7 @@ The public benchmark freezes three relation-label phrasings:
 2. `depends on for this proof`;
 3. `is required to establish the current result`.
 
-All three are evaluated independently so GLiREL's label-ranking competition
+All three are evaluated independently so a model's label-ranking competition
 cannot change one label's score merely because another candidate wording is
 present. Raw per-occurrence scores and threshold sweeps are retained.
 
@@ -126,9 +126,7 @@ At 0.30 every label abstains on every occurrence. The exact recorded summary is
 `research/dependency-semantics/glirel_require_result.json`; the workflow
 artifact retains the full per-occurrence scores and complete threshold sweeps.
 
-### What the high-precision regime means
-
-The strongest public configuration is currently:
+The strongest public GLiREL configuration is:
 
 ```text
 label = "is required to establish the current result"
@@ -141,34 +139,78 @@ ambiguous occurrences. All three recovered references are operator-absent
 positives: one ordinary support case and both references in a joint-support
 case.
 
-This is evidence that an off-the-shelf relation extractor can expose a small,
-exactly grounded, high-precision subset without Thorn growing a handwritten
-English grammar. It is not sufficient coverage for production authority.
+## GLiNER-RelEx comparator
 
-## Runtime and dependency boundary
+The second candidate was evaluated only after the benchmark, three relation
+labels, and GLiREL measurement were frozen. No private examples were inspected
+or used for its configuration.
 
-The measured model has 466,577,920 parameters. The CPU run loaded the model in
-about 67.3 seconds, used about 4.1 GiB peak RSS, and spent about 57.3 seconds in
-inference across the three independent label evaluations.
+GLiNER-RelEx differs architecturally from GLiREL: its public inference API
+jointly discovers entities and relations rather than accepting Thorn's entity
+spans. Thorn therefore gives it credit only when a discovered entity's exact
+character span equals the already-known `THORNOWNER` or `THORNREFn` sentinel.
+This remapping is deliberately one-way: a model-discovered entity can match a
+supplied identity, but can never replace or invent canonical Thorn identity.
 
-GLiREL remains a research-only dependency and is not added to Thorn's
-`pyproject.toml`. The issue-specific workflow creates an isolated environment,
-uses CPU inference, pins the GLiREL package and primary model revision, records
-the resolved upstream model revisions, and uploads the full measurement JSON.
-Ordinary Thorn installation and production semantics remain unchanged.
+The successful keyless measurement used:
 
-## Disposition after the first candidate
+- Thorn revision `f677b4d915ee1df78f480c38d0b53e2a87ba814f`;
+- `knowledgator/gliner-relex-base-v1.0` revision
+  `e6a880049a19c5cc222a7a479c32e84b0d8cdd9a`;
+- GLiNER 0.2.28;
+- workflow run `32832930044`;
+- artifact `9557632070`;
+- artifact ZIP SHA-256
+  `d67e17cc617bb6c183d8cc17a52f5076b5ef897a98d76360ea28b0190735f986`;
+- measurement JSON SHA-256
+  `2b0d8701d448fa0cdcbdfb16f162dc74a6a2ec40af8dd73445dbe0a5ed71b3a0`.
 
-GLiREL is **not** promoted to production authority and is **not yet** taken to
-the private natural-paper holdout. The zero-false-positive regime is credible
-but covers only 3/17 expected prerequisites.
+The strict transport test succeeded: the candidate rediscovered the exact owner
+and reference sentinel spans for 39/39 occurrences under every frozen label.
+Semantic discrimination did not.
 
-The next public tranche evaluates one independent off-the-shelf relation
-extractor against the exact same benchmark and authority boundary. No benchmark
-case, label, threshold, context policy, or private example is changed in
-response to the GLiREL result. If no second candidate materially improves the
-precision/coverage trade-off, the GLiREL configuration above is the candidate
-to freeze before an untouched private holdout run.
+| Relation label | Threshold | TP | FP | Precision | Recall | Ambiguous asserted |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `uses as a direct prerequisite` | 0.90 | 16 | 15 | 0.516 | 0.941 | 7/7 |
+| `depends on for this proof` | 0.90 | 17 | 12 | 0.586 | 1.000 | 7/7 |
+| `is required to establish the current result` | 0.80 | 16 | 10 | 0.615 | 0.941 | 7/7 |
+| `is required to establish the current result` | 0.90 | 15 | 9 | 0.625 | 0.882 | 6/7 |
+
+Lower thresholds are less selective. Thus GLiNER-RelEx has no useful
+high-precision abstention regime on the frozen benchmark. Its exact entity
+rediscovery is evidence that endpoint transport is not the problem; the failure
+is relation semantics.
+
+The measured model has 225,086,211 parameters, used about 6.36 GiB peak RSS on
+CPU, and spent about 280.8 seconds in the three-label inference pass. The heavy
+research workflow is manual-only after the recorded measurement. The exact
+aggregate result is in
+`research/dependency-semantics/gliner_relex_require_result.json`.
+
+## Final public disposition
+
+The independent comparator does not materially improve the precision/coverage
+trade-off. GLiNER-RelEx is therefore not a private-qualification candidate.
+
+The GLiREL configuration is now frozen for the untouched private holdout:
+
+```text
+model = jackboyla/glirel-large-v0
+revision = 40a523e12a8432d6da364cf2a195a28755ff04d3
+label = "is required to establish the current result"
+threshold = 0.20
+decision = score >= threshold proposes REQUIRE; otherwise abstain
+```
+
+The complete freeze, including entity direction, supplied-entity policy,
+tokenization/context boundary, and prohibition on private tuning, is recorded
+in `research/dependency-semantics/require_relation_selection.json`.
+
+This is still **not production authority**. The next experiment is a holdout
+generalization test only. The private corpus may measure whether this tiny
+high-precision public regime survives natural mathematical prose, but it must
+not change the model, label, threshold, context policy, directionality, entity
+policy, or benchmark in response to private outcomes.
 
 Fine-tuning, production graph mutation, `DECLARE`, and changes to the #212
 calculus remain out of scope.
